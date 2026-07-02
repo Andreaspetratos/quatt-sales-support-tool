@@ -1,0 +1,2169 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Quatt Sales Support Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ct)}
+    :root{
+      --or:#F76622;--orh:#E1591A;--orb:#E54910;
+      --gr:#1A7A6B;--grl:#EEF3E6;--grc:#E3F0E3;
+      --bk:#081412;--dk:#283836;
+      --gd:#545454;--gm:#999999;--gg:#C8C8C8;--gl:#EDEDED;
+      --bl:#E8EEEE;--cp:#F3EBE1;--lb:#E9F2F4;--nn:#CCF822;
+      --rd:#C72223;--wh:#FFFFFF;
+      --bg:#080E0C;
+      --c1:#0D1A16;
+      --c2:#122219;
+      --cb:#1A3028;
+      --ct:#E2EDE9;
+      --cs:#6B9088;
+      --ch:#162921;
+    }
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#2A4A40;border-radius:99px}
+
+    .btn{display:inline-flex;align-items:center;gap:7px;border:2px solid transparent;border-radius:150px;font-family:inherit;font-weight:600;cursor:pointer;transition:all .18s;white-space:nowrap;text-decoration:none;line-height:1}
+    .btn-lg{padding:14px 28px;font-size:16px}.btn-md{padding:10px 20px;font-size:14px}
+    .btn-sm{padding:6px 14px;font-size:13px}.btn-xs{padding:4px 10px;font-size:12px}
+    .btn-pr{background:var(--or);color:#fff}.btn-pr:hover:not(:disabled){background:var(--orh);border-color:var(--orb)}
+    .btn-pr:disabled{background:var(--gg);cursor:not-allowed}
+    .btn-sc{background:transparent;color:var(--ct);border-color:var(--cb)}.btn-sc:hover:not(:disabled){border-color:var(--cs);color:var(--ct)}
+    .btn-gh{background:transparent;color:var(--cs);border-color:transparent}.btn-gh:hover{background:var(--ch);color:var(--ct)}
+    .btn-dn{background:transparent;color:var(--rd);border-color:var(--rd)}.btn-dn:hover{background:rgba(199,34,35,.08)}
+    .btn-gn{background:var(--gr);color:#fff;border-color:var(--gr)}.btn-gn:hover{background:#15695c}
+    .btn-bk{background:var(--bk);color:#fff}.btn-bk:hover{background:var(--dk)}
+    .btn-full{width:100%;justify-content:center}
+
+    .iw{display:flex;flex-direction:column;gap:5px}
+    .il{font-size:12px;font-weight:600;color:var(--cs)}
+    .inp,.sel,.ta{width:100%;padding:8px 12px;border-radius:9px;border:2px solid var(--cb);background:var(--c2);font-family:inherit;font-size:13px;color:var(--ct);transition:border-color .18s;outline:none;resize:vertical}
+    .inp:hover,.sel:hover,.ta:hover{border-color:#2A4A40}
+    .inp:focus,.sel:focus,.ta:focus{border-color:var(--gr)}
+    .sel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;cursor:pointer}
+    .ta{min-height:60px}
+    .inp-sm{padding:5px 10px;font-size:12px;border-radius:7px}
+    .chk{width:16px;height:16px;cursor:pointer;accent-color:var(--gr)}
+
+    .badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+    .bo{background:rgba(247,102,34,.1);color:var(--orh)}.bg{background:var(--cb);color:var(--cs)}
+    .bn{background:var(--bk);color:var(--nn)}.bnl{background:var(--c2);color:var(--cs)}
+    .bb{background:var(--lb);color:#0e7490}
+
+    /* ── APP SHELL — fixed height chain so inner panels scroll ── */
+    #app{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+    .tb{display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:50px;background:var(--bk);flex-shrink:0;z-index:100;border-bottom:1px solid var(--cb)}
+    .tb-l,.tb-r{display:flex;align-items:center;gap:10px}
+    .tb-tag{font-size:11px;font-weight:700;color:var(--cs);letter-spacing:.8px;text-transform:uppercase}
+    .rep-chip{display:flex;align-items:center;gap:7px;padding:4px 12px;border-radius:99px;background:var(--c2)}
+    .ava{width:24px;height:24px;border-radius:50%;background:var(--or);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+    .ava img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+    .rep-nm{font-size:13px;font-weight:600;color:#fff}
+    .lt{display:flex;border-radius:99px;overflow:hidden;border:1px solid var(--cb)}
+    .ltb{padding:4px 9px;font-size:10px;font-weight:700;cursor:pointer;background:transparent;color:var(--cs);border:none;font-family:inherit;letter-spacing:.5px;transition:all .15s}
+    .ltb.on{background:var(--or);color:#fff}
+    .cfg-banner{background:#1A1500;border-bottom:1px solid rgba(204,248,34,.3);padding:5px 18px;font-size:12px;color:#CCF822;display:flex;align-items:center;gap:7px;flex-shrink:0}
+    .dp{display:inline-flex;align-items:center;background:var(--nn);color:var(--bk);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.5px}
+
+    /* ── MAIN LAYOUT ── */
+    /* min-height:0 on every flex child is critical — without it, flex items
+       refuse to shrink below their content height, disabling inner scroll */
+    .ml{flex:1;min-height:0;display:flex;overflow:hidden;background:var(--bg)}
+    .la{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+    .ltb2{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--cb);flex-shrink:0;gap:10px;background:var(--c1)}
+    .ltb2-l,.ltb2-r{display:flex;align-items:center;gap:8px}
+
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    thead th{position:sticky;top:0;background:var(--c1);padding:8px 13px;text-align:left;font-weight:600;font-size:11px;color:var(--cs);text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--cb);white-space:nowrap;z-index:10}
+    tbody tr{cursor:pointer;transition:background .1s;border-bottom:1px solid var(--cb)}
+    tbody tr:hover{background:var(--ch)!important}
+    tbody tr.ra{background:rgba(247,102,34,.12)!important}
+    tbody td{padding:9px 13px;vertical-align:middle}
+    .tn{font-weight:600;color:var(--ct);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tm{color:var(--cs);font-size:12px}
+
+    /* ── DEAL MODAL ──
+       Draggable + resizable popup. Default: flex-centred inside the overlay.
+       After first drag, the card gets position:fixed with explicit left/top/width/height
+       (max-width/max-height are overridden via inline style) so it moves freely. */
+    .dm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:900;padding:16px}
+    /* height:92vh (not max-height) gives .dm-card a definite size so flex:1
+       on .dm-body resolves to a real pixel value and overflow-y:auto activates.
+       max-height alone does NOT constrain flex children — height does. */
+    .dm-card{background:var(--c1);border-radius:20px;width:100%;max-width:680px;height:92vh;display:flex;flex-direction:column;box-shadow:0 28px 80px rgba(0,0,0,.6),0 0 0 1px var(--cb);overflow:hidden;user-select:none}
+    .dm-head{padding:16px 20px 14px;border-bottom:1px solid var(--cb);flex-shrink:0;cursor:move}
+    .dm-head:active{cursor:grabbing}
+    .dm-title{font-size:17px;font-weight:700;color:var(--ct);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+    .dm-sub{font-size:12px;color:var(--cs);margin-top:2px;pointer-events:none}
+    .dm-meta{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;pointer-events:none}
+    .dm-phone{font-size:15px;font-weight:700;color:var(--ct)}
+    .dm-body{flex:1;min-height:0;overflow-y:scroll;padding:18px 20px;display:flex;flex-direction:column;gap:11px;user-select:text;cursor:default}
+    .dm-foot{padding:13px 20px;border-top:1px solid var(--cb);flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--c1);cursor:default;user-select:none}
+    /* resize grip — sits in the bottom-right corner of the card */
+    .dm-grip{position:absolute;bottom:0;right:0;width:22px;height:22px;cursor:se-resize;display:flex;align-items:flex-end;justify-content:flex-end;padding:4px;border-radius:0 0 20px 0}
+    .dm-grip svg{opacity:.35;pointer-events:none}
+
+    /* ── PLAYBOOK ── */
+    .pw{border:1px solid var(--gl);border-radius:11px;overflow:hidden}
+    .ph2{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;cursor:pointer;user-select:none;transition:background .13s}
+    .ph2.pho{background:var(--bk);color:#fff}.ph2.phd{background:var(--grc);color:var(--gr)}.ph2.phi{background:var(--gl);color:var(--bk)}
+    .ph2.phi:hover{background:#dde4e2}
+    .phtl{font-size:13px;font-weight:700}
+    .ppip{font-size:11px;padding:2px 7px;border-radius:99px;font-weight:700}
+    .po{background:var(--or);color:#fff}.pd{background:var(--gr);color:#fff}.pi{background:rgba(0,0,0,.12);color:inherit}
+    .pb2{padding:13px;display:flex;flex-direction:column;gap:11px;border-top:1px solid var(--gl)}
+    .ps{height:1px;background:var(--gl)}
+    .sb{background:var(--c2);border-radius:9px;padding:10px 12px;font-size:13px;line-height:1.65;color:var(--ct)}
+    .wb{background:rgba(204,248,34,.08);border:1px solid rgba(204,248,34,.3);border-radius:7px;padding:7px 10px;font-size:12px;color:#CCF822;display:block;line-height:1.6;word-wrap:break-word}
+    .ql{font-size:12px;font-weight:700;color:var(--bk);margin-bottom:4px}
+    .qr{color:var(--rd)}
+    .cr2{display:flex;flex-wrap:wrap;gap:4px}
+    .chip{padding:4px 10px;border-radius:99px;border:2px solid var(--cb);background:var(--c2);font-family:inherit;font-size:12px;font-weight:600;color:var(--ct);cursor:pointer;transition:all .11s}
+    .chip:hover{border-color:#2A4A40}.chip.on{background:rgba(26,122,107,.25);border-color:var(--gr);color:#4ABFB0}
+    .io{padding:8px 11px;border-radius:9px;border:2px solid var(--cb);background:var(--c2);cursor:pointer;transition:all .11s;font-size:12px;line-height:1.5;margin-bottom:3px}
+    .io:hover{border-color:#2A4A40}.io.sh{background:rgba(199,34,35,.15);border-color:#C72223}.io.sw{background:rgba(245,158,11,.12);border-color:#f59e0b}.io.sc{background:rgba(96,165,250,.12);border-color:#60A5FA}
+    .iot{font-weight:700;font-size:13px;margin-bottom:2px;color:var(--ct)}
+    .kv{display:flex;gap:7px;font-size:12px}
+    .kk{color:var(--cs);font-weight:600;min-width:86px;flex-shrink:0}
+    .vv{color:var(--ct);word-break:break-word}
+    .sl2{font-size:10px;font-weight:700;color:var(--cs);text-transform:uppercase;letter-spacing:1px}
+    .dv{height:1px;background:var(--cb)}
+
+    /* ── CALL OUTCOME SECTION ── */
+    .co-section{background:var(--c2);border:1px solid var(--cb);border-radius:11px;padding:12px 13px;display:flex;flex-direction:column;gap:8px}
+    .co-saved{display:inline-flex;align-items:center;gap:5px;background:rgba(26,122,107,.2);color:#4ABFB0;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px}
+
+    .rr{display:flex;align-items:center;gap:9px}
+    .cdp{display:flex;align-items:center;gap:5px;background:var(--gl);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:600;color:var(--gd)}
+    .cdb{flex:1;max-width:100px;height:4px;background:var(--gl);border-radius:99px;overflow:hidden}
+    .cdf{height:100%;background:var(--or);border-radius:99px;transition:width 1s linear}
+
+    .ls{flex:1;display:flex;align-items:center;justify-content:center;background:transparent;overflow:auto;padding:24px}
+    .lc{background:rgba(13,26,22,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--cb);border-radius:22px;padding:38px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:20px;box-shadow:0 24px 80px rgba(0,0,0,.65),0 0 0 1px rgba(204,248,34,.06)}
+    .lt2{font-size:22px;font-weight:700;color:var(--ct)}
+    .ls2{font-size:13px;color:var(--cs);margin-top:-12px}
+
+    .mb{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px}
+    .mo{background:var(--c1);border:1px solid var(--cb);border-radius:18px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 48px rgba(0,0,0,.5)}
+    .moh{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start}
+    .mot{font-size:16px;font-weight:700;color:var(--ct)}
+    .mob{padding:16px 20px 0;display:flex;flex-direction:column;gap:13px}
+    .mof{padding:14px 20px 20px;display:flex;gap:8px;justify-content:flex-end}
+    .xb{width:28px;height:28px;border-radius:50%;border:none;background:var(--c2);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--cs);font-size:14px}
+    .xb:hover{background:var(--cb);color:var(--ct)}
+
+    .es{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:48px;text-align:center}
+    .ei{font-size:34px}.et{font-size:15px;font-weight:700;color:var(--ct)}.es2{font-size:13px;color:var(--cs);max-width:240px}
+
+    .tc{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:9999;pointer-events:none}
+    .tt{padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.2);animation:tup .2s ease;pointer-events:none}
+    .ts{background:var(--gr)}.te{background:var(--rd)}.ti{background:var(--bk)}
+    @keyframes tup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .sp{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:dos .7s linear infinite}
+    .spd{border-color:rgba(8,20,18,.15);border-top-color:var(--bk)}
+    @keyframes dos{to{transform:rotate(360deg)}}
+
+    /* ═══ ADMIN ═══ */
+    .adm{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+    .adm-nav{display:flex;align-items:center;gap:0;padding:0 20px;border-bottom:2px solid var(--cb);flex-shrink:0;background:var(--c1)}
+    .adm-tab{padding:12px 18px;font-size:13px;font-weight:600;color:var(--cs);cursor:pointer;border:none;background:transparent;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+    .adm-tab:hover{color:var(--ct)}.adm-tab.on{color:var(--or);border-bottom-color:var(--or)}
+    .adm-body{flex:1;min-height:0;display:flex;overflow:hidden}
+
+    .pb-list{width:220px;flex-shrink:0;border-right:1px solid var(--cb);display:flex;flex-direction:column;overflow:hidden;background:var(--c1)}
+    .pb-list-hd{padding:12px 14px;border-bottom:1px solid var(--cb);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+    .pb-list-hd-t{font-size:13px;font-weight:700;color:var(--ct)}
+    .pb-list-scroll{flex:1;min-height:0;overflow-y:auto;padding:6px}
+    .pb-item{padding:9px 10px;border-radius:9px;cursor:pointer;transition:background .12s;border:2px solid transparent}
+    .pb-item:hover{background:var(--ch)}.pb-item.sel{background:rgba(247,102,34,.1);border-color:var(--or)}
+    .pb-item-name{font-size:13px;font-weight:600;color:var(--ct)}
+    .pb-item-meta{font-size:11px;color:var(--cs);margin-top:2px}
+    .pb-editor{flex:1;min-height:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px;background:var(--bg)}
+    .pb-editor-hd{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+    .pb-sec{background:var(--c1);border:1px solid var(--cb);border-radius:12px;overflow:hidden}
+    .pb-sec-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--c2);color:var(--ct);cursor:pointer;user-select:none}
+    .pb-sec-hd:hover{background:var(--ch)}.pb-sec-hd.open{background:var(--dk);color:#fff}
+    .pb-sec-title{font-size:13px;font-weight:700}
+    .pb-sec-body{padding:14px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--cb)}
+    .pb-phase-name{display:flex;align-items:center;gap:8px;margin-bottom:0}
+
+    .qcard{background:var(--c2);border:1px solid var(--cb);border-radius:10px;padding:12px 13px;display:flex;flex-direction:column;gap:9px}
+    .qcard-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .qcard-type{font-size:11px;font-weight:700;background:var(--bl);color:var(--bk);padding:2px 8px;border-radius:99px}
+    .qcard-lbl{font-size:12px;color:var(--gd);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+    .hs-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(26,122,107,.1);color:var(--gr);font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
+    .opt-chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+    .opt-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;background:var(--wh);border:1px solid var(--gg);font-size:12px;font-weight:600}
+    .opt-rm{cursor:pointer;color:var(--gm);font-size:14px;line-height:1}.opt-rm:hover{color:var(--rd)}
+
+    .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:20px}
+    .sc-card{background:var(--c1);border:1px solid var(--cb);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
+    .sc-card:hover{border-color:#2A4A40}.sc-card.def{border-color:var(--or)}
+    .sc-card-name{font-size:14px;font-weight:700;color:var(--ct)}
+    .sc-card-url{font-size:11px;color:var(--cs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sc-new{background:var(--c2);border:2px dashed var(--cb);border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;transition:all .15s;min-height:120px}
+    .sc-new:hover{border-color:var(--or);background:rgba(247,102,34,.05)}
+    .sc-new-icon{font-size:26px}.sc-new-lbl{font-size:13px;font-weight:600;color:var(--cs)}
+
+    .ag{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .exp-pre{background:var(--bk);color:var(--nn);padding:14px;border-radius:10px;font-family:monospace;font-size:11px;overflow:auto;max-height:260px;white-space:pre-wrap;word-break:break-all}
+    .adm-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--cs);text-align:center;padding:40px}
+    .adm-empty-icon{font-size:40px;margin-bottom:4px}
+    .adm-scroll{flex:1;min-height:0;overflow-y:auto}
+
+    /* ── PERFORMANCE DRAWER ── */
+    .perf-bd{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:850}
+    .perf-dr{position:fixed;top:0;right:0;bottom:0;width:340px;background:var(--c1);box-shadow:-8px 0 40px rgba(0,0,0,.5),-1px 0 0 var(--cb);z-index:851;display:flex;flex-direction:column;animation:slideInRight .22s ease both}
+    .perf-hd{padding:16px 18px;border-bottom:1px solid var(--gl);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bk)}
+    .perf-ht{font-size:14px;font-weight:700;color:#fff}
+    .perf-tabs{display:flex;border-bottom:1px solid var(--cb);flex-shrink:0;background:var(--c1)}
+    .perf-tab{flex:1;padding:10px;font-size:12px;font-weight:600;color:var(--cs);border:none;background:transparent;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all .15s}
+    .perf-tab:hover{color:var(--ct)}.perf-tab.on{color:var(--or);border-bottom-color:var(--or)}
+    .perf-body{flex:1;min-height:0;overflow-y:auto;padding:18px;background:var(--c1)}
+    .perf-tot{display:flex;align-items:baseline;gap:8px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--cb)}
+    .perf-tot-n{font-size:44px;font-weight:700;color:var(--nn);line-height:1}
+    .perf-tot-l{font-size:13px;color:var(--cs);line-height:1.4}
+    .perf-row{margin-bottom:14px}
+    .perf-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;gap:8px}
+    .perf-row-name{font-size:12px;font-weight:600;color:var(--ct);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .perf-row-val{font-size:13px;font-weight:700;color:var(--ct);white-space:nowrap}
+    .perf-row-pct{font-size:11px;font-weight:400;color:var(--cs);margin-left:3px}
+    .perf-bar-bg{height:5px;background:var(--cb);border-radius:99px;overflow:hidden}
+    .perf-bar-fill{height:100%;border-radius:99px;transition:width .35s ease}
+    .perf-empty{text-align:center;color:var(--cs);font-size:13px;padding:32px 16px;line-height:1.7}
+    .perf-loading{flex:1;display:flex;align-items:center;justify-content:center}
+    .perf-refresh{display:flex;align-items:center;justify-content:flex-end;margin-top:14px;padding-top:14px;border-top:1px solid var(--cb)}
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(10px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .fade-up { animation:fadeUp .28s ease both; }
+
+    @keyframes popIn {
+      from { opacity:0; transform:scale(.95); }
+      to   { opacity:1; transform:scale(1); }
+    }
+    .pop-in { animation:popIn .18s ease both; }
+
+    @keyframes slideInRight {
+      from { transform:translateX(100%); }
+      to   { transform:translateX(0); }
+    }
+
+    @keyframes glowPulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(247,102,34,.0); }
+      50%      { box-shadow:0 0 0 5px rgba(247,102,34,.3); }
+    }
+
+    /* ── LIGHT THEME OVERRIDES ── */
+    [data-theme="light"]{
+      --bg:#F5F6F4;--c1:#FFFFFF;--c2:#F8F9F8;--cb:#EDEDED;--ct:#081412;--cs:#999999;--ch:#E8EEEE;
+    }
+    [data-theme="light"] #particleCanvas{opacity:.04!important}
+    [data-theme="light"] .sb{background:var(--bl);color:var(--bk)}
+    [data-theme="light"] .wb{background:#FEF9C3;border-color:#FCD34D;color:#92400E}
+    [data-theme="light"] .co-section{background:#F8F9F8;border-color:var(--gl)}
+    [data-theme="light"] .co-saved{background:var(--grc);color:var(--gr)}
+    [data-theme="light"] .io{background:var(--wh);border-color:var(--gl);color:var(--bk)}
+    [data-theme="light"] .io:hover{border-color:var(--gm)}
+    [data-theme="light"] .io.sh{background:#FEE2E2;border-color:#F87171}
+    [data-theme="light"] .io.sw{background:#FEF9C3;border-color:#FBBF24}
+    [data-theme="light"] .io.sc{background:#DBEAFE;border-color:#60A5FA}
+    [data-theme="light"] .chip{background:var(--wh);border-color:var(--gl);color:var(--bk)}
+    [data-theme="light"] .chip:hover{border-color:var(--gm)}
+    [data-theme="light"] .chip.on{background:var(--grc);border-color:var(--gr);color:var(--gr)}
+    [data-theme="light"] .dm-card{box-shadow:0 28px 56px rgba(0,0,0,.18)}
+    [data-theme="light"] .dm-overlay{background:rgba(8,20,18,.55)}
+    [data-theme="light"] .cfg-banner{background:#FEF9C3;border-color:#FCD34D;color:#92400E}
+    [data-theme="light"] .perf-tot-n{color:var(--gr)}
+    [data-theme="light"] .iot{color:var(--bk)}
+    [data-theme="light"] .task-card{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .task-card:hover{border-color:var(--gm)}
+    [data-theme="light"] .task-card.overdue{background:#FEF2F2}
+    [data-theme="light"] .tab-bar{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .perf-dr{background:var(--wh);box-shadow:-8px 0 32px rgba(0,0,0,.12),-1px 0 0 var(--gl)}
+    [data-theme="light"] .perf-tabs{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .perf-body{background:var(--wh)}
+    [data-theme="light"] .perf-bar-bg{background:var(--gl)}
+    [data-theme="light"] .mo{background:var(--wh);border-color:var(--gl);box-shadow:0 24px 48px rgba(0,0,0,.18)}
+    [data-theme="light"] .xb{background:var(--gl);color:var(--gd)}
+    [data-theme="light"] .xb:hover{background:var(--gg);color:var(--bk)}
+    [data-theme="light"] .rep-chip{background:var(--dk)}
+    [data-theme="light"] .lt{border-color:var(--dk)}
+    [data-theme="light"] .ltb{color:var(--gm)}
+    [data-theme="light"] .adm{background:#F8F9F8}
+    [data-theme="light"] .adm-nav{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .pb-list{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .pb-sec{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .pb-sec-hd{background:var(--gl);color:var(--bk)}
+    [data-theme="light"] .pb-sec-hd:hover{background:#dde4e2}
+    [data-theme="light"] .qcard{background:#F8F9F8;border-color:var(--gl)}
+    [data-theme="light"] .sc-card{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .sc-new{background:var(--gl);border-color:var(--gg)}
+    [data-theme="light"] .ltb2{background:var(--wh);border-color:var(--gl)}
+    [data-theme="light"] .lc{background:var(--wh);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:0 24px 48px rgba(0,0,0,.1)}
+    [data-theme="light"] .ls{background:var(--bg)}
+    [data-theme="light"] #app{background:var(--bg)}
+    /* ── TASK SYSTEM ── */
+    .task-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--or);color:#fff;font-size:9px;font-weight:700;flex-shrink:0;animation:glowPulse 2s ease-in-out infinite}
+    .task-list{display:flex;flex-direction:column;gap:8px;padding:16px 18px;flex:1;min-height:0;overflow-y:auto}
+    .task-card{background:var(--c1);border:1px solid var(--cb);border-radius:12px;padding:13px 14px;display:flex;flex-direction:column;gap:7px;transition:border-color .15s}
+    .task-card:hover{border-color:#2A4A40}
+    .task-card.overdue{border-color:rgba(199,34,35,.4);background:rgba(199,34,35,.04)}
+    .task-card-title{font-size:13px;font-weight:600;color:var(--ct)}
+    .task-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .task-card-due{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
+    .task-due-ok{background:rgba(26,122,107,.2);color:#4ABFB0}
+    .task-due-today{background:rgba(247,102,34,.15);color:var(--or)}
+    .task-due-over{background:rgba(199,34,35,.15);color:#E05555}
+    .task-card-deal{font-size:11px;color:var(--cs)}
+    .task-card-note{font-size:12px;color:var(--cs);line-height:1.5}
+    .task-card-actions{display:flex;gap:6px}
+    .tab-bar{display:flex;align-items:center;border-bottom:1px solid var(--cb);flex-shrink:0;background:var(--c1);padding:0 18px}
+    .tab-btn{padding:10px 14px;font-size:13px;font-weight:600;color:var(--cs);cursor:pointer;border:none;background:transparent;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;display:flex;align-items:center;gap:6px}
+    .tab-btn:hover{color:var(--ct)}.tab-btn.on{color:var(--ct);border-bottom-color:var(--or)}
+    .tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:99px;font-size:10px;font-weight:700;background:var(--cb);color:var(--cs)}
+    .tab-count.has{background:var(--or);color:#fff}
+  </style>
+</head>
+<body>
+<canvas id="particleCanvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.13;transition:opacity .6s"></canvas>
+<div id="app" style="position:relative;z-index:1"></div>
+<div class="tc" id="toastCtr"></div>
+<script>
+/* ══════════════════════════════════════════
+   QUATT SALES TOOL  v3.1
+══════════════════════════════════════════ */
+
+// ──────────────────────────────────────────
+// ⚙️  CONFIG
+// ──────────────────────────────────────────
+const CONFIG = {
+  GOOGLE_CLIENT_ID: 'YOUR_CLIENT_ID.apps.googleusercontent.com',
+  MAKE_WEBHOOK_URL: 'https://hook.eu1.make.com/YOUR_ID',
+  HUBSPOT_TOKEN: 'pat-eu1-YOUR_TOKEN',
+  CORS_PROXY: '',
+  SCHEDULER_URL: '',
+  STAGES: { HOME_VISIT:'YOUR_HV_STAGE', LOST:'YOUR_LOST_STAGE', LONG_TERM:'YOUR_LT_STAGE' },
+  PROPS: {
+    leadScore:'hubspot_score', product:'selected_product',
+    callOutcome:'qualification_call_outcome', formOrigin:'recent_form_origin',
+    partner:'partner_name', temp:'lead_temperature', requestedAt:'screening_call_requested_at',
+  },
+  REQUEST_COOLDOWN: 60,
+  REPS: [
+    { name:'Andreas Petratos', email:'andreas@quatt.io', hubspotUserId:'FILL', hubspotOwnerId:'FILL' },
+    { name:'Sales Rep 2',      email:'rep2@quatt.io',    hubspotUserId:'FILL', hubspotOwnerId:'FILL' },
+  ],
+  ADMINS: ['andreas@quatt.io'],
+  DEMO_MODE: true,
+  CUSTOM_PLAYBOOKS: [],
+  CUSTOM_SCHEDULERS: [],
+};
+
+// ──────────────────────────────────────────
+// 🌐  i18n  — ALL strings in both languages
+// ──────────────────────────────────────────
+const T = {
+  nl:{
+    // App
+    appTitle:'Sales Support Tool', loginTitle:'Welkom terug 👋', loginSub:'Log in met je Quatt Google-account',
+    demoBtn:'Doorgaan als demo-gebruiker', demoNote:'Demo-modus — geen Google nodig',
+    cfgBanner:'⚙️ Demo-modus actief. Vul CONFIG in om live te gaan.',
+    logout:'Uitloggen', admin:'⚙ Admin', backToSales:'← Terug',
+    // Dashboard
+    reqLeads:'Leads aanvragen', reqding:'Aanvragen…',
+    wait:s=>`Wacht ${s}s`, nextReq:s=>`Volgende over ${s}s`,
+    myLeads:'Mijn leads', refresh:'↻ Vernieuwen',
+    noLeads:'Geen leads', noLeadsSub:'Klik "Leads aanvragen" om te starten.',
+    colName:'Lead naam', colTime:'Aangevraagd', colPhone:'Telefoon', colProduct:'Product',
+    colOutcome:'Call outcome', colOrigin:'Herkomst', colScore:'Lead score',
+    callBtn:'📞 Bellen', homeVisit:'🏠 Home Visit', schedVC:'📹 Schedule Videocall', markLost:'✖ Lost',
+    // Lead info labels
+    origin:'Herkomst', partner:'Partner', stage:'Stage', reqAt:'Aangevraagd',
+    leadInfo:'Lead informatie', pbLabel:'Playbook',
+    // Call outcome section
+    callOutcomeLabel:'Call outcome',
+    callOutcomes:['Aangenomen','Niet opgenomen (1x)','Niet opgenomen (2x)','Voicemail','Fout nummer','Terugbelverzoek'],
+    callNotesPlaceholder:'Notities bij dit gesprek…',
+    logOutcome:'💾 Outcome opslaan',
+    outcomeLogged:'✓ Opgeslagen',
+    // Playbook phase labels (hardcoded fallback)
+    pbHybridLabel:'Hybrid Kwalificatiegesprek', pbChillLabel:'Chill Kwalificatiegesprek', pbAllElectricLabel:'All-Electric Kwalificatiegesprek', pbHomeBatteryLabel:'HomeBattery Kwalificatiegesprek',
+    phOpening:'Fase 1: Opening', phIntent:'Fase 2: Bepaal Koopintentie',
+    phTech:'Fase 3: Technische Check', phClose:'Fase 4: Inplannen & Afronding',
+    savePhase:'✓ Fase afronden', nextPhase:'Volgende fase →',
+    // Modals
+    lostTitle:'Deal sluiten als Lost', lostReason:'Reden', lostNote:'Toelichting',
+    lostReasons:['Geen interesse','Te duur','Al elders gekocht','Technisch niet haalbaar',
+      'Geen CV-systeem','Verkeerde doelgroep','Niet bereikbaar','Wil meer info','Andere reden'],
+    cancel:'Annuleren', confirm:'Bevestigen', close:'Sluiten',
+    schedTitle:'Afspraak inplannen', openSched:'Openen in nieuw tabblad →',
+    noSchedCfg:'Geen scheduler geconfigureerd. Ga naar Admin → Schedulers.',
+    // Toasts & errors
+    toastLeads:'✅ Leads aangevraagd!', toastHV:'🏠 Verplaatst naar Home Visit!',
+    toastLost:'Deal gesloten als Lost', toastRefreshed:'Leads bijgewerkt', toastSaved:'Opgeslagen',
+    errNoRep:'Je e-mail staat niet in het systeem. Vraag je manager om je toe te voegen.',
+    errLoad:e=>'Fout: '+e, errWH:e=>'Webhook fout: '+e, errReason:'Selecteer een reden',
+    errOutcome:'Selecteer een outcome',
+    // Admin — general
+    adPb:'Playbooks', adSch:'Schedulers',
+    adNoPbs:'Nog geen playbooks. Klik "+ Nieuw playbook" om te starten.',
+    adEditPbEmpty:'Selecteer een playbook om te bewerken, of maak er een nieuw aan.',
+    adNameless:'Naamloos', adNoTrigger:'Geen trigger', adEmpty:'(leeg)',
+    copy:'Kopiëren', edit:'Bewerken',
+    adDelConfirm:'Deze actie kan niet ongedaan worden gemaakt.',
+    // Admin — playbooks
+    adNewPb:'+ Nieuw playbook',
+    adPbName:'Naam van het playbook', adPbNameHint:'bijv. Hybrid Kwalificatiegesprek',
+    adPbTrigger:'Productmatch (deals met deze tekst gebruiken dit playbook)',
+    adPbTriggerHint:'bijv. hybrid', adEnterToAdd:'Enter om toe te voegen',
+    adPbPhases:'Fases', adAddPhase:'+ Fase toevoegen',
+    adPhaseName:'Naam van de fase', adPhaseNum:n=>`Fase ${n}`,
+    adQCount:n=>`${n} vraag${n===1?'':'en'}`,
+    adAddQ:'+ Vraag toevoegen', adSavePb:'Playbook opslaan', adDelPb:'Verwijderen',
+    adExport:'Config exporteren',
+    adExportNote:'Kopieer dit en plak het in CONFIG.CUSTOM_PLAYBOOKS / CONFIG.CUSTOM_SCHEDULERS in het HTML-bestand zodat alle gebruikers het kunnen zien.',
+    adDelPbTitle:'Playbook verwijderen?', adDelSchTitle:'Scheduler verwijderen?',
+    adQType:'Type vraag', adQLabel:'Vraagtekst / label', adQContent:'Script tekst',
+    adQOptions:'Antwoordopties', adQHsProp:'HubSpot property (API naam)',
+    adQReq:'Verplicht',
+    adQTypes:['script','choice','textarea','intent'],
+    adQTypeLabels:{'script':'Script','choice':'Meerkeuze','textarea':'Tekstveld','intent':'Koopintentie'},
+    // Admin — schedulers
+    adNewSch:'+ Nieuwe scheduler', adNewSch2:'Nieuwe scheduler', adEditSch2:'Scheduler bewerken',
+    adSchName:'Naam (intern)', adSchNameHint:'bijv. Afspraak inplannen',
+    adSchBtnLabel:'Knoptekst (op de knop in Sales Tool)',
+    adSchUrl:'HubSpot Meetings URL',
+    adSchProd:'Productmatch (leeg = standaard voor alle deals)',
+    adSchProdHint:'bijv. chill',
+    adSchDefault:'Standaard scheduler',
+    adSaveSch:'Scheduler opslaan', adDelSch:'Verwijderen',
+    adDefault:'Standaard', adBtnLabelPrefix:'Knoptekst:', adMatchPrefix:'Match:',
+    adNoUrl:'(geen URL)',
+    // Performance drawer
+    myPerf:'📊 Prestaties',
+    perf_today:'Vandaag', perf_week:'Week', perf_month:'Maand',
+    perfTotal:'leads verwerkt',
+    perfEmpty:'Geen data voor deze periode.',
+    perfRefresh:'↻ Vernieuwen',
+    taskTabLeads:'Mijn leads', taskTabTasks:'Taken',
+    taskNew:'+ Nieuwe taak', taskTitle:'Taak',
+    taskTitleHint:'bijv. Terugbellen om offerte te bespreken',
+    taskDue:'Deadline', taskAssign:'Toegewezen aan',
+    taskNote:'Notitie (optioneel)', taskDeal:'Gekoppelde deal',
+    taskSave:'Aanmaken', taskNone:'Geen openstaande taken',
+    taskNoneSub:'Klik "+ Nieuwe taak" om te beginnen.',
+    taskDone:'✓ Afgerond', taskDelete:'Verwijderen',
+    taskOverdue:'Verlopen', taskToday:'Vandaag',
+    taskAddFromDeal:'+ Taak',
+  },
+  en:{
+    appTitle:'Sales Support Tool', loginTitle:'Welcome back 👋', loginSub:'Sign in with your Quatt Google account',
+    demoBtn:'Continue as demo user', demoNote:'Demo mode — no Google needed',
+    cfgBanner:'⚙️ Demo mode active. Fill in CONFIG to go live.',
+    logout:'Log out', admin:'⚙ Admin', backToSales:'← Back',
+    reqLeads:'Request Leads', reqding:'Requesting…',
+    wait:s=>`Wait ${s}s`, nextReq:s=>`Next in ${s}s`,
+    myLeads:'My Leads', refresh:'↻ Refresh',
+    noLeads:'No leads', noLeadsSub:'Click "Request Leads" to get started.',
+    colName:'Lead name', colTime:'Requested', colPhone:'Phone', colProduct:'Product',
+    colOutcome:'Call outcome', colOrigin:'Source', colScore:'Lead score',
+    callBtn:'📞 Call', homeVisit:'🏠 Home Visit', schedVC:'📹 Schedule Videocall', markLost:'✖ Lost',
+    origin:'Source', partner:'Partner', stage:'Stage', reqAt:'Requested',
+    leadInfo:'Lead info', pbLabel:'Playbook',
+    callOutcomeLabel:'Call outcome',
+    callOutcomes:['Picked up','No answer (1x)','No answer (2x)','Voicemail','Wrong number','Callback request'],
+    callNotesPlaceholder:'Notes for this call…',
+    logOutcome:'💾 Save outcome',
+    outcomeLogged:'✓ Saved',
+    pbHybridLabel:'Hybrid Qualification Call', pbChillLabel:'Chill Qualification Call', pbAllElectricLabel:'All-Electric Qualification Call', pbHomeBatteryLabel:'HomeBattery Qualification Call',
+    phOpening:'Phase 1: Opening', phIntent:'Phase 2: Buying Intent',
+    phTech:'Phase 3: Technical Check', phClose:'Phase 4: Schedule & Close',
+    savePhase:'✓ Complete phase', nextPhase:'Next phase →',
+    lostTitle:'Close deal as Lost', lostReason:'Reason', lostNote:'Notes',
+    lostReasons:['No interest','Too expensive','Bought elsewhere','Not technically feasible',
+      'No CV system','Wrong target group','Not reachable','Wants more info','Other'],
+    cancel:'Cancel', confirm:'Confirm', close:'Close',
+    schedTitle:'Schedule Appointment', openSched:'Open in new tab →',
+    noSchedCfg:'No scheduler configured. Go to Admin → Schedulers.',
+    toastLeads:'✅ Leads requested!', toastHV:'🏠 Moved to Home Visit!',
+    toastLost:'Deal closed as Lost', toastRefreshed:'Refreshed', toastSaved:'Saved',
+    errNoRep:'Your email is not in the system. Ask your manager to add you.',
+    errLoad:e=>'Error: '+e, errWH:e=>'Webhook error: '+e, errReason:'Select a reason',
+    errOutcome:'Select an outcome first',
+    adPb:'Playbooks', adSch:'Schedulers',
+    adNoPbs:'No playbooks yet. Click "+ New playbook" to start.',
+    adEditPbEmpty:'Select a playbook to edit, or create a new one.',
+    adNameless:'Untitled', adNoTrigger:'No trigger', adEmpty:'(empty)',
+    copy:'Copy', edit:'Edit',
+    adDelConfirm:'This action cannot be undone.',
+    adNewPb:'+ New playbook',
+    adPbName:'Playbook name', adPbNameHint:'e.g. Hybrid Qualification Call',
+    adPbTrigger:'Product match (deals containing this text will use this playbook)',
+    adPbTriggerHint:'e.g. hybrid', adEnterToAdd:'Press Enter to add',
+    adPbPhases:'Phases', adAddPhase:'+ Add phase',
+    adPhaseName:'Phase name', adPhaseNum:n=>`Phase ${n}`,
+    adQCount:n=>`${n} question${n===1?'':'s'}`,
+    adAddQ:'+ Add question', adSavePb:'Save playbook', adDelPb:'Delete',
+    adExport:'Export config',
+    adExportNote:'Copy this and paste into CONFIG.CUSTOM_PLAYBOOKS / CONFIG.CUSTOM_SCHEDULERS in the HTML file so all users see it.',
+    adDelPbTitle:'Delete playbook?', adDelSchTitle:'Delete scheduler?',
+    adQType:'Question type', adQLabel:'Question text / label', adQContent:'Script text',
+    adQOptions:'Answer options', adQHsProp:'HubSpot property (API name)',
+    adQReq:'Required',
+    adQTypes:['script','choice','textarea','intent'],
+    adQTypeLabels:{'script':'Script','choice':'Multiple choice','textarea':'Text field','intent':'Buying intent'},
+    adNewSch:'+ New scheduler', adNewSch2:'New scheduler', adEditSch2:'Edit scheduler',
+    adSchName:'Name (internal)', adSchNameHint:'e.g. Schedule appointment',
+    adSchBtnLabel:'Button label (shown in Sales Tool)',
+    adSchUrl:'HubSpot Meetings URL',
+    adSchProd:'Product match (empty = default for all deals)',
+    adSchProdHint:'e.g. chill',
+    adSchDefault:'Default scheduler',
+    adSaveSch:'Save scheduler', adDelSch:'Delete',
+    adDefault:'Default', adBtnLabelPrefix:'Button:', adMatchPrefix:'Match:',
+    adNoUrl:'(no URL)',
+    // Performance drawer
+    myPerf:'📊 Performance',
+    perf_today:'Today', perf_week:'Week', perf_month:'Month',
+    perfTotal:'leads processed',
+    perfEmpty:'No data for this period.',
+    perfRefresh:'↻ Refresh',
+    taskTabLeads:'My leads', taskTabTasks:'Tasks',
+    taskNew:'+ New task', taskTitle:'Task',
+    taskTitleHint:'e.g. Call back to discuss quote',
+    taskDue:'Due date', taskAssign:'Assigned to',
+    taskNote:'Note (optional)', taskDeal:'Linked deal',
+    taskSave:'Create', taskNone:'No open tasks',
+    taskNoneSub:'Click "+ New task" to create one.',
+    taskDone:'✓ Complete', taskDelete:'Delete',
+    taskOverdue:'Overdue', taskToday:'Today',
+    taskAddFromDeal:'+ Task',
+  }
+};
+function t(k,...a){const v=T[S.lang][k];return typeof v==='function'?v(...a):(v??k)}
+
+// ──────────────────────────────────────────
+// 📦  STATE
+// ──────────────────────────────────────────
+const S = {
+  screen:'login', lang:'nl',
+  currentRep:null, userAvatar:null,
+  deals:[], selectedId:null,
+  loading:false, cooldownEnd:null,
+  playbook:{},  // { dealId: { phaseIdx, answers, notes, callOutcome, callOutcomeNote } }
+  modal:null, modalDealId:null, lostReason:'', lostNote:'',
+  adminTab:'playbooks', adminPbId:null, adminEditPb:null,
+  adminExpandedPhase:null, adminEditSched:null,
+  adminShowExport:false,
+  // deal modal position/size (null = default centred)
+  dmX:null, dmY:null, dmW:null, dmH:null,
+  // performance drawer
+  perfOpen:false, perfPeriod:'today', perfData:null, perfLoading:false,
+  taskTab:'leads',
+  taskModal:null,
+  taskDraft:{},
+};
+
+// ──────────────────────────────────────────
+// 🗄️  STORAGE
+// ──────────────────────────────────────────
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function loadPbs(){try{const r=localStorage.getItem('quatt_pbs');return r?JSON.parse(r):[...CONFIG.CUSTOM_PLAYBOOKS]}catch{return[...CONFIG.CUSTOM_PLAYBOOKS]}}
+function savePbs(p){try{localStorage.setItem('quatt_pbs',JSON.stringify(p))}catch{}}
+function loadScheds(){try{const r=localStorage.getItem('quatt_schs');return r?JSON.parse(r):[...CONFIG.CUSTOM_SCHEDULERS]}catch{return[...CONFIG.CUSTOM_SCHEDULERS]}}
+function saveScheds(s){try{localStorage.setItem('quatt_schs',JSON.stringify(s))}catch{}}
+// Theme preference
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  try{localStorage.setItem('quatt_theme',t)}catch{}
+  render();
+}
+function loadTheme(){
+  try{const saved=localStorage.getItem('quatt_theme');return saved||'dark'}catch{return'dark'}
+}
+
+function loadTasks(){try{const r=localStorage.getItem('quatt_tasks');return r?JSON.parse(r):[]}catch{return[]}}
+function saveTasks(arr){try{localStorage.setItem('quatt_tasks',JSON.stringify(arr))}catch{}}
+function myOpenTasks(){return loadTasks().filter(t=>!t.completed&&t.assigneeEmail===S.currentRep?.email)}
+function dealOpenTasks(dealId){return loadTasks().filter(t=>!t.completed&&t.dealId===dealId)}
+function createTask(draft){
+  const tasks=loadTasks();
+  tasks.push({id:uid(),dealId:draft.dealId||null,assigneeEmail:draft.assigneeEmail||S.currentRep?.email,
+    creatorEmail:S.currentRep?.email,title:draft.title||'',note:draft.note||'',dueDate:draft.dueDate||'',
+    completed:false,completedAt:null,createdAt:new Date().toISOString()});
+  saveTasks(tasks);
+}
+function completeTask(id){
+  const tasks=loadTasks();const t=tasks.find(x=>x.id===id);
+  if(t){t.completed=true;t.completedAt=new Date().toISOString();}saveTasks(tasks);render();
+}
+function deleteTask(id){saveTasks(loadTasks().filter(t=>t.id!==id));render();}
+function openCreateTask(dealId){
+  S.taskDraft={dealId:dealId||null,assigneeEmail:S.currentRep?.email,title:'',dueDate:'',note:''};
+  S.taskModal='create';render();
+}
+function openLeadsTab(){S.taskTab='leads';render();}
+function openTasksTab(){S.taskTab='tasks';render();}
+function submitCreateTask(){
+  if(!S.taskDraft.title?.trim()){toast(t('taskTitle')+' is required','error');return;}
+  createTask(S.taskDraft);S.taskModal=null;toast(t('toastSaved'),'success');render();
+}
+
+function getScheduler(deal){
+  const s=loadScheds();if(!s.length)return null;
+  const prod=(deal?.properties?.[CONFIG.PROPS.product]||'').toLowerCase();
+  return s.find(x=>x.productMatch&&prod.includes(x.productMatch.toLowerCase()))||s.find(x=>x.isDefault)||s[0];
+}
+function getPlaybookDefs(deal){
+  const prod=(deal?.properties?.[CONFIG.PROPS.product]||'').toLowerCase();
+  const customs=loadPbs();
+  const results=[];
+  // Custom playbooks take precedence; return all that match
+  customs.forEach(p=>{
+    if(p.productMatches&&p.productMatches.some(x=>prod.includes(x.toLowerCase())))
+      results.push({type:'custom',key:p.id,def:p});
+  });
+  if(results.length>0)return results;
+  // Hardcoded: detect all matching products so multi-product deals get multiple tabs
+  if(prod.includes('all-electric')||prod.includes('all electric'))results.push({type:'hardcoded',key:'all-electric'});
+  if(prod.includes('homebattery')||prod.includes('home battery')||prod.includes('home-battery'))results.push({type:'hardcoded',key:'homebattery'});
+  if(prod.includes('chill'))results.push({type:'hardcoded',key:'chill'});
+  if(prod.includes('hybrid'))results.push({type:'hardcoded',key:'hybrid'});
+  if(results.length===0)results.push({type:'hardcoded',key:'hybrid'});
+  return results;
+}
+// Backward-compat single-result wrapper (used by doneCustomPhase etc.)
+function getPlaybookDef(deal){return getPlaybookDefs(deal)[0];}
+
+// ──────────────────────────────────────────
+// 🎭  DEMO DATA
+// ──────────────────────────────────────────
+const DEMO=[
+  {id:'1',properties:{dealname:'[Hybrid] Lars Haringa',     phone:'+31 6 51342788',selected_product:'Hybrid Single, Chill',      qualification_call_outcome:'--',       recent_form_origin:'Configurator',            partner_name:'--',hubspot_score:'82',lead_temperature:'hot', screening_call_requested_at:new Date().toISOString()}},
+  {id:'2',properties:{dealname:'[Hybrid] Edwin Kamer',      phone:'+31 6 20234646',selected_product:'Hybrid Single',             qualification_call_outcome:'--',       recent_form_origin:'Savings Check',           partner_name:'--',hubspot_score:'67',lead_temperature:'warm',screening_call_requested_at:''}},
+  {id:'3',properties:{dealname:'[Chill FS] Jan Verbakel',   phone:'+31 6 55111145',selected_product:'Hybrid Single, Chill',      qualification_call_outcome:'--',       recent_form_origin:'Configurator - Cooling',  partner_name:'--',hubspot_score:'54',lead_temperature:'warm',screening_call_requested_at:''}},
+  {id:'4',properties:{dealname:'Marcel Van Kesteren',       phone:'+31 6 51387652',selected_product:'Hybrid Single, Hybrid Duo', qualification_call_outcome:'--',       recent_form_origin:'Download Hybrid Brochure',partner_name:'--',hubspot_score:'41',lead_temperature:'',   screening_call_requested_at:new Date(Date.now()-900000).toISOString()}},
+  {id:'5',properties:{dealname:'[VEH] I.M. Luddickhuizen',  phone:'+31 6 13694594',selected_product:'Hybrid Single',             qualification_call_outcome:'No answer',recent_form_origin:'Partner',                 partner_name:'VEH',hubspot_score:'30',lead_temperature:'cold',screening_call_requested_at:new Date(Date.now()-1800000).toISOString()}},
+  {id:'6',properties:{dealname:'Martin Van der Meirsch',    phone:'+31 6 14189870',selected_product:'Hybrid Single, Hybrid Duo', qualification_call_outcome:'--',       recent_form_origin:'Direct offerte - Hybrid', partner_name:'--',hubspot_score:'91',lead_temperature:'hot', screening_call_requested_at:''}},
+  {id:'7',properties:{dealname:'[All-E] Sara Pieters',      phone:'+31 6 87234567',selected_product:'All-Electric',              qualification_call_outcome:'--',       recent_form_origin:'Savings Check',           partner_name:'--',hubspot_score:'74',lead_temperature:'warm',screening_call_requested_at:new Date(Date.now()-600000).toISOString()}},
+  {id:'8',properties:{dealname:'[HomeBatt] Theo Visser',    phone:'+31 6 65432198',selected_product:'HomeBattery',               qualification_call_outcome:'--',       recent_form_origin:'Configurator',            partner_name:'--',hubspot_score:'58',lead_temperature:'',   screening_call_requested_at:''}},
+];
+
+// ──────────────────────────────────────────
+// 🌐  API
+// ──────────────────────────────────────────
+const isDemo=()=>CONFIG.DEMO_MODE||CONFIG.HUBSPOT_TOKEN.includes('YOUR_TOKEN');
+const hsUrl=p=>CONFIG.CORS_PROXY+'https://api.hubapi.com'+p;
+const hsH=()=>({'Authorization':'Bearer '+CONFIG.HUBSPOT_TOKEN,'Content-Type':'application/json'});
+
+async function fetchDeals(ownerId){
+  if(isDemo())return DEMO;
+  const props=Object.values(CONFIG.PROPS).concat(['dealname','dealstage','hubspot_owner_id','phone']);
+  const res=await fetch(hsUrl('/crm/v3/objects/deals/search'),{method:'POST',headers:hsH(),body:JSON.stringify({
+    filterGroups:[{filters:[{propertyName:'hubspot_owner_id',operator:'EQ',value:ownerId}]}],
+    properties:[...new Set(props)],sorts:[{propertyName:CONFIG.PROPS.requestedAt,direction:'DESCENDING'}],limit:100
+  })});
+  if(!res.ok)throw new Error('HTTP '+res.status);
+  return(await res.json()).results||[];
+}
+async function patchDeal(id,props){
+  if(isDemo()){const d=S.deals.find(x=>x.id===id);if(d)Object.assign(d.properties,props);return;}
+  const res=await fetch(hsUrl('/crm/v3/objects/deals/'+id),{method:'PATCH',headers:hsH(),body:JSON.stringify({properties:props})});
+  if(!res.ok)throw new Error('HTTP '+res.status);
+}
+async function postWH(rep){
+  if(isDemo()){await new Promise(r=>setTimeout(r,700));return;}
+  const res=await fetch(CONFIG.MAKE_WEBHOOK_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({hubspot_user_id:rep.hubspotUserId,rep_name:rep.name,timestamp:new Date().toISOString()})});
+  if(!res.ok)throw new Error('HTTP '+res.status);
+}
+
+// ──────────────────────────────────────────
+// 🔑  GOOGLE AUTH
+// ──────────────────────────────────────────
+function decodeJwt(t2){try{return JSON.parse(atob(t2.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))}catch{return null}}
+function initGoogle(){
+  if(!window.google||CONFIG.GOOGLE_CLIENT_ID.includes('YOUR_CLIENT'))return;
+  google.accounts.id.initialize({client_id:CONFIG.GOOGLE_CLIENT_ID,callback:res=>{
+    const u=decodeJwt(res.credential);
+    if(!u){toast(t('errNoRep'),'error');return;}
+    loginWithEmail(u.email,u.name,u.picture);
+  },auto_select:false});
+}
+function loginWithEmail(email,name,picture){
+  const rep=CONFIG.REPS.find(r=>r.email.toLowerCase()===email.toLowerCase());
+  if(!rep){toast(t('errNoRep'),'error');return;}
+  S.currentRep=rep;S.userAvatar=picture||null;afterLogin();
+}
+async function afterLogin(){
+  S.screen='dashboard';S.loading=true;render();
+  try{S.deals=await fetchDeals(S.currentRep.hubspotOwnerId);}
+  catch(e){toast(t('errLoad',e.message),'error');S.deals=[];}
+  S.loading=false;render();
+}
+function isAdmin(){return S.currentRep&&CONFIG.ADMINS.includes(S.currentRep.email);}
+
+// ──────────────────────────────────────────
+// 📞  AIRCALL CTI
+// ──────────────────────────────────────────
+function aircallDial(phone){
+  const clean=phone.replace(/\s/g,'');
+  try{window.postMessage({type:'callRequest',payload:{phone_number:clean}},'*');}catch(e){}
+  setTimeout(()=>{window.location.href='aircallphone://'+clean;},50);
+}
+function addToDialerQueue(dealId){
+  const deal=S.deals.find(d=>d.id===dealId);
+  if(!deal?.properties?.phone){toast('No phone number','error');return;}
+  const phone=deal.properties.phone.replace(/\s/g,'');
+  window.postMessage({type:'addToQueue',payload:{phone_number:phone,contact_name:deal.properties?.dealname||''}},'*');
+  toast('📞 Added to dialer queue','success');
+}
+function initAircallCTI(){
+  window.addEventListener('message',e=>{
+    if(!e.data?.type)return;
+    if(e.data.type==='incoming_call'){
+      const phone=(e.data.payload?.phone_number||'').replace(/\s/g,'');
+      const deal=S.deals.find(d=>(d.properties?.phone||'').replace(/\s/g,'')===phone);
+      if(deal)toast('📞 Inkomend: '+(deal.properties?.dealname||phone),'info');
+    }
+  });
+}
+
+// ──────────────────────────────────────────
+// 🎨  HELPERS
+// ──────────────────────────────────────────
+function initials(n){return n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+function relTime(iso){
+  if(!iso)return '--';const d=Date.now()-new Date(iso);
+  if(d<60000)return '<1m';if(d<3600000)return Math.round(d/60000)+'m';
+  if(d<86400000)return Math.round(d/3600000)+'u';
+  return new Date(iso).toLocaleDateString('nl-NL',{day:'2-digit',month:'short'});
+}
+function scoreBadge(s){
+  if(!s&&s!==0)return'<span class="badge bg">--</span>';const n=parseInt(s);if(isNaN(n))return'<span class="badge bg">--</span>';
+  return n>=70?`<span class="badge bn">⚡${n}</span>`:`<span class="badge bnl">${n}</span>`;
+}
+function prodBadge(p){
+  if(!p||p==='--')return'<span class="badge bg">--</span>';
+  return`<span class="badge bo">${p.length>20?p.slice(0,18)+'…':p}</span>`;
+}
+function quattLogo(h=26,col='#F76622'){
+  return`<svg height="${h}" viewBox="0 0 80 ${h}" xmlns="http://www.w3.org/2000/svg"><text y="${h*.82}" font-family="Plus Jakarta Sans,sans-serif" font-size="${h}" font-weight="700" fill="${col}">Quatt</text></svg>`;
+}
+function langToggle(){
+  return`<div class="lt"><button class="ltb ${S.lang==='nl'?'on':''}" onclick="setLang('nl')">NL</button><button class="ltb ${S.lang==='en'?'on':''}" onclick="setLang('en')">EN</button></div>`;
+}
+
+// ──────────────────────────────────────────
+// 📖  PLAYBOOK STATE
+// ──────────────────────────────────────────
+function pbS(){
+  const id=S.selectedId;
+  if(!S.playbook[id])S.playbook[id]={phaseIdx:0,answers:{},notes:{},callOutcome:'',callOutcomeNote:''};
+  return S.playbook[id];
+}
+function pbA(k){return pbS().answers[k]||''}
+function pbN(k){return pbS().notes[k]||''}
+function setPbA(k,v){const p=pbS();p.answers[k]=p.answers[k]===v?'':v;rePanel()}
+function setPbN(k,v){pbS().notes[k]=v}
+function setPhase(i){pbS().phaseIdx=i;rePanel()}
+function donePhase(phId,next,props){pbS().answers[phId+'_done']=true;pbS().phaseIdx=next;if(props)patchDeal(S.selectedId,props).catch(()=>{});rePanel()}
+function nextPhaseNav(i){pbS().phaseIdx=i+1;rePanel()}
+function setActivePb(key){pbS().activePbKey=key;pbS().phaseIdx=0;rePanel()}
+
+// Call outcome helpers
+function setCallOutcome(v){const p=pbS();p.callOutcome=p.callOutcome===v?'':v;rePanel()}
+function setCallOutcomeNote(v){pbS().callOutcomeNote=v}
+async function saveCallOutcome(){
+  const p=pbS();
+  if(!p.callOutcome){toast(t('errOutcome'),'error');return;}
+  try{
+    await patchDeal(S.selectedId,{[CONFIG.PROPS.callOutcome]:p.callOutcome});
+    const d=S.deals.find(x=>x.id===S.selectedId);
+    if(d)d.properties[CONFIG.PROPS.callOutcome]=p.callOutcome;
+    toast(t('toastSaved'),'success');rePanel();
+  }catch(e){toast(t('errLoad',e.message),'error')}
+}
+
+// ──────────────────────────────────────────
+// 🎯  CUSTOM PLAYBOOK RENDERER
+// ──────────────────────────────────────────
+function renderCustomPb(pbDef){
+  const pbSt=pbS();
+  const phases=pbDef.phases||[];
+  const idx=Math.max(0,Math.min(pbSt.phaseIdx||0,phases.length-1));
+  const phase=phases[idx];
+  if(!phase)return'';
+  return`<div class="pb2" style="border:1px solid var(--gl);border-radius:11px">
+    ${(phase.questions||[]).map(q=>renderCustomQ(q)).join('')}
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn btn-pr btn-sm" onclick="doneCustomPhase('${phase.id}',${idx+1})">${t('savePhase')}</button>
+      ${idx<phases.length-1?`<button class="btn btn-sc btn-sm" onclick="nextPhaseNav(${idx})">${t('nextPhase')}</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderCustomQ(q){
+  switch(q.type){
+    case 'script': return`<div class="sb">${q.content||''}</div>`;
+    case 'choice': return`<div>
+      <div class="ql">${q.label||''}${q.required?'<span class="qr"> *</span>':''}</div>
+      <div class="cr2">${(q.options||[]).map(o=>`<button class="chip ${pbA(q.id)===o?'on':''}" onclick="setPbA('${q.id}','${o}')">${o}</button>`).join('')}</div>
+      ${q.hsProperty?`<div class="hs-badge" style="margin-top:4px">→ ${q.hsProperty}</div>`:''}
+      <textarea class="inp" style="margin-top:5px" rows="2" placeholder="${t('callNotesPlaceholder')}" oninput="setPbN('${q.id}_n',this.value)">${pbN(q.id+'_n')}</textarea>
+    </div>`;
+    case 'textarea': return`<div class="iw">
+      <label class="il">${q.label||''}${q.required?'<span style="color:var(--rd)"> *</span>':''}</label>
+      <textarea class="inp" rows="3" placeholder="${q.placeholder||''}" oninput="setPbN('${q.id}',this.value)">${pbN(q.id)}</textarea>
+      ${q.hsProperty?`<div class="hs-badge">→ ${q.hsProperty}</div>`:''}
+    </div>`;
+    case 'intent': return`<div>
+      <div class="ql">${q.label||t('phIntent')}<span class="qr"> *</span></div>
+      <div>
+        <div class="io ${pbA(q.id)==='hot'?'sh':''}" onclick="setPbA('${q.id}','hot')"><div class="iot">🔥 Hot</div>${q.hotDesc||''}</div>
+        <div class="io ${pbA(q.id)==='warm'?'sw':''}" onclick="setPbA('${q.id}','warm')"><div class="iot">🌤 Warm</div>${q.warmDesc||''}</div>
+        <div class="io ${pbA(q.id)==='cold'?'sc':''}" onclick="setPbA('${q.id}','cold')"><div class="iot">❄️ Cold</div>${q.coldDesc||''}</div>
+      </div>
+      ${q.hsProperty?`<div class="hs-badge" style="margin-top:4px">→ ${q.hsProperty}</div>`:''}
+    </div>`;
+    default:return'';
+  }
+}
+
+function doneCustomPhase(phaseId,nextIdx){
+  const deal=S.deals.find(d=>d.id===S.selectedId);
+  const allDefs=getPlaybookDefs(deal);const st=pbS();
+  const ak=st.activePbKey&&allDefs.some(d=>d.key===st.activePbKey)?st.activePbKey:allDefs[0]?.key;
+  const pbDef=allDefs.find(d=>d.key===ak)||allDefs[0];
+  const props={};
+  if(pbDef.type==='custom'){
+    const phase=pbDef.def.phases.find(p=>p.id===phaseId);
+    if(phase)(phase.questions||[]).forEach(q=>{
+      if(!q.hsProperty)return;
+      let val=q.type==='textarea'?pbN(q.id):pbA(q.id);
+      if(!val)return;
+      if(q.hsValueMap&&q.hsValueMap[val])val=q.hsValueMap[val];
+      props[q.hsProperty]=val;
+    });
+  }
+  donePhase(phaseId,nextIdx,Object.keys(props).length?props:null);
+}
+
+// ──────────────────────────────────────────
+// 📋  HARDCODED PLAYBOOKS  (i18n-aware)
+// ──────────────────────────────────────────
+// Returns the playbook definition using current language for labels.
+// Content (scripts, questions) stays in Dutch — it's customer-facing.
+function getHardcodedPb(key){
+  // ── shared helpers (closures over pbN/pbA/t at call time) ──────────────
+  const opening=()=>`
+    <div class="sb">
+      <strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt.
+      Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>
+      Klant: Ja.<br/><br/>
+      <strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"
+    </div>
+    <div class="wb">👉 Als niet akkoord: stop opname in Aircall</div>`;
+
+  const addrBlock=(pfx)=>`
+    <div class="ag">
+      <div class="iw" style="grid-column:1/-1"><label class="il">Straat</label><input class="inp" type="text" value="${pbN(pfx+'str')}" oninput="setPbN('${pfx}str',this.value)" placeholder="Straatnaam"/></div>
+      <div class="iw"><label class="il">Huisnr</label><input class="inp" type="text" value="${pbN(pfx+'nr')}" oninput="setPbN('${pfx}nr',this.value)"/></div>
+      <div class="iw"><label class="il">Toev.</label><input class="inp" type="text" value="${pbN(pfx+'tv')}" oninput="setPbN('${pfx}tv',this.value)" placeholder="kan leeg zijn"/></div>
+      <div class="iw"><label class="il">Postcode</label><input class="inp" type="text" value="${pbN(pfx+'pc')}" oninput="setPbN('${pfx}pc',this.value)"/></div>
+      <div class="iw"><label class="il">Woonplaats</label><input class="inp" type="text" value="${pbN(pfx+'wp')}" oninput="setPbN('${pfx}wp',this.value)"/></div>
+    </div>`;
+
+  const outcomeBlock=(pfx,altProdNote)=>`
+    <div class="dv"></div>
+    <div class="ql">Call outcome <span class="qr">*</span></div>
+    <div>
+      <div class="io ${pbA(pfx+'out')==='hv'?'sh':''}" onclick="setPbA('${pfx}out','hv')">
+        <div class="iot">🏠 Plan HV</div>Klik "Plan HV" als call outcome in het deal paneel.</div>
+      <div class="io ${pbA(pfx+'out')==='lt'?'sw':''}" onclick="setPbA('${pfx}out','lt')">
+        <div class="iot">📅 Long-term opportunity</div>Timing &gt; 6 maanden.
+        ${pbA(pfx+'out')==='lt'?`<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px" onclick="event.stopPropagation()">
+          <textarea class="inp" rows="2" placeholder="Waarom long-term opportunity?" oninput="setPbN('${pfx}lt_n',this.value)">${pbN(pfx+'lt_n')}</textarea>
+          <input class="inp" type="text" placeholder="Verwachte follow-up datum (DD-MM-YYYY)" value="${pbN(pfx+'lt_d')}" oninput="setPbN('${pfx}lt_d',this.value)"/>
+        </div>`:''}
+      </div>
+      <div class="io ${pbA(pfx+'out')==='lost'?'sc':''}" onclick="setPbA('${pfx}out','lost')">
+        <div class="iot">✖ Lost</div>Niet haalbaar of geen interesse.
+        ${pbA(pfx+'out')==='lost'?`<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px" onclick="event.stopPropagation()">
+          <select class="inp" onchange="setPbN('${pfx}lr',this.value)"><option value="">-- Reden --</option>${t('lostReasons').map(o=>`<option ${pbN(pfx+'lr')===o?'selected':''}>${o}</option>`).join('')}</select>
+          <textarea class="inp" rows="2" placeholder="Toelichting (min. 20 tekens)…" oninput="setPbN('${pfx}ln',this.value)">${pbN(pfx+'ln')}</textarea>
+        </div>`:''}
+      </div>
+    </div>
+    ${altProdNote?`<div class="wb" style="margin-top:8px">💡 ${altProdNote}</div>`:''}`;
+
+  const closePhase=(pfx,acties,altProdNote)=>`
+    <div class="sb"><strong>Agent:</strong> "Leuk! Laten we direct een afspraak inplannen. Ik kijk met je mee wanneer wij een mogelijkheid hebben."<br/><br/>
+    <strong>Actie:</strong> ${acties}</div>
+    <div class="wb">📞 Als de klant veel haast heeft of liever een video call wil: probeer via Aircall door te verbinden naar een Account Manager. Lukt dit niet, plan de afspraak via de Call Scheduler.</div>
+    ${addrBlock(pfx)}
+    <div class="dv"></div>
+    <div><div class="ql">Vul hier je naam in: <span class="qr">*</span></div>
+    <textarea class="inp" rows="1" placeholder="Jouw naam (Qualification-call-owner)…" oninput="setPbN('${pfx}owner',this.value)">${pbN(pfx+'owner')}</textarea></div>
+    ${outcomeBlock(pfx,altProdNote)}`;
+
+  const intentDefs=(hot,warm,cold)=>`
+    <div class="sb" style="font-size:12px;line-height:1.8">
+      <strong>🔥 Hot</strong> — ${hot}<br/>
+      <strong>🌤️ Warm</strong> — ${warm}<br/>
+      <strong>❄️ Cold</strong> — ${cold}
+    </div>`;
+
+  // ── playbook definitions ────────────────────────────────────────────────
+  const defs={
+
+    // ──────────────────────────────────────────────────────────────────────
+    // ALL-ELECTRIC
+    // ──────────────────────────────────────────────────────────────────────
+    'all-electric':{
+      label:t('pbAllElectricLabel'),
+      phases:[
+        {id:'ae_open',label:t('phOpening'),body:()=>opening()},
+
+        {id:'ae_intent',label:t('phIntent'),body:()=>`
+          <div class="sb"><strong>Doel:</strong> bepaal in 2-3 vragen of de lead Hot / Warm / Cold is. Stop zodra je een duidelijk beeld hebt. Stel niet alle vragen als dat niet nodig is.</div>
+          <div>
+            <div class="ql">Om je zo goed mogelijk te helpen: wat was voor jou de belangrijkste reden om de besparingscheck in te vullen? <span class="qr">*</span></div>
+            <div class="cr2">${['Ik wil van het gas af','Ik heb al een Quatt Hybrid en wil naar de volgende stap','Aan het rondkijken','CV-ketel moet worden vervangen','Kosten besparen','Renovatie','Verhuizing'].map(o=>`<button class="chip ${pbA('ae_reden')===o?'on':''}" onclick="setPbA('ae_reden','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="2" placeholder="Notities…" oninput="setPbN('ae_reden_n',this.value)">${pbN('ae_reden_n')}</textarea>
+          </div>
+          <div class="wb" style="font-style:italic;font-weight:400">Vraag indien nodig:</div>
+          <div>
+            <div class="ql">Wat heb je tot nu toe al gedaan in je oriëntatie?</div>
+            <textarea class="inp" rows="2" placeholder="Notities…" oninput="setPbN('ae_orient_n',this.value)">${pbN('ae_orient_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">Heb je al een idee wanneer je wilt dat de All-Electric in jouw huis draait?</div>
+            <div class="cr2">${['ASAP','0-3 months','3-6 months','>6 months'].map(o=>`<button class="chip ${pbA('ae_timing')===o?'on':''}" onclick="setPbA('ae_timing','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="1" placeholder="Notities…" oninput="setPbN('ae_timing_n',this.value)">${pbN('ae_timing_n')}</textarea>
+          </div>
+          <div class="dv"></div>
+          ${intentDefs(
+            'Duidelijke aanleiding (cv bijna stuk, concrete besparing), actief oriënterend, timing &le; 6 mnd &rarr; ga direct naar Fase 3.',
+            'Interesse aanwezig, nog oriënterend, timing globaal of afhankelijk van informatie &rarr; ga naar Fase 3.',
+            'Lage urgentie, nauwelijks oriëntatie, timing onzeker of &gt; 6 mnd: <em>"Helder. Je bent je nog breed aan het oriënteren, heel verstandig. Ons adviesgesprek is echt bedoeld om de installatie technisch uit te werken, dus dat is voor nu misschien wat vroeg. Ik stuur je eerst ons informatiepakket toe, daarin staat precies hoe de Quatt werkt en wat de voorwaarden zijn. Als je daarna denkt \'ja, dit past bij mij\', plannen we direct dat gesprek in. Goed plan?"</em> &rarr; Stuur informatiepakket, rond gesprek af.'
+          )}
+          <div class="dv"></div>
+          <div class="ql">Is deze klant Hot, Warm of Cold? <span class="qr">*</span></div>
+          <div>
+            <div class="io ${pbA('ae_intent')==='hot'?'sh':''}" onclick="setPbA('ae_intent','hot')"><div class="iot">🔥 Hot</div>Concrete aanleiding, timing &le; 6 mnd &rarr; Fase 3.</div>
+            <div class="io ${pbA('ae_intent')==='warm'?'sw':''}" onclick="setPbA('ae_intent','warm')"><div class="iot">🌤️ Warm</div>Interesse aanwezig, oriënterend &rarr; Fase 3.</div>
+            <div class="io ${pbA('ae_intent')==='cold'?'sc':''}" onclick="setPbA('ae_intent','cold')"><div class="iot">❄️ Cold</div>Lage urgentie &rarr; stuur informatiepakket, rond af.</div>
+          </div>`},
+
+        {id:'ae_tech',label:t('phTech'),body:()=>`
+          <div class="wb">🎯 <strong>Doel:</strong> harde disqualifiers uitvragen in zo min mogelijk vragen.<br/><strong>Agent:</strong> "Voordat ik de afspraak inplan, check ik even een paar technische punten. Dit helpt onze adviseur alvast ter voorbereiding."</div>
+          <div>
+            <div class="ql">Check 1 — Gasverbruik</div>
+            <div class="sb" style="font-size:12px;margin-bottom:6px"><strong>Agent:</strong> "Ik zie dat je [Deal: Aardgas] kuub gas hebt opgegeven als jaarlijks gasverbruik. Klopt dat?"</div>
+            <div style="border:1px solid var(--cb);border-radius:8px;overflow:hidden;font-size:12px;margin-bottom:6px">
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Minder dan 700 m³</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Bij een verbruik onder de 700 m³ zien we vaak dat de terugverdientijd erg lang wordt. We willen eerlijk advies geven: in jouw geval is de investering technisch gezien prachtig, maar financieel minder rendabel. Ik wil je tijd niet verspillen met een afspraak die niets oplevert. Of zou het voor jou meer zijn voor het terugbrengen van je CO₂ uitstoot? Zo ja, dan plan ik gewoon een afspraak in!"</div></details></div>
+                <span style="color:var(--rd);font-weight:700;white-space:nowrap">✖ Lost</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <span style="color:var(--ct)">700–2000 m³</span><span style="color:var(--gr);font-weight:700">✓ Ga door</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px">
+                <div><span style="color:var(--ct)">Meer dan 2000 m³</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Super, dan gaan we voor je kijken of de Hybrid Single of Hybrid Duo beter past — dat systeem is voor woningen met meer gasverbruik."</div></details></div>
+                <span style="color:var(--or);font-weight:700;white-space:nowrap">→ Plan Hybrid</span>
+              </div>
+            </div>
+            <div class="ql">Gasverbruik klant</div>
+            <div class="cr2">${['Minder dan 700 m³ (Lost)','700–2000 m³ (doorgaan)','Meer dan 2000 m³ (naar Hybrid)'].map(o=>`<button class="chip ${pbA('ae_gas')===o?'on':''}" onclick="setPbA('ae_gas','${o}')">${o}</button>`).join('')}</div>
+          </div>
+          <div>
+            <div class="ql">Check 2 — Woning</div>
+            <div class="sb" style="font-size:12px;margin-bottom:6px"><strong>Agent:</strong> "Dan nog even een paar snelle vragen over je woning: heb je een eigen woning met een cv-ketel?"</div>
+            <div style="border:1px solid var(--cb);border-radius:8px;overflow:hidden;font-size:12px;margin-bottom:6px">
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Stadsverwarming</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Op dit moment werken onze systemen helaas nog niet met stadsverwarming. Mag ik je op een lijst zetten zodat je het als eerste hoort zodra we daar een oplossing voor hebben?"</div></details></div>
+                <span style="color:var(--rd);font-weight:700;white-space:nowrap">✖ Lost</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Geen buitenruimte</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Voor een warmtepomp hebben we buitenruimte nodig voor de buitenunit. In een appartement is dat helaas vaak niet mogelijk. Ik wil je geen afspraak laten inplannen die uiteindelijk niets oplevert."</div></details></div>
+                <span style="color:var(--rd);font-weight:700;white-space:nowrap">✖ Lost</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Renovatie</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Omdat een warmtepomp nauwkeurig moet worden ingeregeld op een werkend systeem, kunnen we je op dit moment helaas nog niet verder helpen. We willen namelijk voorkomen dat je verbouwing vastloopt op de installatie."</div></details></div>
+                <span style="color:#f59e0b;font-weight:700;white-space:nowrap">⏸ On hold</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 10px">
+                <span style="color:var(--ct)">Cv-ketel / radiatoren / vloerverwarming</span><span style="color:var(--gr);font-weight:700">✓ Ga door</span>
+              </div>
+            </div>
+            <div class="ql">Heeft de klant een werkend warmteafgiftesysteem op de dag van installatie? <span class="qr">*</span></div>
+            <div class="cr2">${['Ja — radiatoren/vloerverwarming','Stadsverwarming (Lost)','Geen buitenruimte (Lost)','Renovatie (On hold)'].map(o=>`<button class="chip ${pbA('ae_woning')===o?'on':''}" onclick="setPbA('ae_woning','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="2" placeholder="Notities…" oninput="setPbN('ae_tech_n',this.value)">${pbN('ae_tech_n')}</textarea>
+          </div>`},
+
+        {id:'ae_close',label:t('phClose'),body:()=>closePhase('ae_',
+          '1. Check of postcode en adres in het systeem staat. Zo niet, vraag deze op en vul ze in. 2. Klik in \'Call outcome\' op Plan HV.',
+          'Als de lead een ander product dan All-Electric wil, pas "Selected Product" aan in HubSpot.')}
+      ]
+    },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // CHILL
+    // ──────────────────────────────────────────────────────────────────────
+    chill:{
+      label:t('pbChillLabel'),
+      phases:[
+        {id:'c_open',label:t('phOpening'),body:()=>opening()},
+
+        {id:'c_inv',label:'Fase 2: Inventarisatie',body:()=>`
+          <div class="sb"><strong>Doel:</strong> snel begrijpen waar de lead naar zoekt, hoeveel productkennis er al is, en of de lead vooral comfort, besparing of beide zoekt.</div>
+          <div>
+            <div class="ql">Om je zo goed mogelijk te helpen: wat was voor jou de belangrijkste reden om de besparingscheck in te vullen? <span class="qr">*</span></div>
+            <div class="cr2">${['Renovatie of verhuizing','Aan het rondkijken','CV-ketel moet worden vervangen','Kosten besparen','Verduurzamen van de woning'].map(o=>`<button class="chip ${pbA('c_reden')===o?'on':''}" onclick="setPbA('c_reden','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="2" placeholder="Notities…" oninput="setPbN('c_reden_n',this.value)">${pbN('c_reden_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">Waar merk je thuis vooral dat het niet comfortabel is? Te warme kamers in de zomer, lastig warm worden in de winter, of allebei? <span class="qr">*</span></div>
+            <textarea class="inp" rows="2" placeholder="Notities…" oninput="setPbN('c_comfort_n',this.value)">${pbN('c_comfort_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">Om welke ruimte of ruimtes gaat het dan vooral? Slaapkamer, woonkamer, werkkamer of zolder? <span class="qr">*</span></div>
+            <div class="cr2">${['Slaapkamer','Woonkamer','Zolder','Anders'].map(o=>`<button class="chip ${pbA('c_ruimte')===o?'on':''}" onclick="setPbA('c_ruimte','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="1" placeholder="Notities…" oninput="setPbN('c_ruimte_n',this.value)">${pbN('c_ruimte_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">En heb je daar nu al iets voor, zoals een mobiele airco, ventilator, split-airco of extra verwarming? <span class="qr">*</span></div>
+            <div class="cr2">${['Mobiele airco','Ventilator','Split-airco','Extra verwarming','Nog niks'].map(o=>`<button class="chip ${pbA('c_curr')===o?'on':''}" onclick="setPbA('c_curr','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="1" placeholder="Notities…" oninput="setPbN('c_curr_n',this.value)">${pbN('c_curr_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">Veel mensen die bij ons terechtkomen zoeken eerst gewoon een airco. Anderen zijn juist benieuwd naar de combinatie van koelen én besparen op je energierekening. Mag ik vragen wat je vooral zocht toen je de aanvraag deed? <span class="qr">*</span></div>
+            <div class="cr2">${['Scenario A — Klant kent Chill nog niet','Scenario B — Klant kent basisprincipe al'].map(o=>`<button class="chip ${pbA('c_scenario')===o?'on':''}" onclick="setPbA('c_scenario','${o}')">${o}</button>`).join('')}</div>
+          </div>`},
+
+        {id:'c_edu',label:'Fase 3: Educatie & Positionering',body:()=>`
+          ${pbA('c_scenario')?`<div class="wb" style="margin-bottom:8px">🎯 Actief scenario: <strong>${pbA('c_scenario')}</strong></div>`:'<div class="wb" style="margin-bottom:8px">💡 Selecteer scenario in Fase 2 om te filteren.</div>'}
+          ${!pbA('c_scenario')||pbA('c_scenario').includes('Scenario A')?`
+          <div style="border-left:3px solid var(--or);padding-left:10px;margin-bottom:12px">
+            <div class="ql" style="color:var(--or);margin-bottom:6px">Scenario A — Klant kent Chill nog niet</div>
+            <div class="sb">
+              <strong>Agent:</strong> "Onze airco heet 'Chill' en Chill werkt nét iets anders dan een standaard split-airco."<br/><br/>
+              Leg daarna kort de relevante voordelen uit:<br/><br/>
+              <strong>1. Eén buitenunit voor twee functies:</strong> "Dat verschil zit vooral in de dubbele functie van het buitendeel: dat is namelijk een airco én warmtepomp in één systeem. Je hebt dus niet een aparte airco én later nog een warmtepomp nodig. Dezelfde buitenunit doet beide."<br/><br/>
+              <strong>2. Koelen + besparen:</strong> "In de zomer gebruik je Chill om te koelen, maar in de winter gebruik je het buitendeel om mee te helpen met verwarmen, gewoon via je bestaande radiatoren. Daardoor bespaar je op je gasverbruik en ook op je energierekening."<br/><br/>
+              <strong>3. Geen nieuw leidingwerk binnen:</strong> "Omdat Chill samenwerkt met je bestaande verwarmingssysteem hoeven we geen nieuwe aircoleidingen door het hele huis te trekken. De meeste kamers met een radiator of cv-leiding zijn al voorbereid voor Chill. Wij zorgen dan voor een connectiepunt."<br/><br/>
+              <strong>4. Flexibel gebruik:</strong> "Het binnendeel kun je zelf loskoppelen en verplaatsen. Daardoor gebruik je Chill altijd waar je hem nodig hebt, of haal je hem weg wanneer het seizoen voorbij is."<br/><br/>
+              <strong>5. Koelen én verwarmen:</strong> "Net als met de meeste split-airco's tegenwoordig kun je met Chill ook zowel koelen als verwarmen. Je kunt Chill gebruiken om een kamer snel op te warmen — en daarna met je radiator en warmtepomp de kamer duurzaam en voordelig op temperatuur houden."
+            </div>
+          </div>`:''}
+          ${!pbA('c_scenario')||pbA('c_scenario').includes('Scenario B')?`
+          <div style="border-left:3px solid var(--gr);padding-left:10px;margin-bottom:12px">
+            <div class="ql" style="color:var(--gr);margin-bottom:6px">Scenario B — Klant kent basisprincipe al</div>
+            <div class="sb">
+              <strong>Agent:</strong> "Top, dan heb je waarschijnlijk al gezien dat Chill nét wat anders werkt dan een standaard airco."<br/><br/>
+              <strong>Korte bevestiging:</strong> "Wat veel mensen interessant vinden is dat je niet alleen koelt in de zomer, maar dat dezelfde buitenunit in de winter ook helpt om je gasverbruik te verlagen via je bestaande verwarmingssysteem."<br/><br/>
+              <strong>Als klant geïnteresseerd in besparen:</strong> "Het mooie is dat je dus niet alleen investeert in comfort, maar ook in lagere gaskosten. Zeker bij huishoudens die nu veel gas gebruiken kan dat interessant zijn."<br/><br/>
+              <strong>Als klant geïnteresseerd in comfort:</strong> "Veel mensen beginnen inderdaad vanuit comfort, bijvoorbeeld een warme slaapkamer of thuiskantoor, en ontdekken daarna dat Chill ook nog helpt bij het verlagen van het energieverbruik."<br/><br/>
+              <strong>Als klant vraagt naar installatie:</strong> "Omdat Chill samenwerkt met je bestaande radiatoren of cv-leidingen hoeven we geen extra aircoleidingen door het hele huis aan te leggen zoals bij traditionele split-airco's."<br/><br/>
+              <strong>Als klant vraagt naar flexibiliteit:</strong> "Het binnendeel kun je zelf loskoppelen en verplaatsen. Daardoor ben je veel flexibeler dan bij een vaste binnenunit aan de muur. En kun je hem ook gewoon opruimen als je Chill even niet nodig hebt."
+            </div>
+          </div>`:''}
+          <div class="dv"></div>
+          <div>
+            <div class="ql">Hoe klinkt dat voor jou? Is dat een oplossing waar je jezelf wel mee ziet wonen? <span class="qr">*</span></div>
+            <textarea class="inp" rows="2" placeholder="Notities…" oninput="setPbN('c_edu_n',this.value)">${pbN('c_edu_n')}</textarea>
+          </div>`},
+
+        {id:'c_close',label:t('phClose'),body:()=>closePhase('c_',
+          '1. Check of postcode en adres in het systeem staat. Zo niet, vraag deze op en vul ze in. 2. Klik in \'Call outcome\' op Plan HV. 3. Check type woning — bij een appartement, controleer of er voldoende ruimte is voor de buitenunit en/of er niet te veel geluidsoverlast wordt veroorzaakt.',
+          'Als de lead een ander product dan Chill wil, pas "Selected Product" aan in HubSpot.')}
+      ]
+    },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // HOMEBATTERY
+    // ──────────────────────────────────────────────────────────────────────
+    homebattery:{
+      label:t('pbHomeBatteryLabel'),
+      phases:[
+        {id:'hb_open',label:t('phOpening'),body:()=>opening()},
+
+        {id:'hb_intent',label:t('phIntent'),body:()=>`
+          <div class="sb"><strong>Doel:</strong> bepaal in 2-3 vragen of de lead Hot / Warm / Cold is. Stop zodra je een duidelijk beeld hebt. Stel niet alle vragen als dat niet nodig is.</div>
+          <div>
+            <div class="ql">Om je zo goed mogelijk te helpen: wat was voor jou de belangrijkste reden om naar een thuisbatterij te kijken? <span class="qr">*</span></div>
+            <div class="cr2">${['Aan het rondkijken','Kosten besparen','Netcongestie verminderen','Zonnestroom opslaan'].map(o=>`<button class="chip ${pbA('hb_reden')===o?'on':''}" onclick="setPbA('hb_reden','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="2" placeholder="Notities…" oninput="setPbN('hb_reden_n',this.value)">${pbN('hb_reden_n')}</textarea>
+          </div>
+          <div class="wb" style="font-style:italic;font-weight:400">Vraag indien nodig:</div>
+          <div>
+            <div class="ql">Wat heb je tot nu toe al gedaan in je oriëntatie?</div>
+            <textarea class="inp" rows="2" placeholder="Notities…" oninput="setPbN('hb_orient_n',this.value)">${pbN('hb_orient_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">Heb je al een idee wanneer je wilt dat de HomeBattery in jouw huis draait?</div>
+            <div class="cr2">${['ASAP','0-3 months','3-6 months','>6 months'].map(o=>`<button class="chip ${pbA('hb_timing')===o?'on':''}" onclick="setPbA('hb_timing','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="1" placeholder="Notities…" oninput="setPbN('hb_timing_n',this.value)">${pbN('hb_timing_n')}</textarea>
+          </div>
+          <div class="dv"></div>
+          <div class="sb" style="font-size:12px;line-height:1.8">
+            <strong>🔥 Hot + Warm</strong> — Heeft zonnepanelen en dynamisch contract, vergelijkt actief of weet al wat die wil, wil binnenkort beslissen en installeren, wil binnen 3 dagen een adviesgesprek &rarr; Plan afspraak in.<br/>
+            <strong>❄️ Cold</strong> — Lage urgentie, nauwelijks oriëntatie, timing onzeker of &gt; 6 mnd:<br/>
+            <em>"Helder. Ik hoor dat je je nog breed aan het oriënteren bent. Heel verstandig, want er komt best wat bij kijken. Omdat ons adviesgesprek echt bedoeld is om de installatie technisch uit te werken, is dat voor nu misschien wat te gedetailleerd. Ik stel voor dat ik je eerst ons digitale informatiepakket stuur. Dat leest rustiger weg dan een gesprek van een uur. Zullen we afspreken dat je dat eerst doorneemt? Als je daarna denkt: 'Ja, dit past bij mijn huis', dan plannen we direct dat gesprek in. Is dat een goed plan?"</em> &rarr; Rond gesprek af.
+          </div>
+          <div class="dv"></div>
+          <div class="ql">Is deze klant Hot, Warm of Cold? <span class="qr">*</span></div>
+          <div>
+            <div class="io ${pbA('hb_intent')==='hot'?'sh':''}" onclick="setPbA('hb_intent','hot')"><div class="iot">🔥 Hot</div>Zonnepanelen, dynamisch contract, wil snel beslissen &rarr; Plan afspraak.</div>
+            <div class="io ${pbA('hb_intent')==='warm'?'sw':''}" onclick="setPbA('hb_intent','warm')"><div class="iot">🌤️ Warm</div>Vergelijkt actief, wil binnenkort beslissen &rarr; Plan afspraak.</div>
+            <div class="io ${pbA('hb_intent')==='cold'?'sc':''}" onclick="setPbA('hb_intent','cold')"><div class="iot">❄️ Cold</div>Lage urgentie &rarr; stuur informatiepakket, rond af.</div>
+          </div>`},
+
+        {id:'hb_close',label:'Fase 3: Inplannen & Afronden',body:()=>closePhase('hb_',
+          '1. Check of postcode en adres in het systeem staat. Zo niet, vraag deze op en vul ze in. 2. Klik in \'Call outcome\' op Plan HV.',
+          null)}
+      ]
+    },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // HYBRID
+    // ──────────────────────────────────────────────────────────────────────
+    hybrid:{
+      label:t('pbHybridLabel'),
+      phases:[
+        {id:'h_open',label:t('phOpening'),body:()=>opening()},
+
+        {id:'h_intent',label:t('phIntent'),body:()=>`
+          <div class="sb"><strong>Doel:</strong> bepaal in 2-3 vragen of de lead Hot / Warm / Cold is. Stop zodra je een duidelijk beeld hebt. Stel niet alle vragen als dat niet nodig is.</div>
+          <div>
+            <div class="ql">Om je zo goed mogelijk te helpen: wat was voor jou de belangrijkste reden om de besparingscheck in te vullen? <span class="qr">*</span></div>
+            <div class="cr2">${['Ik wil van het gas af','Aan het rondkijken','CV-ketel moet worden vervangen','Kosten besparen','Renovatie','Verhuizing'].map(o=>`<button class="chip ${pbA('h_reden')===o?'on':''}" onclick="setPbA('h_reden','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="2" placeholder="Notities…" oninput="setPbN('h_reden_n',this.value)">${pbN('h_reden_n')}</textarea>
+          </div>
+          <div class="wb" style="font-style:italic;font-weight:400">Vraag indien nodig:</div>
+          <div>
+            <div class="ql">Wat heb je tot nu toe al gedaan in je oriëntatie?</div>
+            <textarea class="inp" rows="2" placeholder="Notities…" oninput="setPbN('h_orient_n',this.value)">${pbN('h_orient_n')}</textarea>
+          </div>
+          <div>
+            <div class="ql">Heb je al een idee wanneer je wilt dat de Hybrid in jouw huis draait?</div>
+            <div class="cr2">${['ASAP','0-3 months','3-6 months','>6 months'].map(o=>`<button class="chip ${pbA('h_timing')===o?'on':''}" onclick="setPbA('h_timing','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="1" placeholder="Notities…" oninput="setPbN('h_timing_n',this.value)">${pbN('h_timing_n')}</textarea>
+          </div>
+          <div class="dv"></div>
+          ${intentDefs(
+            'Duidelijke aanleiding (cv bijna stuk, concrete besparing), actief oriënterend, timing &le; 6 mnd &rarr; ga direct naar Fase 3.',
+            'Interesse aanwezig, nog oriënterend, timing globaal of afhankelijk van informatie &rarr; ga naar Fase 3.',
+            'Lage urgentie, nauwelijks oriëntatie, timing onzeker of &gt; 6 mnd: <em>"Helder. Je bent je nog breed aan het oriënteren, heel verstandig. Ons adviesgesprek is echt bedoeld om de installatie technisch uit te werken, dus dat is voor nu misschien wat vroeg. Ik stuur je eerst ons informatiepakket toe, daarin staat precies hoe de Quatt werkt en wat de voorwaarden zijn. Als je daarna denkt \'ja, dit past bij mij\', plannen we direct dat gesprek in. Goed plan?"</em> &rarr; Stuur informatiepakket, rond gesprek af.'
+          )}
+          <div class="dv"></div>
+          <div class="ql">Is deze klant Hot, Warm of Cold? <span class="qr">*</span></div>
+          <div>
+            <div class="io ${pbA('h_intent')==='hot'?'sh':''}" onclick="setPbA('h_intent','hot')"><div class="iot">🔥 Hot</div>Concrete aanleiding, timing &le; 6 mnd &rarr; Fase 3.</div>
+            <div class="io ${pbA('h_intent')==='warm'?'sw':''}" onclick="setPbA('h_intent','warm')"><div class="iot">🌤️ Warm</div>Interesse aanwezig, oriënterend &rarr; Fase 3.</div>
+            <div class="io ${pbA('h_intent')==='cold'?'sc':''}" onclick="setPbA('h_intent','cold')"><div class="iot">❄️ Cold</div>Lage urgentie &rarr; stuur informatiepakket, rond af.</div>
+          </div>`},
+
+        {id:'h_tech',label:t('phTech'),body:()=>`
+          <div class="wb">🎯 <strong>Doel:</strong> harde disqualifiers uitvragen in zo min mogelijk vragen.<br/><strong>Agent:</strong> "Voordat ik de afspraak inplan, check ik even een paar technische punten. Dit helpt onze adviseur alvast ter voorbereiding."</div>
+          <div>
+            <div class="ql">Check 1 — Gasverbruik</div>
+            <div class="sb" style="font-size:12px;margin-bottom:6px"><strong>Agent:</strong> "Ik zie dat je [Deal: Aardgas] kuub gas hebt opgegeven als jaarlijks gasverbruik. Klopt dat?"</div>
+            <div style="border:1px solid var(--cb);border-radius:8px;overflow:hidden;font-size:12px;margin-bottom:6px">
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Minder dan 700 m³</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Bij een verbruik onder de 700 m³ zien we vaak dat de terugverdientijd erg lang wordt. We willen eerlijk advies geven: in jouw geval is de investering technisch gezien prachtig, maar financieel minder rendabel. Ik wil je tijd niet verspillen met een afspraak die niets oplevert. Of zou het voor jou meer zijn voor het terugbrengen van je CO₂ uitstoot? Zo ja, dan plan ik gewoon een afspraak in!"</div></details></div>
+                <span style="color:var(--rd);font-weight:700;white-space:nowrap">✖ Lost</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 10px">
+                <span style="color:var(--ct)">Meer dan 700 m³</span><span style="color:var(--gr);font-weight:700">✓ Ga door</span>
+              </div>
+            </div>
+            <div class="ql">Gasverbruik klant</div>
+            <div class="cr2">${['Minder dan 700 m³ (Lost)','Meer dan 700 m³ (doorgaan)'].map(o=>`<button class="chip ${pbA('h_gas')===o?'on':''}" onclick="setPbA('h_gas','${o}')">${o}</button>`).join('')}</div>
+          </div>
+          <div>
+            <div class="ql">Check 2 — Woning</div>
+            <div class="sb" style="font-size:12px;margin-bottom:6px"><strong>Agent:</strong> "Dan nog even een paar snelle vragen over je woning: heb je een eigen woning met een cv-ketel?"</div>
+            <div style="border:1px solid var(--cb);border-radius:8px;overflow:hidden;font-size:12px;margin-bottom:6px">
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Stadsverwarming</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Op dit moment werken onze systemen helaas nog niet met stadsverwarming. Mag ik je op een lijst zetten zodat je het als eerste hoort zodra we daar een oplossing voor hebben?"</div></details></div>
+                <span style="color:var(--rd);font-weight:700;white-space:nowrap">✖ Lost</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Geen buitenruimte</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Voor een warmtepomp hebben we buitenruimte nodig voor de buitenunit. In een appartement is dat helaas vaak niet mogelijk. Ik wil je geen afspraak laten inplannen die uiteindelijk niets oplevert."</div></details></div>
+                <span style="color:var(--rd);font-weight:700;white-space:nowrap">✖ Lost</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;border-bottom:1px solid var(--cb)">
+                <div><span style="color:var(--ct)">Renovatie</span>
+                <details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">"Omdat een warmtepomp nauwkeurig moet worden ingeregeld op een werkend systeem, kunnen we je op dit moment helaas nog niet verder helpen. We willen namelijk voorkomen dat je verbouwing vastloopt op de installatie."</div></details></div>
+                <span style="color:#f59e0b;font-weight:700;white-space:nowrap">⏸ On hold</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 10px">
+                <span style="color:var(--ct)">Cv-ketel / radiatoren / vloerverwarming</span><span style="color:var(--gr);font-weight:700">✓ Ga door</span>
+              </div>
+            </div>
+            <div class="ql">Heeft de klant een werkend warmteafgiftesysteem op de dag van installatie? <span class="qr">*</span></div>
+            <div class="cr2">${['Ja — radiatoren/vloerverwarming','Stadsverwarming (Lost)','Geen buitenruimte (Lost)','Renovatie (On hold)'].map(o=>`<button class="chip ${pbA('h_woning')===o?'on':''}" onclick="setPbA('h_woning','${o}')">${o}</button>`).join('')}</div>
+            <textarea class="inp" style="margin-top:5px" rows="2" placeholder="Notities…" oninput="setPbN('h_tech_n',this.value)">${pbN('h_tech_n')}</textarea>
+          </div>`},
+
+        {id:'h_close',label:t('phClose'),body:()=>closePhase('h_',
+          '1. Check of postcode en adres in het systeem staat. Zo niet, vraag deze op en vul ze in. 2. Klik in \'Call outcome\' op Plan HV. 3. Check type woning — bij een appartement, controleer of er voldoende ruimte is voor de buitenunit.',
+          'Als de lead een ander product dan Hybrid wil, pas "Selected Product" aan in HubSpot.')}
+      ]
+    }
+  };
+  return defs[key];
+}
+
+function renderHardcodedPb(key){
+  const def=getHardcodedPb(key);if(!def)return'';
+  const pbSt=pbS();
+  const idx=Math.max(0,Math.min(pbSt.phaseIdx||0,def.phases.length-1));
+  const phase=def.phases[idx];
+  if(!phase)return'';
+  return`<div class="pb2" style="border:1px solid var(--gl);border-radius:11px">
+    ${phase.body()}
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn btn-pr btn-sm" onclick="donePhase('${phase.id}',${idx+1},null)">${t('savePhase')}</button>
+      ${idx<def.phases.length-1?`<button class="btn btn-sc btn-sm" onclick="nextPhaseNav(${idx})">${t('nextPhase')}</button>`:''}
+    </div>
+  </div>`;
+}
+
+// ──────────────────────────────────────────
+// 📊  PERFORMANCE DRAWER
+// ──────────────────────────────────────────
+// Outcome metadata: display order + colours
+const PERF_OUTCOMES=[
+  {k:'Plan HV',                         col:'var(--gr)'},
+  {k:'Plan Call',                        col:'#0ea5e9'},
+  {k:'Quote sent',                       col:'var(--or)'},
+  {k:'On hold due to renovation',        col:'#f59e0b'},
+  {k:'On hold due to district heating',  col:'#f59e0b'},
+  {k:'Send Configurator Link',           col:'#8b5cf6'},
+  {k:'Send brochure (cold lead)',        col:'var(--gd)'},
+  {k:'Lost',                             col:'var(--rd)'},
+];
+function perfOutcomeColor(k){const m=PERF_OUTCOMES.find(x=>x.k===k);return m?m.col:'var(--gm)';}
+
+function generateDemoPerf(){
+  const mk=arr=>({total:arr.reduce((s,x)=>s+x[1],0),outcomes:Object.fromEntries(arr)});
+  return{
+    today:mk([['Plan HV',2],['Plan Call',3],['Send brochure (cold lead)',2],['Lost',1]]),
+    week: mk([['Plan HV',8],['Plan Call',12],['Quote sent',3],['On hold due to renovation',2],['Send Configurator Link',4],['Send brochure (cold lead)',4],['Lost',2]]),
+    month:mk([['Plan HV',28],['Plan Call',45],['Quote sent',12],['On hold due to renovation',7],['On hold due to district heating',3],['Send Configurator Link',15],['Send brochure (cold lead)',18],['Lost',14]]),
+  };
+}
+
+async function fetchPerformance(){
+  if(isDemo())return generateDemoPerf();
+  const res=await fetch(hsUrl('/crm/v3/objects/deals/search'),{
+    method:'POST',headers:hsH(),
+    body:JSON.stringify({
+      filterGroups:[{filters:[
+        {propertyName:'hubspot_owner_id',operator:'EQ',value:S.currentRep.hubspotOwnerId},
+        {propertyName:'qualification_call_outcome',operator:'HAS_PROPERTY'},
+      ]}],
+      properties:['qualification_call_outcome','hs_lastmodifieddate'],
+      limit:200
+    })
+  });
+  if(!res.ok)throw new Error('HTTP '+res.status);
+  const deals=(await res.json()).results||[];
+
+  const now=new Date();
+  const todayMs=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  const monDelta=(now.getDay()||7)-1; // days since Monday
+  const weekMs=todayMs-monDelta*86400000;
+  const monthMs=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+
+  const empty=()=>({total:0,outcomes:{}});
+  const add=(b,o)=>{b.total++;b.outcomes[o]=(b.outcomes[o]||0)+1;};
+  const data={today:empty(),week:empty(),month:empty()};
+
+  for(const deal of deals){
+    const outcome=(deal.properties?.qualification_call_outcome||'').trim();
+    if(!outcome||outcome==='--')continue;
+    const mod=new Date(deal.properties?.hs_lastmodifieddate||0).getTime();
+    if(mod>=monthMs)add(data.month,outcome);
+    if(mod>=weekMs) add(data.week, outcome);
+    if(mod>=todayMs)add(data.today,outcome);
+  }
+  return data;
+}
+
+async function openPerf(){
+  S.perfOpen=true;S.perfLoading=true;S.perfData=null;render();
+  try{S.perfData=await fetchPerformance();}
+  catch(e){toast(t('errLoad',e.message),'error');}
+  S.perfLoading=false;render();
+}
+function closePerf(){S.perfOpen=false;render();}
+function setPerfPeriod(p){S.perfPeriod=p;render();}
+async function refreshPerf(){
+  S.perfLoading=true;S.perfData=null;render();
+  try{S.perfData=await fetchPerformance();}
+  catch(e){toast(t('errLoad',e.message),'error');}
+  S.perfLoading=false;render();
+}
+
+function renderPerfDrawer(){
+  if(!S.perfOpen)return'';
+  const pd=S.perfData?.[S.perfPeriod]||{total:0,outcomes:{}};
+  const entries=Object.entries(pd.outcomes).sort((a,b)=>b[1]-a[1]);
+  const maxVal=entries[0]?.[1]||1;
+
+  return`<div class="perf-bd" onclick="closePerf()"></div>
+  <div class="perf-dr">
+    <div class="perf-hd">
+      <span class="perf-ht">${t('myPerf')}</span>
+      <button class="xb" style="background:rgba(255,255,255,.12);color:#fff" onclick="closePerf()">✕</button>
+    </div>
+    <div class="perf-tabs">
+      ${['today','week','month'].map(p=>`<button class="perf-tab ${S.perfPeriod===p?'on':''}" onclick="setPerfPeriod('${p}')">${t('perf_'+p)}</button>`).join('')}
+    </div>
+    ${S.perfLoading
+      ?`<div class="perf-loading"><div class="sp spd"></div></div>`
+      :`<div class="perf-body">
+        <div class="perf-tot">
+          <span class="perf-tot-n">${pd.total}</span>
+          <span class="perf-tot-l">${t('perfTotal')}</span>
+        </div>
+        ${entries.length===0
+          ?`<div class="perf-empty">${t('perfEmpty')}</div>`
+          :entries.map(([name,count])=>{
+            const pct=pd.total?Math.round(count/pd.total*100):0;
+            const bar=Math.round(count/maxVal*100);
+            return`<div class="perf-row">
+              <div class="perf-row-top">
+                <span class="perf-row-name" title="${name}">${name}</span>
+                <span class="perf-row-val">${count}<span class="perf-row-pct">${pct}%</span></span>
+              </div>
+              <div class="perf-bar-bg"><div class="perf-bar-fill" style="width:${bar}%;background:${perfOutcomeColor(name)}"></div></div>
+            </div>`;
+          }).join('')}
+        <div class="perf-refresh">
+          <button class="btn btn-sc btn-xs" onclick="refreshPerf()">${t('perfRefresh')}</button>
+        </div>
+      </div>`}
+  </div>`;
+}
+
+// ──────────────────────────────────────────
+// ✨  PARTICLE BACKGROUND
+// ──────────────────────────────────────────
+function initParticles(){
+  const canvas=document.getElementById('particleCanvas');
+  if(!canvas||canvas._pInit)return;
+  canvas._pInit=true;
+  const ctx=canvas.getContext('2d');
+  let W=canvas.width=window.innerWidth, H=canvas.height=window.innerHeight;
+  window.addEventListener('resize',()=>{W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;});
+
+  // 160 particles: mix of static (twinkling) and drifting
+  const pts=Array.from({length:160},(_,i)=>({
+    x:Math.random()*W, y:Math.random()*H,
+    sz:Math.random()<0.6?2:Math.random()<0.8?3:1.5,
+    op:Math.random()*.55+.05,
+    dOp:(Math.random()*.004+.001)*(Math.random()>.5?1:-1),
+    vx:i<32?(Math.random()-.5)*.18:0,
+    vy:i<32?(Math.random()-.5)*.18:0,
+    col:Math.random()>.25?'#CCF822':'#8CB015',
+  }));
+
+  function frame(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of pts){
+      ctx.globalAlpha=Math.max(.02,Math.min(.75,p.op));
+      ctx.fillStyle=p.col;
+      ctx.fillRect(p.x,p.y,p.sz,p.sz);
+      p.op+=p.dOp;
+      if(p.op>.72||p.op<.03)p.dOp*=-1;
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<-4)p.x=W+4; else if(p.x>W+4)p.x=-4;
+      if(p.y<-4)p.y=H+4; else if(p.y>H+4)p.y=-4;
+    }
+    ctx.globalAlpha=1;
+    requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+function updateParticleOpacity(){
+  const canvas=document.getElementById('particleCanvas');
+  if(!canvas)return;
+  canvas.style.opacity=S.screen==='login'?'.42':'.13';
+}
+
+// ──────────────────────────────────────────
+// 🖼️  RENDERS — SALES TOOL
+// ──────────────────────────────────────────
+function renderLogin(){
+  const noGoogle=CONFIG.DEMO_MODE||CONFIG.GOOGLE_CLIENT_ID.includes('YOUR_CLIENT');
+  return`<div class="ls"><div class="lc">
+    <div style="display:flex;align-items:center;gap:10px">
+      ${quattLogo(26)}<span style="font-size:11px;font-weight:700;color:var(--gm);letter-spacing:1px;text-transform:uppercase">${t('appTitle')}</span>
+      <div style="margin-left:auto">${langToggle()}</div>
+    </div>
+    <div><div class="lt2">${t('loginTitle')}</div><div class="ls2">${t('loginSub')}</div></div>
+    ${noGoogle
+      ?`<div style="background:var(--gl);border-radius:10px;padding:12px;font-size:12px;color:var(--gd)"><span class="dp">DEMO</span> ${t('demoNote')}</div>
+         <button class="btn btn-pr btn-lg btn-full" onclick="demoLogin()">${t('demoBtn')}</button>`
+      :`<div id="gBtn"></div>`}
+  </div></div>`;
+}
+
+function renderTopBar(){
+  const rep=S.currentRep;const demo=isDemo();
+  return`<div class="tb">
+    <div class="tb-l">
+      ${quattLogo(20)}
+      <span class="tb-tag">${t('appTitle')}</span>
+      ${demo?'<span class="dp">DEMO</span>':''}
+      ${S.screen==='admin'?`<button class="btn btn-xs" style="color:var(--gm);border:1px solid var(--dk);background:transparent" onclick="S.screen='dashboard';render()">${t('backToSales')}</button>`:''}
+    </div>
+    <div class="tb-r">
+      ${langToggle()}
+      <button class="btn btn-xs" title="Toggle theme" style="color:var(--gm);border:1px solid var(--dk);background:transparent;font-size:14px;padding:4px 8px" onclick="setTheme(document.documentElement.getAttribute('data-theme')==='light'?'dark':'light')">${document.documentElement.getAttribute('data-theme')==='light'?'🌙':'☀️'}</button>
+      ${S.screen==='dashboard'?`<button class="btn btn-xs" style="${S.perfOpen?'background:var(--or);color:#fff;border-color:var(--or)':'color:var(--gm);border:1px solid var(--dk);background:transparent'}" onclick="${S.perfOpen?'closePerf()':'openPerf()'}">📊</button>`:''}
+      ${isAdmin()?`<button class="btn btn-xs ${S.screen==='admin'?'btn-pr':'btn-sc'}" style="${S.screen==='admin'?'':'border-color:var(--gm);color:var(--gm)'}" onclick="goAdmin()">${t('admin')}</button>`:''}
+      ${rep?`<div class="rep-chip"><div class="ava">${S.userAvatar?`<img src="${S.userAvatar}"/>`+initials(rep.name):initials(rep.name)}</div><span class="rep-nm">${rep.name.split(' ')[0]}</span></div>`:''}
+      <button class="btn btn-xs" style="color:var(--gm);border:1px solid var(--dk);background:transparent" onclick="handleLogout()">${t('logout')}</button>
+    </div>
+  </div>
+  ${demo?`<div class="cfg-banner">${t('cfgBanner')}</div>`:''}`;
+}
+
+function renderReqRow(){
+  const onCD=S.cooldownEnd&&Date.now()<S.cooldownEnd;
+  const sL=onCD?Math.ceil((S.cooldownEnd-Date.now())/1000):0;
+  return`<div class="rr">
+    <button class="btn btn-pr btn-sm" id="reqBtn" onclick="handleReqLeads()" ${onCD||S.loading?'disabled':''}>
+      ${S.loading?'<div class="sp"></div>':''}
+      ${onCD?t('wait',sL):S.loading?t('reqding'):t('reqLeads')}
+    </button>
+    ${onCD?`<div class="cdp"><div class="cdb"><div class="cdf" id="cdf" style="width:${sL/CONFIG.REQUEST_COOLDOWN*100}%"></div></div><span id="cdt">${t('nextReq',sL)}</span></div>`:''}
+  </div>`;
+}
+
+function renderTable(){
+  if(!S.deals.length)return`<div class="es"><div class="ei">📋</div><div class="et">${t('noLeads')}</div><div class="es2">${t('noLeadsSub')}</div></div>`;
+  const P=CONFIG.PROPS;
+  return`<div style="flex:1;min-height:0;overflow:auto">
+    <table><thead><tr>
+      <th>${t('colName')}</th><th>${t('colTime')}</th><th>${t('colPhone')}</th>
+      <th>${t('colProduct')}</th><th>${t('colOutcome')}</th><th>${t('colOrigin')}</th><th>${t('colScore')}</th>
+    </tr></thead><tbody>
+    ${S.deals.map(d=>{const p=d.properties;return`<tr class="${d.id===S.selectedId?'ra':''}" onclick="selectDeal('${d.id}')">
+      <td><div style="display:flex;align-items:center;gap:7px;max-width:200px"><span class="tn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:none;flex:1">${p.dealname||'--'}</span>${dealOpenTasks(d.id).length?`<span class="task-badge">${dealOpenTasks(d.id).length}</span>`:''}</div></td>
+      <td class="tm">${relTime(p[P.requestedAt])}</td>
+      <td style="font-size:12px;color:var(--cs)" data-phone="${p.phone||''}">${p.phone||'--'}</td>
+      <td>${prodBadge(p[P.product])}</td>
+      <td class="tm">${p[P.callOutcome]||'--'}</td>
+      <td class="tm">${p[P.formOrigin]||'--'}</td>
+      <td>${scoreBadge(p[P.leadScore])}</td>
+    </tr>`}).join('')}
+    </tbody></table>
+  </div>`;
+}
+
+function renderPhaseNav(pbInfo,pbSt){
+  const phases=pbInfo.type==='custom'
+    ?(pbInfo.def.phases||[])
+    :(getHardcodedPb(pbInfo.key)?.phases||[]);
+  if(phases.length<2)return'';
+  return`<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:6px 12px;background:#F8F9F8;border-radius:10px;border:1px solid var(--gl)">
+    <span style="font-size:10px;font-weight:700;color:var(--gm);text-transform:uppercase;letter-spacing:.8px;margin-right:2px">Fase:</span>
+    ${phases.map((ph,i)=>{
+      const isOpen=pbSt.phaseIdx===i;
+      const isDone=!!pbSt.answers[ph.id+'_done'];
+      const short=(ph.label||'').replace(/^(Fase|Phase)\s+\d+[:\s]*/i,'').trim()||String(i+1);
+      return`<button onclick="setPhase(${i})"
+        style="padding:4px 11px;border-radius:99px;border:2px solid ${isOpen?'var(--bk)':isDone?'var(--gr)':'var(--gg)'};
+        background:${isOpen?'var(--bk)':isDone?'var(--grc)':'var(--wh)'};
+        color:${isOpen?'#fff':isDone?'var(--gr)':'var(--gd)'};
+        font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
+        display:inline-flex;align-items:center;gap:4px;transition:all .13s">
+        <span style="opacity:.7;font-size:10px">${isDone?'✓':i+1}</span>
+        <span>${short.length>14?short.slice(0,13)+'…':short}</span>
+      </button>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderDealModal(){
+  if(!S.selectedId)return'';
+  const deal=S.deals.find(d=>d.id===S.selectedId);if(!deal)return'';
+  const p=deal.properties;const P=CONFIG.PROPS;
+  const pbDefs=getPlaybookDefs(deal);
+  const pbSt=pbS();
+  const activeKey=pbSt.activePbKey&&pbDefs.some(d=>d.key===pbSt.activePbKey)?pbSt.activePbKey:pbDefs[0]?.key;
+  const pbInfo=pbDefs.find(d=>d.key===activeKey)||pbDefs[0];
+  const pbLabel=pbInfo.type==='custom'?pbInfo.def.name:(getHardcodedPb(pbInfo.key)?.label||t('pbLabel'));
+  const pbHtml=pbInfo.type==='custom'?renderCustomPb(pbInfo.def):renderHardcodedPb(pbInfo.key);
+  const sched=getScheduler(deal);
+  const schedLabel=sched?.buttonLabel||t('schedVC');
+
+  // When a position is stored, pin the card with fixed coords (overrides flex centering)
+  const cardStyle=S.dmX!=null
+    ?`position:fixed;left:${S.dmX}px;top:${S.dmY}px;width:${S.dmW}px;height:${S.dmH}px;max-width:none;max-height:none;`
+    :'';
+
+  return`<div class="dm-overlay" id="dealModal" onclick="if(event.target===this)closeDeal()">
+    <div class="dm-card pop-in" id="dmCard" style="${cardStyle}">
+
+      <!-- Pinned header — drag to move -->
+      <div class="dm-head" onmousedown="dmStartDrag(event,'move')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="min-width:0;flex:1">
+            <div class="dm-title" title="${p.dealname||''}">${p.dealname||'--'}</div>
+            <div class="dm-sub">${p[P.product]||'--'}</div>
+          </div>
+          <button class="xb" style="flex-shrink:0;margin-left:10px;pointer-events:auto" onmousedown="event.stopPropagation()" onclick="closeDeal()">✕</button>
+        </div>
+        <div class="dm-meta">
+          <span class="dm-phone">${p.phone||'--'}</span>
+          ${p.phone?`<button class="btn btn-pr btn-sm" onclick="aircallDial('${p.phone.replace(/'/g,'').replace(/\s/g,'')}');" onmousedown="event.stopPropagation()" style="text-decoration:none;pointer-events:auto">${t('callBtn')}</button><button class="btn btn-sc btn-sm" onclick="addToDialerQueue('${deal.id}')" onmousedown="event.stopPropagation()" style="font-size:11px" title="Add to Aircall Power Dialer">⚡</button>`:''}
+          ${scoreBadge(p[P.leadScore])}
+        </div>
+      </div>
+
+      <!-- Scrollable body — flex:1 + overflow-y:auto on a child of a flex column
+           with a capped max-height always works, no flex chain issues. -->
+      <div class="dm-body" id="dealModal-body">
+
+        <!-- Lead info -->
+        <div class="sl2">${t('leadInfo')}</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="kv"><span class="kk">${t('origin')}</span><span class="vv">${p[P.formOrigin]||'--'}</span></div>
+          <div class="kv"><span class="kk">${t('partner')}</span><span class="vv">${p[P.partner]||'--'}</span></div>
+          <div class="kv"><span class="kk">${t('stage')}</span><span class="vv">${p.dealstage||'--'}</span></div>
+          <div class="kv"><span class="kk">${t('reqAt')}</span><span class="vv">${relTime(p[P.requestedAt])}</span></div>
+        </div>
+
+        <div class="dv"></div>
+
+        <!-- Call outcome -->
+        <div class="sl2">${t('callOutcomeLabel')}</div>
+        <div class="co-section">
+          <div class="cr2">
+            ${t('callOutcomes').map(o=>`<button class="chip ${pbSt.callOutcome===o?'on':''}" onclick="setCallOutcome('${o}')">${o}</button>`).join('')}
+          </div>
+          <textarea class="inp" rows="2" placeholder="${t('callNotesPlaceholder')}" oninput="setCallOutcomeNote(this.value)">${pbSt.callOutcomeNote||''}</textarea>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn btn-bk btn-sm" onclick="saveCallOutcome()">${t('logOutcome')}</button>
+            ${p[P.callOutcome]&&p[P.callOutcome]!=='--'?`<span class="co-saved">✓ ${p[P.callOutcome]}</span>`:''}
+          </div>
+        </div>
+
+        <div class="dv"></div>
+
+        <!-- Playbook -->
+        <div class="sl2">${t('pbLabel')} — ${pbLabel}</div>
+        ${pbDefs.length>1?`<div class="cr2" style="margin-bottom:8px">${pbDefs.map(d=>{
+          const k=d.key;
+          const fl=d.type==='hardcoded'?(getHardcodedPb(k)?.label||k):d.def.name;
+          const sh=fl.replace(/ Kwalificatiegesprek| Qualification Call/gi,'').trim();
+          return`<button class="chip ${activeKey===k?'on':''}" onclick="setActivePb('${k}')">${sh}</button>`;
+        }).join('')}</div>`:''}
+        ${renderPhaseNav(pbInfo,pbSt)}
+        ${pbHtml}
+
+      </div>
+
+      <!-- Pinned footer -->
+      <div class="dm-foot" style="position:relative">
+        <button class="btn btn-gn btn-sm" onclick="handleHV('${deal.id}')">${t('homeVisit')}</button>
+        <button class="btn btn-sc btn-sm" onclick="openSched('${deal.id}')">${schedLabel}</button>
+        <button class="btn btn-sc btn-sm" onclick="openCreateTask('${deal.id}')" onmousedown="event.stopPropagation()">${t('taskAddFromDeal')}</button>
+        <button class="btn btn-dn btn-sm" style="margin-left:auto" onclick="openLost('${deal.id}')">${t('markLost')}</button>
+        <!-- Resize grip bottom-right -->
+        <div class="dm-grip" onmousedown="dmStartDrag(event,'resize')">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M11 1L1 11M11 6L6 11M11 11" stroke="#081412" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+function renderDashboard(){
+  const openTasks=myOpenTasks();
+  return`${renderTopBar()}
+  <div class="ml">
+    <div class="la">
+      <div class="tab-bar">
+        <button class="tab-btn ${S.taskTab==='leads'?'on':''}" onclick="openLeadsTab()">
+          ${t('taskTabLeads')}
+          <span class="tab-count ${S.deals.length?'has':''}">${S.deals.length}</span>
+        </button>
+        <button class="tab-btn ${S.taskTab==='tasks'?'on':''}" onclick="openTasksTab()">
+          ${t('taskTabTasks')}
+          <span class="tab-count ${openTasks.length?'has':''}">${openTasks.length}</span>
+        </button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;padding:6px 0">
+          ${S.taskTab==='leads'?renderReqRow()+'<button class="btn btn-sc btn-sm" onclick="handleRefresh()">'+t('refresh')+'</button>':''}
+          ${S.taskTab==='tasks'?'<button class="btn btn-pr btn-sm" onclick="openCreateTask(null)">'+t('taskNew')+'</button>':''}
+        </div>
+      </div>
+      ${S.taskTab==='leads'
+        ?(S.loading&&!S.deals.length?'<div class="es"><div class="sp spd"></div></div>':renderTable())
+        :renderTasksTab()}
+    </div>
+  </div>
+  ${S.selectedId?renderDealModal():''}
+  ${S.modal==='lost'?renderLostModal():''}
+  ${S.modal==='sched'?renderSchedModal():''}
+  ${S.taskModal==='create'?renderCreateTaskModal():''}
+  ${renderPerfDrawer()}`;
+}
+
+function renderTasksTab(){
+  const tasks=myOpenTasks().sort((a,b)=>{
+    if(!a.dueDate&&!b.dueDate)return 0;
+    if(!a.dueDate)return 1;if(!b.dueDate)return-1;
+    return new Date(a.dueDate)-new Date(b.dueDate);
+  });
+  if(!tasks.length)return`<div class="es"><div class="ei">✅</div><div class="et">${t('taskNone')}</div><div class="es2">${t('taskNoneSub')}</div></div>`;
+  function dueMeta(dueDate){
+    if(!dueDate)return{label:'',cls:''};
+    const d=new Date(dueDate),now=new Date();
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const due=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    const diff=Math.round((due-today)/86400000);
+    if(diff<0)return{label:t('taskOverdue'),cls:'task-due-over'};
+    if(diff===0)return{label:t('taskToday'),cls:'task-due-today'};
+    return{label:d.toLocaleDateString('nl-NL',{day:'2-digit',month:'short'}),cls:'task-due-ok'};
+  }
+  return`<div class="task-list fade-up">
+    ${tasks.map(task=>{
+      const dm=dueMeta(task.dueDate);
+      const deal=S.deals.find(d=>d.id===task.dealId);
+      return`<div class="task-card ${dm.cls==='task-due-over'?'overdue':''}">
+        <div class="task-card-title">${task.title||'(no title)'}</div>
+        ${task.note?`<div class="task-card-note">${task.note}</div>`:''}
+        <div class="task-card-meta">
+          ${dm.label?`<span class="task-card-due ${dm.cls}">${dm.label}</span>`:''}
+          ${deal?`<span class="task-card-deal">📋 ${deal.properties?.dealname||'--'}</span>`:''}
+        </div>
+        <div class="task-card-actions">
+          <button class="btn btn-gn btn-xs" onclick="completeTask('${task.id}')">${t('taskDone')}</button>
+          <button class="btn btn-dn btn-xs" onclick="deleteTask('${task.id}')">${t('taskDelete')}</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderCreateTaskModal(){
+  const d=S.taskDraft;
+  const linkedDeal=S.deals.find(x=>x.id===d.dealId);
+  return`<div class="mb" onclick="if(event.target===this){S.taskModal=null;render()}">
+    <div class="mo pop-in">
+      <div class="moh"><div class="mot">${t('taskNew')}</div><button class="xb" onclick="S.taskModal=null;render()">✕</button></div>
+      <div class="mob">
+        <div class="iw"><label class="il">${t('taskTitle')} <span style="color:var(--rd)">*</span></label>
+          <input class="inp" type="text" placeholder="${t('taskTitleHint')}" value="${esc(d.title||'')}" oninput="S.taskDraft.title=this.value"/></div>
+        <div class="iw"><label class="il">${t('taskDue')}</label>
+          <input class="inp" type="date" value="${d.dueDate||''}" oninput="S.taskDraft.dueDate=this.value"/></div>
+        <div class="iw"><label class="il">${t('taskAssign')}</label>
+          <select class="sel" onchange="S.taskDraft.assigneeEmail=this.value">
+            ${CONFIG.REPS.map(r=>`<option value="${r.email}" ${d.assigneeEmail===r.email?'selected':''}>${r.name}</option>`).join('')}
+          </select></div>
+        ${linkedDeal?`<div class="iw"><label class="il">${t('taskDeal')}</label><div style="font-size:13px;color:var(--ct);padding:4px 0">📋 ${linkedDeal.properties?.dealname||'--'}</div></div>`:''}
+        <div class="iw"><label class="il">${t('taskNote')}</label>
+          <textarea class="ta" rows="3" oninput="S.taskDraft.note=this.value">${d.note||''}</textarea></div>
+      </div>
+      <div class="mof">
+        <button class="btn btn-sc btn-sm" onclick="S.taskModal=null;render()">${t('cancel')}</button>
+        <button class="btn btn-pr btn-sm" onclick="submitCreateTask()">${t('taskSave')}</button>
+      </div>
+    </div></div>`;
+}
+
+function renderLostModal(){
+  return`<div class="mb" onclick="if(event.target===this)closeModal()">
+    <div class="mo"><div class="moh"><div class="mot">${t('lostTitle')}</div><button class="xb" onclick="closeModal()">✕</button></div>
+    <div class="mob">
+      <div class="iw"><label class="il">${t('lostReason')} <span style="color:var(--rd)">*</span></label>
+        <select class="sel" id="lostSel" onchange="S.lostReason=this.value"><option value="">--</option>
+        ${t('lostReasons').map(o=>`<option value="${o}">${o}</option>`).join('')}</select></div>
+      <div class="iw"><label class="il">${t('lostNote')}</label>
+        <textarea class="ta" rows="3" oninput="S.lostNote=this.value"></textarea></div>
+    </div>
+    <div class="mof">
+      <button class="btn btn-sc btn-sm" onclick="closeModal()">${t('cancel')}</button>
+      <button class="btn btn-dn btn-sm" onclick="confirmLost('${S.modalDealId}')">${t('confirm')}</button>
+    </div></div></div>`;
+}
+
+function renderSchedModal(){
+  const deal=S.deals.find(d=>d.id===S.modalDealId);const sched=getScheduler(deal);
+  return`<div class="mb" onclick="if(event.target===this)closeModal()">
+    <div class="mo"><div class="moh"><div class="mot">${sched?.name||t('schedTitle')}</div><button class="xb" onclick="closeModal()">✕</button></div>
+    <div class="mob">
+      ${!sched?`<div class="wb">⚙️ ${t('noSchedCfg')}</div>`:`
+        <a href="${sched.url}" target="_blank" class="btn btn-pr btn-md btn-full" style="text-decoration:none">${t('openSched')}</a>
+        <iframe src="${sched.url}" style="width:100%;height:360px;border:none;border-radius:10px;border:1px solid var(--gl)"></iframe>`}
+    </div>
+    <div class="mof"><button class="btn btn-sc btn-sm" onclick="closeModal()">${t('close')}</button></div>
+    </div></div>`;
+}
+
+// ──────────────────────────────────────────
+// 🛠️  RENDERS — ADMIN PANEL
+// ──────────────────────────────────────────
+function renderAdmin(){
+  return`${renderTopBar()}
+  <div class="adm">
+    <div class="adm-nav">
+      <button class="adm-tab ${S.adminTab==='playbooks'?'on':''}" onclick="setAdminTab('playbooks')">${t('adPb')}</button>
+      <button class="adm-tab ${S.adminTab==='schedulers'?'on':''}" onclick="setAdminTab('schedulers')">${t('adSch')}</button>
+    </div>
+    <div class="adm-body">
+      ${S.adminTab==='playbooks'?renderAdminPlaybooks():renderAdminSchedulers()}
+    </div>
+  </div>
+  ${S.adminShowExport?renderExportModal():''}
+  ${S.modal==='delPb'?renderDelPbModal():''}
+  ${S.modal==='delSch'?renderDelSchModal():''}`;
+}
+
+function renderAdminPlaybooks(){
+  const pbs=loadPbs();
+  return`
+  <div class="pb-list">
+    <div class="pb-list-hd">
+      <span class="pb-list-hd-t">${t('adPb')} (${pbs.length})</span>
+      <button class="btn btn-pr btn-xs" onclick="adminNewPb()">${t('adNewPb')}</button>
+    </div>
+    <div class="pb-list-scroll">
+      ${!pbs.length?`<div style="padding:14px 10px;font-size:12px;color:var(--gm)">${t('adNoPbs')}</div>`:''}
+      ${pbs.map(pb=>` <div class="pb-item ${S.adminPbId===pb.id?'sel':''}" onclick="adminEditPb('${pb.id}')">
+        <div class="pb-item-name">${pb.name||t('adNameless')}</div>
+        <div class="pb-item-meta">${t('adQCount',(pb.phases||[]).reduce((a,p)=>a+(p.questions||[]).length,0))} · ${(pb.productMatches||[]).join(', ')||t('adNoTrigger')}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+  <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+    ${S.adminEditPb?renderAdminPbEditor():`<div class="adm-empty"><div class="adm-empty-icon">📋</div><p style="font-size:13px">${t('adEditPbEmpty')}</p></div>`}
+  </div>`;
+}
+
+function renderAdminPbEditor(){
+  const ep=S.adminEditPb;
+  return`<div class="pb-editor">
+    <div class="pb-editor-hd">
+      <div class="iw" style="flex:1;min-width:180px">
+        <label class="il">${t('adPbName')}</label>
+        <input class="inp" type="text" value="${esc(ep.name||'')}" oninput="epField('name',this.value)" placeholder="${t('adPbNameHint')}"/>
+      </div>
+      <div style="display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap">
+        <button class="btn btn-pr btn-sm" onclick="adminSavePb()">${t('adSavePb')}</button>
+        <button class="btn btn-sc btn-sm" onclick="adminShowExportFn()">${t('adExport')}</button>
+        <button class="btn btn-dn btn-sm" onclick="confirmDelPb('${ep.id}')">${t('adDelPb')}</button>
+      </div>
+    </div>
+
+    <div class="iw">
+      <label class="il">${t('adPbTrigger')}</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${(ep.productMatches||[]).map((m,i)=>`<span class="opt-chip">${m}<span class="opt-rm" onclick="rmPbMatch(${i})">×</span></span>`).join('')}
+        <input class="inp inp-sm" style="width:140px" placeholder="${t('adPbTriggerHint')}" onkeydown="if(event.key==='Enter'||event.key===','){addPbMatch(this.value);this.value='';event.preventDefault()}"/>
+        <span style="font-size:11px;color:var(--gm)">${t('adEnterToAdd')}</span>
+      </div>
+    </div>
+
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:700">${t('adPbPhases')}</span>
+        <button class="btn btn-sc btn-sm" onclick="adminAddPhase()">${t('adAddPhase')}</button>
+      </div>
+      ${(ep.phases||[]).map((phase,pi)=>renderAdminPhaseCard(phase,pi)).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAdminPhaseCard(phase,pi){
+  const isOpen=S.adminExpandedPhase===pi;
+  const qc=(phase.questions||[]).length;
+  return`<div class="pb-sec" style="margin-bottom:10px">
+    <div class="pb-sec-hd ${isOpen?'open':''}" onclick="toggleAdminPhase(${pi})">
+      <div class="pb-phase-name">
+        <span style="background:${isOpen?'rgba(255,255,255,.15)':'var(--gg)'};color:${isOpen?'#fff':'var(--gd)'};padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">${pi+1}</span>
+        <span class="pb-sec-title">${phase.label||t('adPhaseNum',pi+1)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:${isOpen?'rgba(255,255,255,.6)':'var(--gm)'}">${t('adQCount',qc)}</span>
+        <button class="btn btn-xs ${isOpen?'btn-sc':'btn-gh'}" style="${isOpen?'border-color:rgba(255,255,255,.3);color:#fff;background:transparent':''}" onclick="event.stopPropagation();rmAdminPhase(${pi})">✕</button>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="${isOpen?'M18 15l-6-6-6 6':'M6 9l6 6 6-6'}"/></svg>
+      </div>
+    </div>
+    ${isOpen?`<div class="pb-sec-body">
+      <div class="iw">
+        <label class="il">${t('adPhaseName')}</label>
+        <input class="inp inp-sm" type="text" value="${esc(phase.label||'')}" oninput="epPhaseLabel(${pi},this.value)"/>
+      </div>
+      ${(phase.questions||[]).map((q,qi)=>renderAdminQCard(q,pi,qi)).join('')}
+      <button class="btn btn-sc btn-sm" style="width:100%;justify-content:center;margin-top:4px" onclick="adminAddQ(${pi})">${t('adAddQ')}</button>
+    </div>`:''}
+  </div>`;
+}
+
+function renderAdminQCard(q,pi,qi){
+  const typeLabels=t('adQTypeLabels');
+  return`<div class="qcard">
+    <div class="qcard-hd">
+      <span class="qcard-type">${typeLabels[q.type]||q.type}</span>
+      <span class="qcard-lbl">${q.label||q.content||t('adEmpty')}</span>
+      ${q.hsProperty?`<span class="hs-badge">→ ${q.hsProperty}</span>`:''}
+      <button class="btn btn-dn btn-xs" onclick="rmAdminQ(${pi},${qi})">✕</button>
+    </div>
+    <div class="iw">
+      <label class="il">${t('adQType')}</label>
+      <select class="sel" onchange="epQField(${pi},${qi},'type',this.value)">
+        ${t('adQTypes').map(tp=>`<option value="${tp}" ${q.type===tp?'selected':''}>${typeLabels[tp]}</option>`).join('')}
+      </select>
+    </div>
+    ${q.type==='script'?`
+      <div class="iw"><label class="il">${t('adQContent')}</label>
+        <textarea class="ta" rows="3" oninput="epQField(${pi},${qi},'content',this.value)">${esc(q.content||'')}</textarea></div>
+    `:`
+      <div class="iw"><label class="il">${t('adQLabel')}</label>
+        <input class="inp inp-sm" type="text" value="${esc(q.label||'')}" oninput="epQField(${pi},${qi},'label',this.value)"/></div>
+    `}
+    ${q.type==='choice'?`
+      <div class="iw"><label class="il">${t('adQOptions')}</label>
+        <div class="opt-chips">
+          ${(q.options||[]).map((o,oi)=>`<span class="opt-chip">${o}<span class="opt-rm" onclick="rmQOpt(${pi},${qi},${oi})">×</span></span>`).join('')}
+          <input class="inp inp-sm" style="width:110px" placeholder="${t('adEnterToAdd').split(' ')[0]}…" onkeydown="if(event.key==='Enter'||event.key===','){addQOpt(${pi},${qi},this.value);this.value='';event.preventDefault()}"/>
+        </div>
+      </div>
+    `:''}
+    ${q.type==='intent'?`
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <div class="iw"><label class="il">🔥 Hot</label><input class="inp inp-sm" value="${esc(q.hotDesc||'')}" oninput="epQField(${pi},${qi},'hotDesc',this.value)"/></div>
+        <div class="iw"><label class="il">🌤 Warm</label><input class="inp inp-sm" value="${esc(q.warmDesc||'')}" oninput="epQField(${pi},${qi},'warmDesc',this.value)"/></div>
+        <div class="iw"><label class="il">❄️ Cold</label><input class="inp inp-sm" value="${esc(q.coldDesc||'')}" oninput="epQField(${pi},${qi},'coldDesc',this.value)"/></div>
+      </div>
+    `:''}
+    ${q.type!=='script'?`
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="iw" style="flex:1;min-width:140px"><label class="il">${t('adQHsProp')}</label>
+          <input class="inp inp-sm" placeholder="bijv. lead_temperature" value="${esc(q.hsProperty||'')}" oninput="epQField(${pi},${qi},'hsProperty',this.value)"/></div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gd);cursor:pointer;flex-shrink:0">
+          <input type="checkbox" class="chk" ${q.required?'checked':''} onchange="epQField(${pi},${qi},'required',this.checked)"/> ${t('adQReq')}</label>
+      </div>
+    `:''}
+  </div>`;
+}
+
+function renderAdminSchedulers(){
+  const scheds=loadScheds();
+  return`<div class="adm-scroll">
+    <div class="sc-grid">
+      ${scheds.map(s=>`<div class="sc-card ${s.isDefault?'def':''}">
+        <div>
+          <div class="sc-card-name">${s.name||t('adNameless')}</div>
+          ${s.isDefault?`<span class="badge bo" style="margin-top:4px">${t('adDefault')}</span>`:''}
+          <div class="sc-card-url" style="margin-top:6px">${s.url||t('adNoUrl')}</div>
+          <div style="font-size:12px;color:var(--gm);margin-top:3px">${t('adBtnLabelPrefix')} <strong>${s.buttonLabel||t('schedVC')}</strong></div>
+          ${s.productMatch?`<div style="font-size:11px;color:var(--gm);margin-top:2px">${t('adMatchPrefix')} ${s.productMatch}</div>`:''}
+        </div>
+        <div style="display:flex;gap:7px;margin-top:auto">
+          <button class="btn btn-sc btn-sm" onclick="adminEditSched('${s.id}')">${t('edit')}</button>
+          <button class="btn btn-dn btn-xs" onclick="confirmDelSch('${s.id}')">✕</button>
+        </div>
+      </div>`).join('')}
+      <div class="sc-new" onclick="adminNewSched()">
+        <div class="sc-new-icon">＋</div>
+        <div class="sc-new-lbl">${t('adNewSch')}</div>
+      </div>
+    </div>
+    ${S.adminEditSched?renderAdminSchedEditor():''}
+  </div>`;
+}
+
+function renderAdminSchedEditor(){
+  const es=S.adminEditSched;
+  const existing=loadScheds().find(s=>s.id===es.id);
+  return`<div style="padding:0 20px 24px">
+    <div style="background:var(--wh);border:1px solid var(--gl);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;max-width:500px">
+      <div style="font-size:14px;font-weight:700">${existing?t('adEditSch2'):t('adNewSch2')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="iw"><label class="il">${t('adSchName')}</label>
+          <input class="inp" type="text" value="${esc(es.name||'')}" oninput="esField('name',this.value)" placeholder="${t('adSchNameHint')}"/></div>
+        <div class="iw"><label class="il">${t('adSchBtnLabel')}</label>
+          <input class="inp" type="text" value="${esc(es.buttonLabel||'')}" oninput="esField('buttonLabel',this.value)" placeholder="${t('schedVC')}"/></div>
+      </div>
+      <div class="iw"><label class="il">${t('adSchUrl')}</label>
+        <input class="inp" type="url" value="${esc(es.url||'')}" oninput="esField('url',this.value)" placeholder="https://meetings.hubspot.com/…"/></div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+        <div class="iw"><label class="il">${t('adSchProd')}</label>
+          <input class="inp" type="text" value="${esc(es.productMatch||'')}" oninput="esField('productMatch',this.value)" placeholder="${t('adSchProdHint')}"/></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;padding-bottom:10px;white-space:nowrap">
+          <input type="checkbox" class="chk" ${es.isDefault?'checked':''} onchange="esField('isDefault',this.checked)"/> ${t('adSchDefault')}</label>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-pr btn-sm" onclick="adminSaveSched()">${t('adSaveSch')}</button>
+        <button class="btn btn-gh btn-sm" onclick="S.adminEditSched=null;render()">${t('cancel')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderExportModal(){
+  const pbJson=JSON.stringify(loadPbs(),null,2);
+  const schJson=JSON.stringify(loadScheds(),null,2);
+  return`<div class="mb" onclick="if(event.target===this){S.adminShowExport=false;render()}">
+    <div class="mo" style="max-width:580px"><div class="moh"><div class="mot">${t('adExport')}</div><button class="xb" onclick="S.adminShowExport=false;render()">✕</button></div>
+    <div class="mob">
+      <p style="font-size:12px;color:var(--gd)">${t('adExportNote')}</p>
+      <div><div class="sl2" style="margin-bottom:5px">CONFIG.CUSTOM_PLAYBOOKS</div>
+        <div class="exp-pre">${esc(pbJson)}</div>
+        <button class="btn btn-sc btn-xs" style="margin-top:5px" onclick="copyText(${JSON.stringify(pbJson)})">${t('copy')}</button>
+      </div>
+      <div><div class="sl2" style="margin-bottom:5px">CONFIG.CUSTOM_SCHEDULERS</div>
+        <div class="exp-pre">${esc(schJson)}</div>
+        <button class="btn btn-sc btn-xs" style="margin-top:5px" onclick="copyText(${JSON.stringify(schJson)})">${t('copy')}</button>
+      </div>
+    </div>
+    <div class="mof"><button class="btn btn-sc btn-sm" onclick="S.adminShowExport=false;render()">${t('close')}</button></div>
+    </div></div>`;
+}
+
+function renderDelPbModal(){
+  return`<div class="mb" onclick="if(event.target===this)closeModal()">
+    <div class="mo"><div class="moh"><div class="mot">${t('adDelPbTitle')}</div><button class="xb" onclick="closeModal()">✕</button></div>
+    <div class="mob"><p style="font-size:13px">${t('adDelConfirm')}</p></div>
+    <div class="mof"><button class="btn btn-sc btn-sm" onclick="closeModal()">${t('cancel')}</button>
+      <button class="btn btn-dn btn-sm" onclick="doDelPb('${S.modalDealId}')">${t('adDelPb')}</button></div>
+    </div></div>`;
+}
+
+function renderDelSchModal(){
+  return`<div class="mb" onclick="if(event.target===this)closeModal()">
+    <div class="mo"><div class="moh"><div class="mot">${t('adDelSchTitle')}</div><button class="xb" onclick="closeModal()">✕</button></div>
+    <div class="mob"><p style="font-size:13px">${t('adDelConfirm')}</p></div>
+    <div class="mof"><button class="btn btn-sc btn-sm" onclick="closeModal()">${t('cancel')}</button>
+      <button class="btn btn-dn btn-sm" onclick="doDelSch('${S.modalDealId}')">${t('adDelSch')}</button></div>
+    </div></div>`;
+}
+
+// ──────────────────────────────────────────
+// 🎬  ACTIONS — SALES
+// ──────────────────────────────────────────
+function setLang(l){S.lang=l;render()}
+function demoLogin(){S.currentRep=CONFIG.REPS[0]||{name:'Demo',email:'demo@quatt.io',hubspotUserId:'demo',hubspotOwnerId:'demo'};S.userAvatar=null;afterLogin()}
+function handleLogout(){Object.assign(S,{screen:'login',currentRep:null,userAvatar:null,deals:[],selectedId:null});render()}
+function goAdmin(){S.screen='admin';render()}
+
+async function handleReqLeads(){
+  if(S.cooldownEnd&&Date.now()<S.cooldownEnd)return;
+  S.loading=true;render();
+  try{
+    await postWH(S.currentRep);
+    S.cooldownEnd=Date.now()+CONFIG.REQUEST_COOLDOWN*1000;
+    startCD();toast(t('toastLeads'),'success');
+    setTimeout(async()=>{try{S.deals=await fetchDeals(S.currentRep.hubspotOwnerId)}catch{}render()},isDemo()?600:3000);
+  }catch(e){toast(t('errWH',e.message),'error')}
+  S.loading=false;render();
+}
+async function handleRefresh(){
+  S.loading=true;render();
+  try{S.deals=await fetchDeals(S.currentRep.hubspotOwnerId);toast(t('toastRefreshed'),'success')}
+  catch(e){toast(t('errLoad',e.message),'error')}
+  S.loading=false;render();
+}
+function selectDeal(id){S.selectedId=id;if(!S.playbook[id])S.playbook[id]={phaseIdx:0,answers:{},notes:{},callOutcome:'',callOutcomeNote:''};render()}
+function closeDeal(){S.selectedId=null;S.dmX=S.dmY=S.dmW=S.dmH=null;render()}
+async function handleHV(id){
+  try{await patchDeal(id,{dealstage:CONFIG.STAGES.HOME_VISIT});const d=S.deals.find(x=>x.id===id);if(d)d.properties.dealstage='Home Visit';toast(t('toastHV'),'success');render()}
+  catch(e){toast(t('errLoad',e.message),'error')}
+}
+function openLost(id){S.modal='lost';S.modalDealId=id;S.lostReason='';S.lostNote='';render()}
+function openSched(id){S.modal='sched';S.modalDealId=id;render()}
+function closeModal(){S.modal=null;render()}
+async function confirmLost(id){
+  const reason=document.getElementById('lostSel')?.value||S.lostReason;
+  if(!reason){toast(t('errReason'),'error');return}
+  try{
+    await patchDeal(id,{dealstage:CONFIG.STAGES.LOST,closed_lost_reason:reason});
+    S.deals=S.deals.filter(d=>d.id!==id);if(S.selectedId===id)S.selectedId=null;
+    closeModal();toast(t('toastLost'),'success');render();
+  }catch(e){toast(t('errLoad',e.message),'error')}
+}
+function rePanel(){
+  const el=document.getElementById('dealModal');
+  if(!el){render();return;}
+  const body=document.getElementById('dealModal-body');
+  const scrollTop=body?body.scrollTop:0;
+  const tmp=document.createElement('div');
+  tmp.innerHTML=renderDealModal();
+  const np=tmp.firstElementChild;
+  if(np){
+    // Remove pop-in so the open animation doesn't re-fire on every chip click
+    const card=np.querySelector('#dmCard');
+    if(card)card.classList.remove('pop-in');
+    el.replaceWith(np);
+    requestAnimationFrame(()=>{
+      const b=document.getElementById('dealModal-body');
+      if(b)b.scrollTop=scrollTop;
+    });
+  }
+}
+
+// ──────────────────────────────────────────
+// 🛠️  ACTIONS — ADMIN
+// ──────────────────────────────────────────
+function setAdminTab(tab){S.adminTab=tab;S.adminPbId=null;S.adminEditPb=null;S.adminEditSched=null;render()}
+function adminNewPb(){const nb={id:uid(),name:'',productMatches:[],phases:[]};const pbs=loadPbs();pbs.unshift(nb);savePbs(pbs);S.adminPbId=nb.id;S.adminEditPb=JSON.parse(JSON.stringify(nb));S.adminExpandedPhase=null;render()}
+function adminEditPb(id){const pb2=loadPbs().find(p=>p.id===id);if(!pb2)return;S.adminPbId=id;S.adminEditPb=JSON.parse(JSON.stringify(pb2));S.adminExpandedPhase=null;render()}
+function adminSavePb(){if(!S.adminEditPb)return;const pbs=loadPbs();const idx=pbs.findIndex(p=>p.id===S.adminEditPb.id);if(idx>=0)pbs[idx]=S.adminEditPb;else pbs.unshift(S.adminEditPb);savePbs(pbs);toast(t('toastSaved'),'success');render()}
+function confirmDelPb(id){S.modal='delPb';S.modalDealId=id;render()}
+function doDelPb(id){const pbs=loadPbs().filter(p=>p.id!==id);savePbs(pbs);if(S.adminPbId===id){S.adminPbId=null;S.adminEditPb=null}closeModal();render()}
+
+function epField(k,v){if(!S.adminEditPb)return;S.adminEditPb[k]=v}
+function addPbMatch(v){if(!v.trim()||!S.adminEditPb)return;if(!S.adminEditPb.productMatches)S.adminEditPb.productMatches=[];S.adminEditPb.productMatches.push(v.trim());render()}
+function rmPbMatch(i){if(!S.adminEditPb)return;S.adminEditPb.productMatches.splice(i,1);render()}
+function toggleAdminPhase(i){S.adminExpandedPhase=S.adminExpandedPhase===i?null:i;render()}
+function adminAddPhase(){if(!S.adminEditPb)return;if(!S.adminEditPb.phases)S.adminEditPb.phases=[];const ni=S.adminEditPb.phases.length;S.adminEditPb.phases.push({id:uid(),label:t('adPhaseNum',ni+1),questions:[]});S.adminExpandedPhase=ni;render()}
+function rmAdminPhase(pi){if(!S.adminEditPb)return;S.adminEditPb.phases.splice(pi,1);if(S.adminExpandedPhase===pi)S.adminExpandedPhase=null;render()}
+function epPhaseLabel(pi,v){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].label=v}
+function adminAddQ(pi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions.push({id:uid(),type:'script',content:'',label:'',options:[],hsProperty:'',required:false});render()}
+function rmAdminQ(pi,qi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions.splice(qi,1);render()}
+function epQField(pi,qi,k,v){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions[qi][k]=v;if(k==='type')render()}
+function addQOpt(pi,qi,v){if(!v.trim()||!S.adminEditPb)return;if(!S.adminEditPb.phases[pi].questions[qi].options)S.adminEditPb.phases[pi].questions[qi].options=[];S.adminEditPb.phases[pi].questions[qi].options.push(v.trim());render()}
+function rmQOpt(pi,qi,oi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions[qi].options.splice(oi,1);render()}
+
+function adminNewSched(){S.adminEditSched={id:uid(),name:'',buttonLabel:'',url:'',productMatch:'',isDefault:false};render()}
+function adminEditSched(id){const s=loadScheds().find(x=>x.id===id);if(!s)return;S.adminEditSched=JSON.parse(JSON.stringify(s));render()}
+function adminSaveSched(){if(!S.adminEditSched)return;const scheds=loadScheds();const idx=scheds.findIndex(s=>s.id===S.adminEditSched.id);if(idx>=0)scheds[idx]=S.adminEditSched;else scheds.push(S.adminEditSched);saveScheds(scheds);S.adminEditSched=null;toast(t('toastSaved'),'success');render()}
+function esField(k,v){if(!S.adminEditSched)return;S.adminEditSched[k]=v}
+function confirmDelSch(id){S.modal='delSch';S.modalDealId=id;render()}
+function doDelSch(id){saveScheds(loadScheds().filter(s=>s.id!==id));closeModal();render()}
+function adminShowExportFn(){S.adminShowExport=true;render()}
+function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast(t('copy')+' ✓','success')).catch(()=>toast('Copy manually','info'))}
+
+// ──────────────────────────────────────────
+// 🖱️  DRAG / RESIZE — DEAL MODAL
+// ──────────────────────────────────────────
+let _dm=null; // active drag/resize operation
+
+function dmStartDrag(e,type){
+  e.preventDefault();e.stopPropagation();
+  const card=document.getElementById('dmCard');
+  if(!card)return;
+  const r=card.getBoundingClientRect();
+  // Capture current rendered size/position as starting point
+  _dm={type,sx:e.clientX,sy:e.clientY,sw:r.width,sh:r.height,sl:r.left,st:r.top};
+  // Commit to fixed position immediately so movement is pixel-accurate
+  S.dmX=r.left;S.dmY=r.top;S.dmW=r.width;S.dmH=r.height;
+  card.style.cssText=`position:fixed;left:${S.dmX}px;top:${S.dmY}px;width:${S.dmW}px;height:${S.dmH}px;max-width:none;max-height:none;`;
+  document.addEventListener('mousemove',dmMove,{passive:false});
+  document.addEventListener('mouseup',dmStop);
+}
+
+function dmMove(e){
+  if(!_dm)return;
+  e.preventDefault();
+  const dx=e.clientX-_dm.sx, dy=e.clientY-_dm.sy;
+  const card=document.getElementById('dmCard');
+  if(!card)return;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  if(_dm.type==='move'){
+    S.dmX=Math.max(0,Math.min(_dm.sl+dx, vw-120));
+    S.dmY=Math.max(0,Math.min(_dm.st+dy, vh-60));
+    card.style.left=S.dmX+'px';
+    card.style.top=S.dmY+'px';
+  }else{
+    S.dmW=Math.max(420,Math.min(_dm.sw+dx, vw));
+    S.dmH=Math.max(300,Math.min(_dm.sh+dy, vh));
+    card.style.width=S.dmW+'px';
+    card.style.height=S.dmH+'px';
+  }
+}
+
+function dmStop(){
+  _dm=null;
+  document.removeEventListener('mousemove',dmMove);
+  document.removeEventListener('mouseup',dmStop);
+}
+
+// ──────────────────────────────────────────
+// ⏱️  COOLDOWN
+// ──────────────────────────────────────────
+let _cdt=null;
+function startCD(){
+  if(_cdt)clearInterval(_cdt);
+  _cdt=setInterval(()=>{
+    if(!S.cooldownEnd||Date.now()>=S.cooldownEnd){clearInterval(_cdt);render();return}
+    const s=Math.ceil((S.cooldownEnd-Date.now())/1000);
+    const b=document.getElementById('reqBtn');const f=document.getElementById('cdf');const d2=document.getElementById('cdt');
+    if(b)b.textContent=t('wait',s);if(f)f.style.width=(s/CONFIG.REQUEST_COOLDOWN*100)+'%';if(d2)d2.textContent=t('nextReq',s);
+  },1000);
+}
+
+// ──────────────────────────────────────────
+// 🔔  TOAST
+// ──────────────────────────────────────────
+function toast(msg,type='info'){
+  const c=document.getElementById('toastCtr');if(!c)return;
+  const el=document.createElement('div');el.className=`tt t${type[0]}`;el.textContent=msg;
+  c.appendChild(el);setTimeout(()=>el.remove(),3000);
+}
+
+// ──────────────────────────────────────────
+// 🛡️  UTILS
+// ──────────────────────────────────────────
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// ──────────────────────────────────────────
+// 🔄  RENDER
+// ──────────────────────────────────────────
+function render(){
+  const app=document.getElementById('app');if(!app)return;
+  if(S.screen==='login'){
+    app.innerHTML=renderLogin();
+    setTimeout(()=>{
+      if(window.google&&!CONFIG.GOOGLE_CLIENT_ID.includes('YOUR_CLIENT')){
+        initGoogle();const btn=document.getElementById('gBtn');
+        if(btn)google.accounts.id.renderButton(btn,{theme:'outline',size:'large',shape:'pill',text:'signin_with',width:320});
+      }
+    },80);
+  }else if(S.screen==='admin'){app.innerHTML=renderAdmin();}
+  else{app.innerHTML=renderDashboard();}
+  updateParticleOpacity();
+}
+
+// ──────────────────────────────────────────
+// 🚀  INIT
+// ──────────────────────────────────────────
+// Apply saved theme before first render
+document.documentElement.setAttribute('data-theme',loadTheme());
+render();
+updateParticleOpacity();
+if(S.cooldownEnd&&Date.now()<S.cooldownEnd)startCD();
+if(!window._aircallInit){window._aircallInit=true;initAircallCTI();}
+initParticles();
+</script>
+</body>
+</html>
