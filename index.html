@@ -120,14 +120,14 @@
     .pb2{padding:13px;display:flex;flex-direction:column;gap:11px;border-top:1px solid var(--gl)}
     .ps{height:1px;background:var(--gl)}
     .sb{background:var(--c2);border-radius:9px;padding:10px 12px;font-size:13px;line-height:1.65;color:var(--ct)}
-    .sb-hd{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--cs);cursor:pointer;user-select:none;padding:2px 0}
-    .sb-hd:hover{color:var(--ct)}
-    .sb-icon{font-size:14px;flex-shrink:0}
-    .sb-arr{margin-left:auto;font-size:10px;transition:transform .2s;display:inline-block}
-    .sb.open .sb-arr{transform:rotate(180deg)}
-    .sb.open .sb-hd{padding-bottom:8px;border-bottom:1px solid var(--cb);margin-bottom:6px}
-    .sb-body{display:none}
-    .sb.open .sb-body{display:block}
+    .wb-hd{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;cursor:pointer;user-select:none}
+    .wb-hd:hover{opacity:.8}
+    .wb-arr{margin-left:auto;font-size:10px;transition:transform .2s;display:inline-block;flex-shrink:0}
+    .wb.open .wb-arr{transform:rotate(180deg)}
+    .wb.open .wb-hd{padding-bottom:6px;border-bottom:1px solid rgba(204,248,34,.25);margin-bottom:5px}
+    [data-theme="light"] .wb.open .wb-hd{border-bottom-color:rgba(252,211,77,.5)}
+    .wb-body{display:none}
+    .wb.open .wb-body{display:block}
     .wb{background:rgba(204,248,34,.08);border:1px solid rgba(204,248,34,.3);border-radius:7px;padding:7px 10px;font-size:12px;color:#CCF822;display:block;line-height:1.6;word-wrap:break-word}
     .ql{font-size:12px;font-weight:700;color:var(--bk);margin-bottom:4px}
     .qr{color:var(--rd)}
@@ -1548,7 +1548,7 @@ function renderDealModal(){
         </div>
         <div class="dm-meta">
           <span class="dm-phone">${p.phone||'--'}</span>
-          ${p.phone?`<button class="btn btn-pr btn-sm" onclick="aircallDial('${p.phone.replace(/'/g,'').replace(/\s/g,'')}');" onmousedown="event.stopPropagation()" style="text-decoration:none;pointer-events:auto">${t('callBtn')}</button><button class="btn btn-sc btn-sm" onclick="addToDialerQueue('${deal.id}')" onmousedown="event.stopPropagation()" style="font-size:11px" title="Add to Aircall Power Dialer">⚡</button>`:''}
+          ${p.phone?`<button class="btn btn-pr btn-sm" onclick="aircallDial('${p.phone.replace(/'/g,'').replace(/\s/g,'')}');" onmousedown="event.stopPropagation()" style="text-decoration:none;pointer-events:auto">${t('callBtn')}</button>`:''}
         </div>
       </div>
 
@@ -2017,12 +2017,12 @@ async function confirmLost(id){
     closeModal();toast(t('toastLost'),'success');render();
   }catch(e){toast(t('errLoad',e.message),'error')}
 }
-function initSbToggles(){
+function initWbToggles(){
   requestAnimationFrame(()=>{
-    document.querySelectorAll('.pb2 .sb:not([data-sb])').forEach(sb=>{
-      sb.setAttribute('data-sb','1');
-      const inner=sb.innerHTML;
-      sb.innerHTML=`<div class="sb-hd" onclick="this.closest('.sb').classList.toggle('open')"><span class="sb-icon">ℹ</span><span>Uitleg / script</span><span class="sb-arr">▾</span></div><div class="sb-body">${inner}</div>`;
+    document.querySelectorAll('.pb2 .wb:not([data-wb])').forEach(wb=>{
+      wb.setAttribute('data-wb','1');
+      const inner=wb.innerHTML;
+      wb.innerHTML=`<div class="wb-hd" onclick="this.closest('.wb').classList.toggle('open')"><span>ℹ</span><span>Info</span><span class="wb-arr">▾</span></div><div class="wb-body">${inner}</div>`;
     });
   });
 }
@@ -2043,7 +2043,7 @@ function rePanel(){
     requestAnimationFrame(()=>{
       const b=document.getElementById('dealModal-body');
       if(b)b.scrollTop=scrollTop;
-      initSbToggles();
+      initWbToggles();
     });
   }
 }
@@ -2169,7 +2169,7 @@ function render(){
   }else if(S.screen==='admin'){app.innerHTML=renderAdmin();}
   else{app.innerHTML=renderDashboard();}
   updateParticleOpacity();
-  initSbToggles();
+  initWbToggles();
 }
 
 // ──────────────────────────────────────────
