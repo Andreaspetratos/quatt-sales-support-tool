@@ -96,7 +96,7 @@
     /* height:92vh (not max-height) gives .dm-card a definite size so flex:1
        on .dm-body resolves to a real pixel value and overflow-y:auto activates.
        max-height alone does NOT constrain flex children — height does. */
-    .dm-card{background:var(--c1);border-radius:20px;width:100%;max-width:680px;height:92vh;display:flex;flex-direction:column;box-shadow:0 28px 80px rgba(0,0,0,.6),0 0 0 1px var(--cb);overflow:hidden;user-select:none}
+    .dm-card{background:var(--c1);border-radius:20px;width:100%;max-width:calc(100vw - 32px);height:96vh;display:flex;flex-direction:column;box-shadow:0 28px 80px rgba(0,0,0,.6),0 0 0 1px var(--cb);overflow:hidden;user-select:none}
     .dm-head{padding:16px 20px 14px;border-bottom:1px solid var(--cb);flex-shrink:0;cursor:move}
     .dm-head:active{cursor:grabbing}
     .dm-title{font-size:17px;font-weight:700;color:var(--ct);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
@@ -120,6 +120,14 @@
     .pb2{padding:13px;display:flex;flex-direction:column;gap:11px;border-top:1px solid var(--gl)}
     .ps{height:1px;background:var(--gl)}
     .sb{background:var(--c2);border-radius:9px;padding:10px 12px;font-size:13px;line-height:1.65;color:var(--ct)}
+    .sb-hd{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--cs);cursor:pointer;user-select:none;padding:2px 0}
+    .sb-hd:hover{color:var(--ct)}
+    .sb-icon{font-size:14px;flex-shrink:0}
+    .sb-arr{margin-left:auto;font-size:10px;transition:transform .2s;display:inline-block}
+    .sb.open .sb-arr{transform:rotate(180deg)}
+    .sb.open .sb-hd{padding-bottom:8px;border-bottom:1px solid var(--cb);margin-bottom:6px}
+    .sb-body{display:none}
+    .sb.open .sb-body{display:block}
     .wb{background:rgba(204,248,34,.08);border:1px solid rgba(204,248,34,.3);border-radius:7px;padding:7px 10px;font-size:12px;color:#CCF822;display:block;line-height:1.6;word-wrap:break-word}
     .ql{font-size:12px;font-weight:700;color:var(--bk);margin-bottom:4px}
     .qr{color:var(--rd)}
@@ -587,7 +595,7 @@ function setTheme(t){
   render();
 }
 function loadTheme(){
-  try{const saved=localStorage.getItem('quatt_theme');return saved||'dark'}catch{return'dark'}
+  try{const saved=localStorage.getItem('quatt_theme');return saved||'light'}catch{return'light'}
 }
 
 function loadTasks(){try{const r=localStorage.getItem('quatt_tasks');return r?JSON.parse(r):[]}catch{return[]}}
@@ -1470,7 +1478,7 @@ function renderTable(){
   return`<div style="flex:1;min-height:0;overflow:auto">
     <table><thead><tr>
       <th>${t('colName')}</th><th>${t('colTime')}</th><th>${t('colPhone')}</th>
-      <th>${t('colProduct')}</th><th>${t('colOutcome')}</th><th>${t('colOrigin')}</th><th>${t('colScore')}</th>
+      <th>${t('colProduct')}</th><th>${t('colOutcome')}</th><th>${t('colOrigin')}</th>
     </tr></thead><tbody>
     ${S.deals.map(d=>{const p=d.properties;return`<tr class="${d.id===S.selectedId?'ra':''}" onclick="selectDeal('${d.id}')">
       <td><div style="display:flex;align-items:center;gap:7px;max-width:200px"><span class="tn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:none;flex:1">${p.dealname||'--'}</span>${dealOpenTasks(d.id).length?`<span class="task-badge">${dealOpenTasks(d.id).length}</span>`:''}</div></td>
@@ -1479,7 +1487,6 @@ function renderTable(){
       <td>${prodBadge(p[P.product])}</td>
       <td class="tm">${p[P.callOutcome]||'--'}</td>
       <td class="tm">${p[P.formOrigin]||'--'}</td>
-      <td>${scoreBadge(p[P.leadScore])}</td>
     </tr>`}).join('')}
     </tbody></table>
   </div>`;
@@ -1542,7 +1549,6 @@ function renderDealModal(){
         <div class="dm-meta">
           <span class="dm-phone">${p.phone||'--'}</span>
           ${p.phone?`<button class="btn btn-pr btn-sm" onclick="aircallDial('${p.phone.replace(/'/g,'').replace(/\s/g,'')}');" onmousedown="event.stopPropagation()" style="text-decoration:none;pointer-events:auto">${t('callBtn')}</button><button class="btn btn-sc btn-sm" onclick="addToDialerQueue('${deal.id}')" onmousedown="event.stopPropagation()" style="font-size:11px" title="Add to Aircall Power Dialer">⚡</button>`:''}
-          ${scoreBadge(p[P.leadScore])}
         </div>
       </div>
 
@@ -2011,6 +2017,16 @@ async function confirmLost(id){
     closeModal();toast(t('toastLost'),'success');render();
   }catch(e){toast(t('errLoad',e.message),'error')}
 }
+function initSbToggles(){
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.pb2 .sb:not([data-sb])').forEach(sb=>{
+      sb.setAttribute('data-sb','1');
+      const inner=sb.innerHTML;
+      sb.innerHTML=`<div class="sb-hd" onclick="this.closest('.sb').classList.toggle('open')"><span class="sb-icon">ℹ</span><span>Uitleg / script</span><span class="sb-arr">▾</span></div><div class="sb-body">${inner}</div>`;
+    });
+  });
+}
+
 function rePanel(){
   const el=document.getElementById('dealModal');
   if(!el){render();return;}
@@ -2027,6 +2043,7 @@ function rePanel(){
     requestAnimationFrame(()=>{
       const b=document.getElementById('dealModal-body');
       if(b)b.scrollTop=scrollTop;
+      initSbToggles();
     });
   }
 }
@@ -2152,6 +2169,7 @@ function render(){
   }else if(S.screen==='admin'){app.innerHTML=renderAdmin();}
   else{app.innerHTML=renderDashboard();}
   updateParticleOpacity();
+  initSbToggles();
 }
 
 // ──────────────────────────────────────────
