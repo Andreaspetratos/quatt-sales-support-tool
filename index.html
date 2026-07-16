@@ -442,8 +442,8 @@ const T = {
     adQType:'Type vraag', adQLabel:'Vraagtekst / label', adQContent:'Script tekst',
     adQOptions:'Antwoordopties', adQHsProp:'HubSpot property (API naam)',
     adQReq:'Verplicht',
-    adQTypes:['script','choice','textarea','intent'],
-    adQTypeLabels:{'script':'Script','choice':'Meerkeuze','textarea':'Tekstveld','intent':'Koopintentie'},
+    adQTypes:['script','info','choice','textarea','intent','address','outcome','tech_check'],
+    adQTypeLabels:{'script':'Script','info':'Info block','choice':'Meerkeuze','textarea':'Tekstveld','intent':'Koopintentie','address':'Adresvelden','outcome':'Call outcome','tech_check':'Tech check'},
     // Admin — schedulers
     adNewSch:'+ Nieuwe scheduler', adNewSch2:'Nieuwe scheduler', adEditSch2:'Scheduler bewerken',
     adSchName:'Naam (intern)', adSchNameHint:'bijv. Afspraak inplannen',
@@ -526,8 +526,8 @@ const T = {
     adQType:'Question type', adQLabel:'Question text / label', adQContent:'Script text',
     adQOptions:'Answer options', adQHsProp:'HubSpot property (API name)',
     adQReq:'Required',
-    adQTypes:['script','choice','textarea','intent'],
-    adQTypeLabels:{'script':'Script','choice':'Multiple choice','textarea':'Text field','intent':'Buying intent'},
+    adQTypes:['script','info','choice','textarea','intent','address','outcome','tech_check'],
+    adQTypeLabels:{'script':'Script','info':'Info block','choice':'Multiple choice','textarea':'Text field','intent':'Buying intent','address':'Address fields','outcome':'Call outcome','tech_check':'Tech check'},
     adNewSch:'+ New scheduler', adNewSch2:'New scheduler', adEditSch2:'Edit scheduler',
     adSchName:'Name (internal)', adSchNameHint:'e.g. Schedule appointment',
     adSchBtnLabel:'Button label (shown in Sales Tool)',
@@ -822,6 +822,10 @@ function renderCustomPb(pbDef){
 function renderCustomQ(q){
   switch(q.type){
     case 'script': return`<div class="sb">${q.content||''}</div>`;
+    case 'info':   return`<div class="wb">${q.content||''}</div>`;
+    case 'address': return renderAddrBlock(q.prefix||'cp_');
+    case 'outcome': return renderOutcomeBlock(q.prefix||'cp_', q.altProdNote||'');
+    case 'tech_check': return renderTechCheckQ(q);
     case 'choice': return`<div>
       <div class="ql">${q.label||''}${q.required?'<span class="qr"> *</span>':''}</div>
       <div class="cr2">${(q.options||[]).map(o=>`<button class="chip ${pbA(q.id)===o?'on':''}" onclick="setPbA('${q.id}','${o}')">${o}</button>`).join('')}</div>
@@ -866,32 +870,20 @@ function doneCustomPhase(phaseId,nextIdx){
 }
 
 // ──────────────────────────────────────────
-// 📋  HARDCODED PLAYBOOKS  (i18n-aware)
+// 🧱  SHARED PLAYBOOK BLOCK RENDERERS
 // ──────────────────────────────────────────
-// Returns the playbook definition using current language for labels.
-// Content (scripts, questions) stays in Dutch — it's customer-facing.
-function getHardcodedPb(key){
-  // ── shared helpers (closures over pbN/pbA/t at call time) ──────────────
-  const opening=()=>`
-    <div class="sb">
-      <strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt.
-      Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>
-      Klant: Ja.<br/><br/>
-      <strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"
-    </div>
-    <div class="wb">👉 Als niet akkoord: stop opname in Aircall</div>`;
+function renderAddrBlock(pfx){
+  return`<div class="ag">
+    <div class="iw" style="grid-column:1/-1"><label class="il">Straat</label><input class="inp" type="text" value="${pbN(pfx+'str')}" oninput="setPbN('${pfx}str',this.value)" placeholder="Straatnaam"/></div>
+    <div class="iw"><label class="il">Huisnr</label><input class="inp" type="text" value="${pbN(pfx+'nr')}" oninput="setPbN('${pfx}nr',this.value)"/></div>
+    <div class="iw"><label class="il">Toev.</label><input class="inp" type="text" value="${pbN(pfx+'tv')}" oninput="setPbN('${pfx}tv',this.value)" placeholder="kan leeg zijn"/></div>
+    <div class="iw"><label class="il">Postcode</label><input class="inp" type="text" value="${pbN(pfx+'pc')}" oninput="setPbN('${pfx}pc',this.value)"/></div>
+    <div class="iw"><label class="il">Woonplaats</label><input class="inp" type="text" value="${pbN(pfx+'wp')}" oninput="setPbN('${pfx}wp',this.value)"/></div>
+  </div>`;
+}
 
-  const addrBlock=(pfx)=>`
-    <div class="ag">
-      <div class="iw" style="grid-column:1/-1"><label class="il">Straat</label><input class="inp" type="text" value="${pbN(pfx+'str')}" oninput="setPbN('${pfx}str',this.value)" placeholder="Straatnaam"/></div>
-      <div class="iw"><label class="il">Huisnr</label><input class="inp" type="text" value="${pbN(pfx+'nr')}" oninput="setPbN('${pfx}nr',this.value)"/></div>
-      <div class="iw"><label class="il">Toev.</label><input class="inp" type="text" value="${pbN(pfx+'tv')}" oninput="setPbN('${pfx}tv',this.value)" placeholder="kan leeg zijn"/></div>
-      <div class="iw"><label class="il">Postcode</label><input class="inp" type="text" value="${pbN(pfx+'pc')}" oninput="setPbN('${pfx}pc',this.value)"/></div>
-      <div class="iw"><label class="il">Woonplaats</label><input class="inp" type="text" value="${pbN(pfx+'wp')}" oninput="setPbN('${pfx}wp',this.value)"/></div>
-    </div>`;
-
-  const outcomeBlock=(pfx,altProdNote)=>`
-    <div class="dv"></div>
+function renderOutcomeBlock(pfx,altProdNote){
+  return`<div class="dv"></div>
     <div class="ql">Call outcome <span class="qr">*</span></div>
     <div>
       <div class="io ${pbA(pfx+'out')==='hv'?'sh':''}" onclick="setPbA('${pfx}out','hv')">
@@ -912,6 +904,45 @@ function getHardcodedPb(key){
       </div>
     </div>
     ${altProdNote?`<div class="wb" style="margin-top:8px">💡 ${altProdNote}</div>`:''}`;
+}
+
+function renderTechCheckQ(q){
+  const chipKey=q.chipKey||q.id;
+  return`<div>
+    <div class="ql">${q.label||''}</div>
+    <div class="sb" style="font-size:12px;margin-bottom:6px"><strong>Agent:</strong> "${q.agentQuestion||''}"</div>
+    <div style="border:1px solid var(--cb);border-radius:8px;overflow:hidden;font-size:12px;margin-bottom:6px">
+      ${(q.outcomes||[]).map((o,i)=>`
+        <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;padding:6px 10px;${i<(q.outcomes||[]).length-1?'border-bottom:1px solid var(--cb)':''}">
+          <div><span style="color:var(--ct)">${o.condition}</span>
+          ${o.script?`<details style="margin-top:2px"><summary style="color:var(--cs);font-size:11px;cursor:pointer;user-select:none">▸ script</summary><div style="font-size:11px;color:var(--cs);font-style:italic;line-height:1.5;padding-top:3px;border-top:1px solid var(--cb);margin-top:3px">${o.script}</div></details>`:''}
+          </div>
+          <span style="color:${o.color||'var(--ct)'};font-weight:700;white-space:nowrap">${o.result}</span>
+        </div>`).join('')}
+    </div>
+    <div class="ql">${q.chipLabel||'Situatie klant'}</div>
+    <div class="cr2">${(q.chipOptions||[]).map(o=>`<button class="chip ${pbA(chipKey)===o?'on':''}" onclick="setPbA('${chipKey}','${o}')">${o}</button>`).join('')}</div>
+  </div>`;
+}
+
+// ──────────────────────────────────────────
+// 📋  HARDCODED PLAYBOOKS  (i18n-aware)
+// ──────────────────────────────────────────
+// Returns the playbook definition using current language for labels.
+// Content (scripts, questions) stays in Dutch — it's customer-facing.
+function getHardcodedPb(key){
+  // ── shared helpers ──────────────────────────────────────────────────────
+  const opening=()=>`
+    <div class="sb">
+      <strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt.
+      Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>
+      Klant: Ja.<br/><br/>
+      <strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"
+    </div>
+    <div class="wb">👉 Als niet akkoord: stop opname in Aircall</div>`;
+
+  const addrBlock=(pfx)=>renderAddrBlock(pfx);
+  const outcomeBlock=(pfx,altProdNote)=>renderOutcomeBlock(pfx,altProdNote);
 
   const closePhase=(pfx,acties,altProdNote)=>`
     <div class="sb"><strong>Agent:</strong> "Leuk! Laten we direct een afspraak inplannen. Ik kijk met je mee wanneer wij een mogelijkheid hebben."<br/><br/>
@@ -1764,7 +1795,10 @@ function renderAdminPlaybooks(){
     <div class="pb-list-scroll">
       ${!pbs.length?`<div style="padding:14px 10px;font-size:12px;color:var(--gm)">${t('adNoPbs')}</div>`:''}
       ${pbs.map(pb=>` <div class="pb-item ${S.adminPbId===pb.id?'sel':''}" onclick="adminEditPb('${pb.id}')">
-        <div class="pb-item-name">${pb.name||t('adNameless')}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="pb-item-name">${pb.name||t('adNameless')}</div>
+          ${pb.isBuiltin?`<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;background:rgba(26,122,107,.15);color:var(--gr);flex-shrink:0">BUILT-IN</span>`:''}
+        </div>
         <div class="pb-item-meta">${t('adQCount',(pb.phases||[]).reduce((a,p)=>a+(p.questions||[]).length,0))} · ${(pb.productMatches||[]).join(', ')||t('adNoTrigger')}</div>
       </div>`).join('')}
     </div>
@@ -1849,9 +1883,47 @@ function renderAdminQCard(q,pi,qi){
         ${t('adQTypes').map(tp=>`<option value="${tp}" ${q.type===tp?'selected':''}>${typeLabels[tp]}</option>`).join('')}
       </select>
     </div>
-    ${q.type==='script'?`
+    ${(q.type==='script'||q.type==='info')?`
       <div class="iw"><label class="il">${t('adQContent')}</label>
         <textarea class="ta" rows="3" oninput="epQField(${pi},${qi},'content',this.value)">${esc(q.content||'')}</textarea></div>
+    `:(q.type==='address')?`
+      <div class="iw"><label class="il">Prefix (staat voor de veldnamen)</label>
+        <input class="inp inp-sm" value="${esc(q.prefix||'cp_')}" oninput="epQField(${pi},${qi},'prefix',this.value)"/></div>
+    `:(q.type==='outcome')?`
+      <div class="iw"><label class="il">Prefix</label>
+        <input class="inp inp-sm" value="${esc(q.prefix||'cp_')}" oninput="epQField(${pi},${qi},'prefix',this.value)"/></div>
+      <div class="iw"><label class="il">Extra notitie (optioneel, bijv. alternatief product)</label>
+        <input class="inp inp-sm" value="${esc(q.altProdNote||'')}" oninput="epQField(${pi},${qi},'altProdNote',this.value)"/></div>
+    `:(q.type==='tech_check')?`
+      <div class="iw"><label class="il">Label / titel</label>
+        <input class="inp inp-sm" value="${esc(q.label||'')}" oninput="epQField(${pi},${qi},'label',this.value)"/></div>
+      <div class="iw"><label class="il">Agent vraag</label>
+        <textarea class="ta" rows="2" oninput="epQField(${pi},${qi},'agentQuestion',this.value)">${esc(q.agentQuestion||'')}</textarea></div>
+      <div class="iw"><label class="il">Chip state key</label>
+        <input class="inp inp-sm" value="${esc(q.chipKey||'')}" oninput="epQField(${pi},${qi},'chipKey',this.value)"/></div>
+      <div class="iw"><label class="il">Uitkomsten</label>
+        ${(q.outcomes||[]).map((o,oi)=>`<div style="border:1px solid var(--cb);border-radius:7px;padding:7px;margin-bottom:6px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 90px auto;gap:4px;margin-bottom:4px;align-items:center">
+            <input class="inp inp-sm" placeholder="Situatie" value="${esc(o.condition||'')}" oninput="epOutcomeField(${pi},${qi},${oi},'condition',this.value)"/>
+            <input class="inp inp-sm" placeholder="Resultaat" value="${esc(o.result||'')}" oninput="epOutcomeField(${pi},${qi},${oi},'result',this.value)"/>
+            <select class="sel" onchange="epOutcomeField(${pi},${qi},${oi},'color',this.value)">
+              <option value="var(--gr)" ${(o.color||'')==='var(--gr)'?'selected':''}>✓ Groen</option>
+              <option value="var(--rd)" ${(o.color||'')==='var(--rd)'?'selected':''}>✖ Rood</option>
+              <option value="var(--or)" ${(o.color||'')==='var(--or)'?'selected':''}>→ Oranje</option>
+              <option value="#f59e0b" ${(o.color||'')==='#f59e0b'?'selected':''}>⏸ Geel</option>
+            </select>
+            <button class="btn btn-dn btn-xs" onclick="rmTcOutcome(${pi},${qi},${oi})">✕</button>
+          </div>
+          <textarea class="ta" rows="2" placeholder="Script (optioneel)…" oninput="epOutcomeField(${pi},${qi},${oi},'script',this.value)">${esc(o.script||'')}</textarea>
+        </div>`).join('')}
+        <button class="btn btn-sc btn-xs" onclick="addTcOutcome(${pi},${qi})">+ Uitkomst toevoegen</button>
+      </div>
+      <div class="iw"><label class="il">Chip opties (klant selectie)</label>
+        <div class="opt-chips">
+          ${(q.chipOptions||[]).map((o,oi)=>`<span class="opt-chip">${o}<span class="opt-rm" onclick="rmTcOpt(${pi},${qi},${oi})">×</span></span>`).join('')}
+          <input class="inp inp-sm" style="width:160px" placeholder="Optie toevoegen…" onkeydown="if(event.key==='Enter'||event.key===','){addTcOpt(${pi},${qi},this.value);this.value='';event.preventDefault()}"/>
+        </div>
+      </div>
     `:`
       <div class="iw"><label class="il">${t('adQLabel')}</label>
         <input class="inp inp-sm" type="text" value="${esc(q.label||'')}" oninput="epQField(${pi},${qi},'label',this.value)"/></div>
@@ -1871,7 +1943,7 @@ function renderAdminQCard(q,pi,qi){
         <div class="iw"><label class="il">❄️ Cold</label><input class="inp inp-sm" value="${esc(q.coldDesc||'')}" oninput="epQField(${pi},${qi},'coldDesc',this.value)"/></div>
       </div>
     `:''}
-    ${q.type!=='script'?`
+    ${!['script','info','address','outcome','tech_check'].includes(q.type)?`
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div class="iw" style="flex:1;min-width:140px"><label class="il">${t('adQHsProp')}</label>
           <input class="inp inp-sm" placeholder="bijv. lead_temperature" value="${esc(q.hsProperty||'')}" oninput="epQField(${pi},${qi},'hsProperty',this.value)"/></div>
@@ -2070,6 +2142,132 @@ function rmAdminQ(pi,qi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].quest
 function epQField(pi,qi,k,v){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions[qi][k]=v;if(k==='type')render()}
 function addQOpt(pi,qi,v){if(!v.trim()||!S.adminEditPb)return;if(!S.adminEditPb.phases[pi].questions[qi].options)S.adminEditPb.phases[pi].questions[qi].options=[];S.adminEditPb.phases[pi].questions[qi].options.push(v.trim());render()}
 function rmQOpt(pi,qi,oi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions[qi].options.splice(oi,1);render()}
+// tech_check outcome helpers
+function epOutcomeField(pi,qi,oi,k,v){if(!S.adminEditPb)return;const outcomes=S.adminEditPb.phases[pi].questions[qi].outcomes;if(outcomes&&outcomes[oi])outcomes[oi][k]=v;}
+function addTcOutcome(pi,qi){if(!S.adminEditPb)return;const q=S.adminEditPb.phases[pi].questions[qi];if(!q.outcomes)q.outcomes=[];q.outcomes.push({condition:'',result:'',color:'var(--gr)',script:''});render()}
+function rmTcOutcome(pi,qi,oi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions[qi].outcomes.splice(oi,1);render()}
+function addTcOpt(pi,qi,v){if(!v.trim()||!S.adminEditPb)return;const q=S.adminEditPb.phases[pi].questions[qi];if(!q.chipOptions)q.chipOptions=[];q.chipOptions.push(v.trim());render()}
+function rmTcOpt(pi,qi,oi){if(!S.adminEditPb)return;S.adminEditPb.phases[pi].questions[qi].chipOptions.splice(oi,1);render()}
+
+// ──────────────────────────────────────────
+// 🌱  BUILT-IN PLAYBOOKS (seeded into custom system)
+// ──────────────────────────────────────────
+function getBuiltinPlaybookDefs(){
+  return[
+    // HYBRID
+    {id:'builtin-hybrid',isBuiltin:true,name:'Hybrid Kwalificatiegesprek',productMatches:['hybrid'],phases:[
+      {id:'bh_p1',label:'Fase 1: Opening',questions:[
+        {id:'bh_open_s',type:'script',content:'<strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt. Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>Klant: Ja.<br/><br/><strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"'},
+        {id:'bh_open_i',type:'info',content:'👉 Als niet akkoord: stop opname in Aircall'}
+      ]},
+      {id:'bh_p2',label:'Fase 2: Koopintentie',questions:[
+        {id:'bh_doel',type:'script',content:'<strong>Doel:</strong> bepaal in 2-3 vragen of de lead Hot / Warm / Cold is. Stop zodra je een duidelijk beeld hebt.'},
+        {id:'h_reden',type:'choice',label:'Wat was voor jou de belangrijkste reden om de besparingscheck in te vullen?',required:true,options:['Ik wil van het gas af','Aan het rondkijken','CV-ketel moet worden vervangen','Kosten besparen','Renovatie','Verhuizing'],hsProperty:'',chipOptions:[]},
+        {id:'bh_ori_i',type:'info',content:'Vraag indien nodig:'},
+        {id:'h_orient_n',type:'textarea',label:'Wat heb je tot nu toe al gedaan in je oriëntatie?',placeholder:'Notities…'},
+        {id:'h_timing',type:'choice',label:'Wanneer wil je de Hybrid in huis hebben?',options:['ASAP','0-3 months','3-6 months','>6 months'],hsProperty:'',chipOptions:[]},
+        {id:'h_intent',type:'intent',label:'Is deze klant Hot, Warm of Cold?',required:true,hotDesc:'Concrete aanleiding, timing ≤ 6 mnd → Fase 3.',warmDesc:'Interesse aanwezig, oriënterend → Fase 3.',coldDesc:'Lage urgentie → stuur informatiepakket, rond af.'}
+      ]},
+      {id:'bh_p3',label:'Fase 3: Tech check',questions:[
+        {id:'bh_tc_i',type:'info',content:'🎯 <strong>Doel:</strong> harde disqualifiers uitvragen in zo min mogelijk vragen.<br/><strong>Agent:</strong> "Voordat ik de afspraak inplan, check ik even een paar technische punten. Dit helpt onze adviseur alvast ter voorbereiding."'},
+        {id:'h_gas_tc',type:'tech_check',label:'Check 1 — Gasverbruik',chipKey:'h_gas',agentQuestion:'Ik zie dat je [Deal: Aardgas] kuub gas hebt opgegeven als jaarlijks gasverbruik. Klopt dat?',outcomes:[{condition:'Minder dan 700 m³',result:'✖ Lost',color:'var(--rd)',script:'"Bij een verbruik onder de 700 m³ zien we vaak dat de terugverdientijd erg lang wordt. We willen eerlijk advies geven: in jouw geval is de investering technisch gezien prachtig, maar financieel minder rendabel. Ik wil je tijd niet verspillen met een afspraak die niets oplevert. Of zou het voor jou meer zijn voor het terugbrengen van je CO₂ uitstoot? Zo ja, dan plan ik gewoon een afspraak in!"'},{condition:'Meer dan 700 m³',result:'✓ Ga door',color:'var(--gr)'}],chipOptions:['Minder dan 700 m³ (Lost)','Meer dan 700 m³ (doorgaan)']},
+        {id:'h_woning_tc',type:'tech_check',label:'Check 2 — Woning',chipKey:'h_woning',agentQuestion:'Dan nog even een paar snelle vragen over je woning: heb je een eigen woning met een cv-ketel?',outcomes:[{condition:'Stadsverwarming',result:'✖ Lost',color:'var(--rd)',script:'"Op dit moment werken onze systemen helaas nog niet met stadsverwarming. Mag ik je op een lijst zetten zodat je het als eerste hoort zodra we daar een oplossing voor hebben?"'},{condition:'Geen buitenruimte',result:'✖ Lost',color:'var(--rd)',script:'"Voor een warmtepomp hebben we buitenruimte nodig voor de buitenunit. In een appartement is dat helaas vaak niet mogelijk. Ik wil je geen afspraak laten inplannen die uiteindelijk niets oplevert."'},{condition:'Renovatie',result:'⏸ On hold',color:'#f59e0b',script:'"Omdat een warmtepomp nauwkeurig moet worden ingeregeld op een werkend systeem, kunnen we je op dit moment helaas nog niet verder helpen. We willen namelijk voorkomen dat je verbouwing vastloopt op de installatie."'},{condition:'Cv-ketel / radiatoren / vloerverwarming',result:'✓ Ga door',color:'var(--gr)'}],chipOptions:['Ja — radiatoren/vloerverwarming','Stadsverwarming (Lost)','Geen buitenruimte (Lost)','Renovatie (On hold)']},
+        {id:'h_tech_n',type:'textarea',label:'Notities tech check',placeholder:'Notities…'}
+      ]},
+      {id:'bh_p4',label:'Fase 4: Afsluiting',questions:[
+        {id:'bh_close_s',type:'script',content:'<strong>Agent:</strong> "Leuk! Laten we direct een afspraak inplannen. Ik kijk met je mee wanneer wij een mogelijkheid hebben."<br/><br/><strong>Actie:</strong> 1. Check of postcode en adres in het systeem staat. Zo niet, vraag deze op en vul ze in. 2. Klik in \'Call outcome\' op Plan HV.'},
+        {id:'bh_close_i',type:'info',content:'📞 Als de klant veel haast heeft of liever een video call wil: probeer via Aircall door te verbinden naar een Account Manager. Lukt dit niet, plan de afspraak via de Call Scheduler.'},
+        {id:'bh_addr',type:'address',prefix:'h_'},
+        {id:'h_owner',type:'textarea',label:'Vul hier je naam in (Qualification-call-owner)',placeholder:'Jouw naam…'},
+        {id:'bh_out',type:'outcome',prefix:'h_',altProdNote:'Als de lead een ander product wil, pas "Selected Product" aan in HubSpot.'}
+      ]}
+    ]},
+    // ALL-ELECTRIC
+    {id:'builtin-all-electric',isBuiltin:true,name:'All-Electric Kwalificatiegesprek',productMatches:['all-electric','all electric'],phases:[
+      {id:'ae_p1',label:'Fase 1: Opening',questions:[
+        {id:'ae_open_s',type:'script',content:'<strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt. Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>Klant: Ja.<br/><br/><strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"'},
+        {id:'ae_open_i',type:'info',content:'👉 Als niet akkoord: stop opname in Aircall'}
+      ]},
+      {id:'ae_p2',label:'Fase 2: Koopintentie',questions:[
+        {id:'ae_doel',type:'script',content:'<strong>Doel:</strong> bepaal in 2-3 vragen of de lead Hot / Warm / Cold is. Stop zodra je een duidelijk beeld hebt.'},
+        {id:'ae_reden',type:'choice',label:'Wat was voor jou de belangrijkste reden om de besparingscheck in te vullen?',required:true,options:['Ik wil van het gas af','Ik heb al een Quatt Hybrid en wil naar de volgende stap','Aan het rondkijken','CV-ketel moet worden vervangen','Kosten besparen','Renovatie','Verhuizing'],hsProperty:'',chipOptions:[]},
+        {id:'ae_ori_i',type:'info',content:'Vraag indien nodig:'},
+        {id:'ae_orient_n',type:'textarea',label:'Wat heb je tot nu toe al gedaan in je oriëntatie?',placeholder:'Notities…'},
+        {id:'ae_timing',type:'choice',label:'Wanneer wil je de All-Electric in huis hebben?',options:['ASAP','0-3 months','3-6 months','>6 months'],hsProperty:'',chipOptions:[]},
+        {id:'ae_intent',type:'intent',label:'Is deze klant Hot, Warm of Cold?',required:true,hotDesc:'Concrete aanleiding, timing ≤ 6 mnd → Fase 3.',warmDesc:'Interesse aanwezig, oriënterend → Fase 3.',coldDesc:'Lage urgentie → stuur informatiepakket, rond af.'}
+      ]},
+      {id:'ae_p3',label:'Fase 3: Tech check',questions:[
+        {id:'ae_tc_i',type:'info',content:'🎯 <strong>Doel:</strong> harde disqualifiers uitvragen in zo min mogelijk vragen.<br/><strong>Agent:</strong> "Voordat ik de afspraak inplan, check ik even een paar technische punten. Dit helpt onze adviseur alvast ter voorbereiding."'},
+        {id:'ae_gas_tc',type:'tech_check',label:'Check 1 — Gasverbruik',chipKey:'ae_gas',agentQuestion:'Ik zie dat je [Deal: Aardgas] kuub gas hebt opgegeven als jaarlijks gasverbruik. Klopt dat?',outcomes:[{condition:'Minder dan 700 m³',result:'✖ Lost',color:'var(--rd)',script:'"Bij een verbruik onder de 700 m³ zien we vaak dat de terugverdientijd erg lang wordt. We willen eerlijk advies geven: in jouw geval is de investering technisch gezien prachtig, maar financieel minder rendabel. Ik wil je tijd niet verspillen met een afspraak die niets oplevert. Of zou het voor jou meer zijn voor het terugbrengen van je CO₂ uitstoot? Zo ja, dan plan ik gewoon een afspraak in!"'},{condition:'700–2000 m³',result:'✓ Ga door',color:'var(--gr)'},{condition:'Meer dan 2000 m³',result:'→ Plan Hybrid',color:'var(--or)',script:'"Super, dan gaan we voor je kijken of de Hybrid Single of Hybrid Duo beter past — dat systeem is voor woningen met meer gasverbruik."'}],chipOptions:['Minder dan 700 m³ (Lost)','700–2000 m³ (doorgaan)','Meer dan 2000 m³ (naar Hybrid)']},
+        {id:'ae_woning_tc',type:'tech_check',label:'Check 2 — Woning',chipKey:'ae_woning',agentQuestion:'Dan nog even een paar snelle vragen over je woning: heb je een eigen woning met een cv-ketel?',outcomes:[{condition:'Stadsverwarming',result:'✖ Lost',color:'var(--rd)',script:'"Op dit moment werken onze systemen helaas nog niet met stadsverwarming. Mag ik je op een lijst zetten zodat je het als eerste hoort zodra we daar een oplossing voor hebben?"'},{condition:'Geen buitenruimte',result:'✖ Lost',color:'var(--rd)',script:'"Voor een warmtepomp hebben we buitenruimte nodig voor de buitenunit. In een appartement is dat helaas vaak niet mogelijk. Ik wil je geen afspraak laten inplannen die uiteindelijk niets oplevert."'},{condition:'Renovatie',result:'⏸ On hold',color:'#f59e0b',script:'"Omdat een warmtepomp nauwkeurig moet worden ingeregeld op een werkend systeem, kunnen we je op dit moment helaas nog niet verder helpen. We willen namelijk voorkomen dat je verbouwing vastloopt op de installatie."'},{condition:'Cv-ketel / radiatoren / vloerverwarming',result:'✓ Ga door',color:'var(--gr)'}],chipOptions:['Ja — radiatoren/vloerverwarming','Stadsverwarming (Lost)','Geen buitenruimte (Lost)','Renovatie (On hold)']},
+        {id:'ae_tech_n',type:'textarea',label:'Notities tech check',placeholder:'Notities…'}
+      ]},
+      {id:'ae_p4',label:'Fase 4: Afsluiting',questions:[
+        {id:'ae_close_s',type:'script',content:'<strong>Agent:</strong> "Leuk! Laten we direct een afspraak inplannen."<br/><br/><strong>Actie:</strong> 1. Check of postcode en adres in het systeem staat. Zo niet, vraag deze op en vul ze in. 2. Klik in \'Call outcome\' op Plan HV.'},
+        {id:'ae_close_i',type:'info',content:'📞 Als de klant veel haast heeft of liever een video call wil: probeer via Aircall door te verbinden naar een Account Manager. Lukt dit niet, plan de afspraak via de Call Scheduler.'},
+        {id:'ae_addr',type:'address',prefix:'ae_'},
+        {id:'ae_owner',type:'textarea',label:'Vul hier je naam in (Qualification-call-owner)',placeholder:'Jouw naam…'},
+        {id:'ae_out',type:'outcome',prefix:'ae_',altProdNote:'Als de lead een ander product dan All-Electric wil, pas "Selected Product" aan in HubSpot.'}
+      ]}
+    ]},
+    // CHILL
+    {id:'builtin-chill',isBuiltin:true,name:'Chill Kwalificatiegesprek',productMatches:['chill'],phases:[
+      {id:'c_p1',label:'Fase 1: Opening',questions:[
+        {id:'c_open_s',type:'script',content:'<strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt. Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>Klant: Ja.<br/><br/><strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"'},
+        {id:'c_open_i',type:'info',content:'👉 Als niet akkoord: stop opname in Aircall'}
+      ]},
+      {id:'c_p2',label:'Fase 2: Inventarisatie',questions:[
+        {id:'c_doel',type:'script',content:'<strong>Doel:</strong> snel begrijpen waar de lead naar zoekt, hoeveel productkennis er al is, en of de lead vooral comfort, besparing of beide zoekt.'},
+        {id:'c_reden',type:'choice',label:'Wat was voor jou de belangrijkste reden om de besparingscheck in te vullen?',required:true,options:['Renovatie of verhuizing','Aan het rondkijken','CV-ketel moet worden vervangen','Kosten besparen','Verduurzamen van de woning'],hsProperty:'',chipOptions:[]},
+        {id:'c_comfort_n',type:'textarea',label:'Waar merk je thuis vooral dat het niet comfortabel is? Te warme kamers in de zomer, lastig warm worden in de winter, of allebei?',placeholder:'Notities…'},
+        {id:'c_ruimte',type:'choice',label:'Om welke ruimte of ruimtes gaat het dan vooral?',options:['Slaapkamer','Woonkamer','Zolder','Anders'],hsProperty:'',chipOptions:[]},
+        {id:'c_curr',type:'choice',label:'Heb je daar nu al iets voor, zoals een mobiele airco, ventilator, split-airco of extra verwarming?',options:['Mobiele airco','Ventilator','Split-airco','Extra verwarming','Nog niks'],hsProperty:'',chipOptions:[]},
+        {id:'c_scenario',type:'choice',label:'Wat zocht je vooral toen je de aanvraag deed?',options:['Scenario A — Klant kent Chill nog niet','Scenario B — Klant kent basisprincipe al'],hsProperty:'',chipOptions:[]}
+      ]},
+      {id:'c_p3',label:'Fase 3: Educatie & Positionering',questions:[
+        {id:'c_edu_sa',type:'script',content:'<strong>Scenario A — Klant kent Chill nog niet</strong><br/><br/><strong>Agent:</strong> "Onze airco heet \'Chill\' en Chill werkt nét iets anders dan een standaard split-airco."<br/><br/><strong>1. Eén buitenunit voor twee functies:</strong> "Dat verschil zit vooral in de dubbele functie van het buitendeel: dat is namelijk een airco én warmtepomp in één systeem."<br/><br/><strong>2. Koelen + besparen:</strong> "In de zomer gebruik je Chill om te koelen, maar in de winter gebruik je het buitendeel om mee te helpen met verwarmen. Daardoor bespaar je op je gasverbruik."<br/><br/><strong>3. Geen nieuw leidingwerk binnen:</strong> "Omdat Chill samenwerkt met je bestaande verwarmingssysteem hoeven we geen nieuwe aircoleidingen door het hele huis te trekken."<br/><br/><strong>4. Flexibel gebruik:</strong> "Het binnendeel kun je zelf loskoppelen en verplaatsen."<br/><br/><strong>5. Koelen én verwarmen:</strong> "Net als met de meeste split-airco\'s tegenwoordig kun je met Chill ook zowel koelen als verwarmen."'},
+        {id:'c_edu_sb',type:'script',content:'<strong>Scenario B — Klant kent basisprincipe al</strong><br/><br/><strong>Agent:</strong> "Super dat je al weet hoe Chill werkt. Dan kunnen we direct kijken wat de beste oplossing is voor jouw situatie."<br/><br/>Stel gericht door: hoeveel ruimtes, wanneer installatie, welk budget?'},
+        {id:'c_edu_n',type:'textarea',label:'Notities educatie & positionering',placeholder:'Notities…'}
+      ]},
+      {id:'c_p4',label:'Fase 4: Afsluiting',questions:[
+        {id:'c_close_s',type:'script',content:'<strong>Agent:</strong> "Leuk! Laten we direct een afspraak inplannen."<br/><br/><strong>Actie:</strong> 1. Check of postcode en adres in het systeem staat. 2. Klik in \'Call outcome\' op Plan HV.'},
+        {id:'c_close_i',type:'info',content:'📞 Als de klant veel haast heeft of liever een video call wil: probeer via Aircall door te verbinden naar een Account Manager.'},
+        {id:'c_addr',type:'address',prefix:'c_'},
+        {id:'c_owner',type:'textarea',label:'Vul hier je naam in (Qualification-call-owner)',placeholder:'Jouw naam…'},
+        {id:'c_out',type:'outcome',prefix:'c_',altProdNote:''}
+      ]}
+    ]},
+    // HOMEBATTERY
+    {id:'builtin-homebattery',isBuiltin:true,name:'HomeBattery Kwalificatiegesprek',productMatches:['homebattery','home battery','home-battery'],phases:[
+      {id:'hb_p1',label:'Fase 1: Opening',questions:[
+        {id:'hb_open_s',type:'script',content:'<strong>"Hoi [voornaam lead]"</strong>, je spreekt met <strong>[jouw naam]</strong> van Quatt. Ik bel je even kort omdat je je gegevens hebt achterlaten via <em>[form origin]</em>. Klopt dat?<br/><br/>Klant: Ja.<br/><br/><strong>Agent:</strong> "Top, dan heb ik de juiste persoon aan de lijn. Voor de kwaliteit nemen we dit gesprek op. Is dat oké voor je?"'},
+        {id:'hb_open_i',type:'info',content:'👉 Als niet akkoord: stop opname in Aircall'}
+      ]},
+      {id:'hb_p2',label:'Fase 2: Koopintentie',questions:[
+        {id:'hb_doel',type:'script',content:'<strong>Doel:</strong> bepaal in 2-3 vragen of de lead Hot / Warm / Cold is en wat de aanleiding is voor de HomeBattery interesse.'},
+        {id:'hb_reden',type:'choice',label:'Wat was voor jou de belangrijkste reden om de aanvraag in te vullen?',required:true,options:['Aan het rondkijken','Kosten besparen','Netcongestie verminderen','Zonnestroom opslaan'],hsProperty:'',chipOptions:[]},
+        {id:'hb_orient_n',type:'textarea',label:'Wat heb je tot nu toe al gedaan in je oriëntatie?',placeholder:'Notities…'},
+        {id:'hb_timing',type:'choice',label:'Wanneer wil je de HomeBattery in huis hebben?',options:['ASAP','0-3 months','3-6 months','>6 months'],hsProperty:'',chipOptions:[]},
+        {id:'hb_intent',type:'intent',label:'Is deze klant Hot, Warm of Cold?',required:true,hotDesc:'Concrete aanleiding, timing ≤ 6 mnd → Fase 3.',warmDesc:'Interesse aanwezig, oriënterend → Fase 3.',coldDesc:'Lage urgentie → stuur informatiepakket, rond af.'}
+      ]},
+      {id:'hb_p3',label:'Fase 3: Inplannen & Afronden',questions:[
+        {id:'hb_close_s',type:'script',content:'<strong>Agent:</strong> "Leuk! Laten we direct een afspraak inplannen."<br/><br/><strong>Actie:</strong> 1. Check of postcode en adres in het systeem staat. 2. Klik in \'Call outcome\' op Plan HV.'},
+        {id:'hb_close_i',type:'info',content:'📞 Als de klant veel haast heeft of liever een video call wil: probeer via Aircall door te verbinden naar een Account Manager.'},
+        {id:'hb_addr',type:'address',prefix:'hb_'},
+        {id:'hb_owner',type:'textarea',label:'Vul hier je naam in (Qualification-call-owner)',placeholder:'Jouw naam…'},
+        {id:'hb_out',type:'outcome',prefix:'hb_',altProdNote:''}
+      ]}
+    ]}
+  ];
+}
+
+function seedBuiltinPlaybooks(){
+  const existing=loadPbs();
+  const builtins=getBuiltinPlaybookDefs();
+  const toAdd=builtins.filter(b=>!existing.some(e=>e.id===b.id));
+  if(!toAdd.length)return;
+  try{localStorage.setItem('quatt_pbs',JSON.stringify([...existing,...toAdd]))}catch(e){console.warn('Could not seed built-in playbooks',e)}
+}
 
 function adminNewSched(){S.adminEditSched={id:uid(),name:'',buttonLabel:'',url:'',productMatch:'',isDefault:false};render()}
 function adminEditSched(id){const s=loadScheds().find(x=>x.id===id);if(!s)return;S.adminEditSched=JSON.parse(JSON.stringify(s));render()}
@@ -2177,6 +2375,7 @@ function render(){
 // ──────────────────────────────────────────
 // Apply saved theme before first render
 document.documentElement.setAttribute('data-theme',loadTheme());
+seedBuiltinPlaybooks();
 render();
 updateParticleOpacity();
 if(S.cooldownEnd&&Date.now()<S.cooldownEnd)startCD();
