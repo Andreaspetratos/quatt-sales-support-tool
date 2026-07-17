@@ -1,0 +1,461 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { useApp } from '@/context/AppContext'
+import { translate, translateArr } from '@/lib/i18n'
+import { CONFIG } from '@/lib/config'
+import { postWebhook, fetchDeals, fetchPerformance } from '@/lib/hubspot'
+import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks } from '@/lib/storage'
+import { showToast } from './Toast'
+import DealModal from './DealModal'
+import type { Deal, Task } from '@/lib/types'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function relTime(iso: string | undefined): string {
+  if (!iso) return '--'
+  const d = Date.now() - new Date(iso).getTime()
+  if (d < 60000) return '<1m'
+  if (d < 3600000) return Math.round(d / 60000) + 'm'
+  if (d < 86400000) return Math.round(d / 3600000) + 'u'
+  return new Date(iso).toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' })
+}
+
+function scoreBadge(s: string | undefined): React.ReactNode {
+  if (!s && s !== '0') return <span className="badge bg">--</span>
+  const n = parseInt(s || '')
+  if (isNaN(n)) return <span className="badge bg">--</span>
+  return n >= 70
+    ? <span className="badge bn">⚡{n}</span>
+    : <span className="badge bnl">{n}</span>
+}
+
+function prodBadge(p: string | undefined): React.ReactNode {
+  if (!p || p === '--') return <span className="badge bg">--</span>
+  return <span className="badge bo">{p.length > 20 ? p.slice(0, 18) + '…' : p}</span>
+}
+
+// ── Performance drawer ────────────────────────────────────────────────────────
+const PERF_OUTCOME_COLORS: Record<string, string> = {
+  'Plan HV': 'var(--gr)',
+  'Plan Call': '#0ea5e9',
+  'Quote sent': 'var(--or)',
+  'On hold due to renovation': '#f59e0b',
+  'On hold due to district heating': '#f59e0b',
+  'Send Configurator Link': '#8b5cf6',
+  'Send brochure (cold lead)': 'var(--gd)',
+  'Lost': 'var(--rd)',
+}
+
+function PerfDrawer({ lang }: { lang: 'nl' | 'en' }) {
+  const { state, setState } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const pd = state.perfData?.[state.perfPeriod] || { total: 0, outcomes: {} }
+  const entries = Object.entries(pd.outcomes).sort((a, b) => b[1] - a[1])
+  const maxVal = entries[0]?.[1] || 1
+
+  async function refresh() {
+    setState({ perfLoading: true, perfData: null })
+    try {
+      const data = await fetchPerformance(state.currentRep?.hubspotOwnerId || '')
+      setState({ perfData: data, perfLoading: false })
+    } catch (e: any) {
+      showToast(t('errLoad', e.message), 'error')
+      setState({ perfLoading: false })
+    }
+  }
+
+  return (
+    <>
+      <div className="perf-bd" onClick={() => setState({ perfOpen: false })} />
+      <div className="perf-dr">
+        <div className="perf-hd">
+          <span className="perf-ht">{t('myPerf')}</span>
+          <button className="xb" style={{ background: 'rgba(255,255,255,.12)', color: '#fff' }} onClick={() => setState({ perfOpen: false })}>✕</button>
+        </div>
+        <div className="perf-tabs">
+          {(['today', 'week', 'month'] as const).map(p => (
+            <button
+              key={p}
+              className={`perf-tab ${state.perfPeriod === p ? 'on' : ''}`}
+              onClick={() => setState({ perfPeriod: p })}
+            >
+              {t('perf_' + p)}
+            </button>
+          ))}
+        </div>
+        {state.perfLoading
+          ? <div className="perf-loading"><div className="sp spd" /></div>
+          : (
+            <div className="perf-body">
+              <div className="perf-tot">
+                <span className="perf-tot-n">{pd.total}</span>
+                <span className="perf-tot-l">{t('perfTotal')}</span>
+              </div>
+              {entries.length === 0
+                ? <div className="perf-empty">{t('perfEmpty')}</div>
+                : entries.map(([name, count]) => {
+                  const pct = pd.total ? Math.round(count / pd.total * 100) : 0
+                  const bar = Math.round(count / maxVal * 100)
+                  return (
+                    <div className="perf-row" key={name}>
+                      <div className="perf-row-top">
+                        <span className="perf-row-name" title={name}>{name}</span>
+                        <span className="perf-row-val">{count}<span className="perf-row-pct">{pct}%</span></span>
+                      </div>
+                      <div className="perf-bar-bg">
+                        <div className="perf-bar-fill" style={{ width: bar + '%', background: PERF_OUTCOME_COLORS[name] || 'var(--gm)' }} />
+                      </div>
+                    </div>
+                  )
+                })
+              }
+              <div className="perf-refresh">
+                <button className="btn btn-sc btn-xs" onClick={refresh}>{t('perfRefresh')}</button>
+              </div>
+            </div>
+          )
+        }
+      </div>
+    </>
+  )
+}
+
+// ── Create Task Modal ─────────────────────────────────────────────────────────
+function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
+  const { state, setState } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const draft = state.taskDraft
+  const linkedDeal = state.deals.find(d => d.id === draft.dealId)
+
+  function submit() {
+    if (!draft.title?.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
+    createTask({ ...draft, creatorEmail: state.currentRep?.email || '' })
+    setState({ taskModal: null, taskDraft: {} })
+    showToast(t('toastSaved'), 'success')
+  }
+
+  return (
+    <div className="mb" onClick={e => { if (e.target === e.currentTarget) setState({ taskModal: null }) }}>
+      <div className="mo pop-in">
+        <div className="moh">
+          <div className="mot">{t('taskNew')}</div>
+          <button className="xb" onClick={() => setState({ taskModal: null })}>✕</button>
+        </div>
+        <div className="mob">
+          <div className="iw">
+            <label className="il">{t('taskTitle')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            <input
+              className="inp" type="text" placeholder={t('taskTitleHint')}
+              defaultValue={draft.title || ''}
+              onBlur={e => setState({ taskDraft: { ...state.taskDraft, title: e.target.value } })}
+            />
+          </div>
+          <div className="iw">
+            <label className="il">{t('taskDue')}</label>
+            <input
+              className="inp" type="date" defaultValue={draft.dueDate || ''}
+              onBlur={e => setState({ taskDraft: { ...state.taskDraft, dueDate: e.target.value } })}
+            />
+          </div>
+          <div className="iw">
+            <label className="il">{t('taskAssign')}</label>
+            <select
+              className="sel"
+              defaultValue={draft.assigneeEmail}
+              onChange={e => setState({ taskDraft: { ...state.taskDraft, assigneeEmail: e.target.value } })}
+            >
+              {CONFIG.REPS.map(r => <option key={r.email} value={r.email}>{r.name}</option>)}
+            </select>
+          </div>
+          {linkedDeal && (
+            <div className="iw">
+              <label className="il">{t('taskDeal')}</label>
+              <div style={{ fontSize: 13, color: 'var(--ct)', padding: '4px 0' }}>📋 {linkedDeal.properties?.dealname || '--'}</div>
+            </div>
+          )}
+          <div className="iw">
+            <label className="il">{t('taskNote')}</label>
+            <textarea className="ta" rows={3} defaultValue={draft.note || ''}
+              onBlur={e => setState({ taskDraft: { ...state.taskDraft, note: e.target.value } })} />
+          </div>
+        </div>
+        <div className="mof">
+          <button className="btn btn-sc btn-sm" onClick={() => setState({ taskModal: null })}>{t('cancel')}</button>
+          <button className="btn btn-pr btn-sm" onClick={submit}>{t('taskSave')}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Tasks tab ─────────────────────────────────────────────────────────────────
+function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
+  const { state } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [, forceUpdate] = useState(0)
+  const tasks = myOpenTasks(state.currentRep?.email).sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) return 0
+    if (!a.dueDate) return 1
+    if (!b.dueDate) return -1
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+  })
+
+  function dueMeta(dueDate: string): { label: string; cls: string } {
+    if (!dueDate) return { label: '', cls: '' }
+    const d = new Date(dueDate), now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const due = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diff = Math.round((due.getTime() - today.getTime()) / 86400000)
+    if (diff < 0) return { label: t('taskOverdue'), cls: 'task-due-over' }
+    if (diff === 0) return { label: t('taskToday'), cls: 'task-due-today' }
+    return { label: d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' }), cls: 'task-due-ok' }
+  }
+
+  if (!tasks.length) {
+    return (
+      <div className="es">
+        <div className="ei">✅</div>
+        <div className="et">{t('taskNone')}</div>
+        <div className="es2">{t('taskNoneSub')}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="task-list fade-up">
+      {tasks.map(task => {
+        const dm = dueMeta(task.dueDate)
+        const deal = state.deals.find(d => d.id === task.dealId)
+        return (
+          <div key={task.id} className={`task-card ${dm.cls === 'task-due-over' ? 'overdue' : ''}`}>
+            <div className="task-card-title">{task.title || '(no title)'}</div>
+            {task.note && <div className="task-card-note">{task.note}</div>}
+            <div className="task-card-meta">
+              {dm.label && <span className={`task-card-due ${dm.cls}`}>{dm.label}</span>}
+              {deal && <span className="task-card-deal">📋 {deal.properties?.dealname || '--'}</span>}
+            </div>
+            <div className="task-card-actions">
+              <button className="btn btn-gn btn-xs" onClick={() => { completeTask(task.id); forceUpdate(n => n + 1) }}>{t('taskDone')}</button>
+              <button className="btn btn-dn btn-xs" onClick={() => { deleteTask(task.id); forceUpdate(n => n + 1) }}>{t('taskDelete')}</button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Deals table ───────────────────────────────────────────────────────────────
+function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
+  const { state, selectDeal } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const P = CONFIG.PROPS
+
+  if (!state.deals.length) {
+    return (
+      <div className="es">
+        <div className="ei">📋</div>
+        <div className="et">{t('noLeads')}</div>
+        <div className="es2">{t('noLeadsSub')}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <table>
+        <thead>
+          <tr>
+            <th>{t('colName')}</th>
+            <th>{t('colTime')}</th>
+            <th>{t('colPhone')}</th>
+            <th>{t('colProduct')}</th>
+            <th>{t('colOutcome')}</th>
+            <th>{t('colOrigin')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.deals.map(deal => {
+            const p = deal.properties
+            const tasks = dealOpenTasks(deal.id)
+            return (
+              <tr
+                key={deal.id}
+                className={deal.id === state.selectedId ? 'ra' : ''}
+                onClick={() => selectDeal(deal.id)}
+              >
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, maxWidth: 200 }}>
+                    <span className="tn" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {p.dealname || '--'}
+                    </span>
+                    {tasks.length > 0 && <span className="task-badge">{tasks.length}</span>}
+                  </div>
+                </td>
+                <td className="tm">{relTime(p[P.requestedAt])}</td>
+                <td style={{ fontSize: 12, color: 'var(--cs)' }}>{p.phone || '--'}</td>
+                <td>{prodBadge(p[P.product])}</td>
+                <td className="tm">{p[P.callOutcome] || '--'}</td>
+                <td className="tm">{p[P.formOrigin] || '--'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Request leads / cooldown row ───────────────────────────────────────────────
+function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
+  const { state, setState } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [secs, setSecs] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const onCD = !!(state.cooldownEnd && Date.now() < state.cooldownEnd)
+
+  useEffect(() => {
+    if (onCD) {
+      const tick = () => {
+        if (!state.cooldownEnd || Date.now() >= state.cooldownEnd) {
+          setSecs(0)
+          if (timerRef.current) clearInterval(timerRef.current)
+          setState({ cooldownEnd: null })
+          return
+        }
+        setSecs(Math.ceil((state.cooldownEnd - Date.now()) / 1000))
+      }
+      tick()
+      timerRef.current = setInterval(tick, 1000)
+      return () => { if (timerRef.current) clearInterval(timerRef.current) }
+    }
+  }, [onCD, state.cooldownEnd, setState])
+
+  async function handleReq() {
+    if (onCD || state.loading || !state.currentRep) return
+    setState({ loading: true })
+    try {
+      await postWebhook(state.currentRep)
+      const newEnd = Date.now() + CONFIG.REQUEST_COOLDOWN * 1000
+      setState({ cooldownEnd: newEnd })
+      showToast(t('toastLeads'), 'success')
+      setTimeout(async () => {
+        try {
+          const deals = await fetchDeals(state.currentRep!.hubspotOwnerId)
+          setState({ deals })
+        } catch {}
+      }, 3000)
+    } catch (e: any) {
+      showToast(t('errWH', e.message), 'error')
+    }
+    setState({ loading: false })
+  }
+
+  return (
+    <div className="rr">
+      <button
+        className="btn btn-pr btn-sm"
+        onClick={handleReq}
+        disabled={onCD || state.loading}
+      >
+        {state.loading && <div className="sp" />}
+        {onCD ? t('wait', secs) : state.loading ? t('reqding') : t('reqLeads')}
+      </button>
+      {onCD && (
+        <div className="cdp">
+          <div className="cdb">
+            <div className="cdf" style={{ width: (secs / CONFIG.REQUEST_COOLDOWN * 100) + '%' }} />
+          </div>
+          <span>{t('nextReq', secs)}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main PipelineBoard ────────────────────────────────────────────────────────
+interface PipelineBoardProps {
+  perfOpen: boolean
+  onOpenPerf: () => void
+  onClosePerf: () => void
+}
+
+export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: PipelineBoardProps) {
+  const { state, setState, selectDeal } = useApp()
+  const lang = state.lang
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const openTasks = myOpenTasks(state.currentRep?.email)
+
+  async function handleRefresh() {
+    setState({ loading: true })
+    try {
+      const deals = await fetchDeals(state.currentRep?.hubspotOwnerId || '')
+      setState({ deals, loading: false })
+      showToast(t('toastRefreshed'), 'success')
+    } catch (e: any) {
+      showToast(t('errLoad', e.message), 'error')
+      setState({ loading: false })
+    }
+  }
+
+  function openCreateTask() {
+    setState({
+      taskModal: 'create',
+      taskDraft: { dealId: null, assigneeEmail: state.currentRep?.email || '', title: '', dueDate: '', note: '' },
+    })
+  }
+
+  return (
+    <div className="ml">
+      <div className="la">
+        {/* Tab bar */}
+        <div className="tab-bar">
+          <button
+            className={`tab-btn ${state.taskTab === 'leads' ? 'on' : ''}`}
+            onClick={() => setState({ taskTab: 'leads' })}
+          >
+            {t('taskTabLeads')}
+            <span className={`tab-count ${state.deals.length ? 'has' : ''}`}>{state.deals.length}</span>
+          </button>
+          <button
+            className={`tab-btn ${state.taskTab === 'tasks' ? 'on' : ''}`}
+            onClick={() => setState({ taskTab: 'tasks' })}
+          >
+            {t('taskTabTasks')}
+            <span className={`tab-count ${openTasks.length ? 'has' : ''}`}>{openTasks.length}</span>
+          </button>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+            {state.taskTab === 'leads' && (
+              <>
+                <ReqRow lang={lang} />
+                <button className="btn btn-sc btn-sm" onClick={handleRefresh}>{t('refresh')}</button>
+              </>
+            )}
+            {state.taskTab === 'tasks' && (
+              <button className="btn btn-pr btn-sm" onClick={openCreateTask}>{t('taskNew')}</button>
+            )}
+          </div>
+        </div>
+
+        {/* Tab content */}
+        {state.taskTab === 'leads'
+          ? (state.loading && !state.deals.length
+            ? <div className="es"><div className="sp spd" /></div>
+            : <DealsTable lang={lang} />)
+          : <TasksTab lang={lang} />
+        }
+      </div>
+
+      {/* Deal modal */}
+      {state.selectedId && <DealModal />}
+
+      {/* Task create modal */}
+      {state.taskModal === 'create' && <CreateTaskModal lang={lang} />}
+
+      {/* Performance drawer */}
+      {perfOpen && <PerfDrawer lang={lang} />}
+    </div>
+  )
+}
