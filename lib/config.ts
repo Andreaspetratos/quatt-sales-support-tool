@@ -33,9 +33,9 @@ interface AppConfig {
 }
 
 export const CONFIG: AppConfig = {
-  GOOGLE_CLIENT_ID: 'YOUR_CLIENT_ID.apps.googleusercontent.com',
-  MAKE_WEBHOOK_URL: 'https://hook.eu1.make.com/YOUR_ID',
-  HUBSPOT_TOKEN: 'pat-eu1-YOUR_TOKEN',
+  GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? 'YOUR_CLIENT_ID.apps.googleusercontent.com',
+  MAKE_WEBHOOK_URL: process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL ?? 'https://hook.eu1.make.com/YOUR_ID',
+  HUBSPOT_TOKEN: process.env.NEXT_PUBLIC_HUBSPOT_TOKEN ?? 'pat-eu1-YOUR_TOKEN',
   CORS_PROXY: '',
   SCHEDULER_URL: '',
   STAGES: {
