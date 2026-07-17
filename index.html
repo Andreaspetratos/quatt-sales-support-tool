@@ -381,7 +381,7 @@ const CONFIG = {
 const T = {
   nl:{
     // App
-    appTitle:'Sales Support Tool', loginTitle:'Welkom terug 👋', loginSub:'Log in met je Quatt Google-account',
+    appTitle:'Sales Support Tool', loginTitle:'Welkom terug 👋', loginSub:'Log in met je @quatt.io Google-account',
     demoBtn:'Doorgaan als demo-gebruiker', demoNote:'Demo-modus — geen Google nodig',
     cfgBanner:'⚙️ Demo-modus actief. Vul CONFIG in om live te gaan.',
     logout:'Uitloggen', admin:'⚙ Admin', backToSales:'← Terug',
@@ -418,6 +418,7 @@ const T = {
     toastLeads:'✅ Leads aangevraagd!', toastHV:'🏠 Verplaatst naar Home Visit!',
     toastLost:'Deal gesloten als Lost', toastRefreshed:'Leads bijgewerkt', toastSaved:'Opgeslagen',
     errNoRep:'Je e-mail staat niet in het systeem. Vraag je manager om je toe te voegen.',
+    errDomain:'Alleen @quatt.io accounts hebben toegang tot dit systeem.',
     errLoad:e=>'Fout: '+e, errWH:e=>'Webhook fout: '+e, errReason:'Selecteer een reden',
     errOutcome:'Selecteer een outcome',
     // Admin — general
@@ -473,7 +474,7 @@ const T = {
     taskAddFromDeal:'+ Taak',
   },
   en:{
-    appTitle:'Sales Support Tool', loginTitle:'Welcome back 👋', loginSub:'Sign in with your Quatt Google account',
+    appTitle:'Sales Support Tool', loginTitle:'Welcome back 👋', loginSub:'Sign in with your @quatt.io Google account',
     demoBtn:'Continue as demo user', demoNote:'Demo mode — no Google needed',
     cfgBanner:'⚙️ Demo mode active. Fill in CONFIG to go live.',
     logout:'Log out', admin:'⚙ Admin', backToSales:'← Back',
@@ -504,6 +505,7 @@ const T = {
     toastLeads:'✅ Leads requested!', toastHV:'🏠 Moved to Home Visit!',
     toastLost:'Deal closed as Lost', toastRefreshed:'Refreshed', toastSaved:'Saved',
     errNoRep:'Your email is not in the system. Ask your manager to add you.',
+    errDomain:'Only @quatt.io accounts have access to this system.',
     errLoad:e=>'Error: '+e, errWH:e=>'Webhook error: '+e, errReason:'Select a reason',
     errOutcome:'Select an outcome first',
     adPb:'Playbooks', adSch:'Schedulers',
@@ -707,8 +709,10 @@ function initGoogle(){
   },auto_select:false});
 }
 function loginWithEmail(email,name,picture){
-  const rep=CONFIG.REPS.find(r=>r.email.toLowerCase()===email.toLowerCase());
-  if(!rep){toast(t('errNoRep'),'error');return;}
+  const domain=(email||'').toLowerCase().split('@')[1];
+  if(domain!=='quatt.io'){toast(t('errDomain'),'error');return;}
+  const rep=CONFIG.REPS.find(r=>r.email.toLowerCase()===email.toLowerCase())
+    ||{name:name||email,email:email,hubspotUserId:null,hubspotOwnerId:null};
   S.currentRep=rep;S.userAvatar=picture||null;afterLogin();
 }
 async function afterLogin(){
