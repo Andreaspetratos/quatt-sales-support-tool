@@ -24,9 +24,33 @@ function Shell() {
     try {
       seedBuiltinPlaybooks()
     } catch (e) {
-      // non-fatal — app still works without seeded playbooks
       console.warn('[AppShell] seedBuiltinPlaybooks failed', e)
     }
+  }, [])
+
+  // Check server-side session on mount — auto-login if cookie is valid
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch('/auth/me')
+        if (!res.ok) return
+        const data = await res.json() as {
+          authenticated: boolean
+          email?: string
+          name?: string
+          picture?: string
+          role?: string
+        }
+        if (!data.authenticated || !data.email) return
+        const rep = { name: data.name || data.email, email: data.email, hubspotUserId: '', hubspotOwnerId: '' }
+        setState({ screen: 'dashboard', currentRep: rep, userAvatar: data.picture || null, loading: false })
+      } catch {
+        // No session — stay on login screen
+      }
+    }
+    // Only check when on login screen (avoids re-checking on every render)
+    if (screen === 'login') checkSession()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Initialize Aircall CTI listener once we have a logged-in rep
