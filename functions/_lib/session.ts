@@ -94,8 +94,8 @@ export async function verifySession(
     valid = await crypto.subtle.verify(
       'HMAC',
       key,
-      base64UrlToUint8(signatureB64),
-      encoder.encode(payloadB64),
+      base64UrlToUint8(signatureB64).buffer as ArrayBuffer,
+      encoder.encode(payloadB64).buffer as ArrayBuffer,
     );
   } catch {
     return null;
