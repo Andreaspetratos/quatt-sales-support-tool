@@ -1,11 +1,8 @@
-name = "quatt-sales-tool"
+name = "quatt-sales-support-tool"
 compatibility_date = "2024-09-23"
-
-# Cloudflare Pages — static output dir produced by `next build` with
-# the @cloudflare/next-on-pages adapter.
-pages_build_output_dir = ".vercel/output/static"
+pages_build_output_dir = "./out"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "quatt-sales-auth"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_name = "quatt-sales-support-auth"
+database_id = "47c7180f-5ab0-4d48-a74a-b333549a2857"
