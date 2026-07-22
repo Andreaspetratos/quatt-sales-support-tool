@@ -188,6 +188,46 @@ export default function DealModal() {
   const cardRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ type: 'move' | 'resize'; sx: number; sy: number; sw: number; sh: number; sl: number; st: number } | null>(null)
 
+  // ── Drag / resize — must be before the early return to avoid hooks-order violation ──
+  const startDrag = useCallback((e: React.MouseEvent, type: 'move' | 'resize') => {
+    e.preventDefault()
+    e.stopPropagation()
+    const card = cardRef.current
+    if (!card) return
+    const r = card.getBoundingClientRect()
+    dragRef.current = { type, sx: e.clientX, sy: e.clientY, sw: r.width, sh: r.height, sl: r.left, st: r.top }
+    // Commit current position to state for pixel-accurate dragging
+    setState({ dmX: r.left, dmY: r.top, dmW: r.width, dmH: r.height })
+    card.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;max-width:none;max-height:none;`
+
+    const onMove = (me: MouseEvent) => {
+      if (!dragRef.current) return
+      me.preventDefault()
+      const dx = me.clientX - dragRef.current.sx
+      const dy = me.clientY - dragRef.current.sy
+      const c = cardRef.current
+      if (!c) return
+      const vw = window.innerWidth, vh = window.innerHeight
+      if (dragRef.current.type === 'move') {
+        const nx = Math.max(0, Math.min(dragRef.current.sl + dx, vw - 120))
+        const ny = Math.max(0, Math.min(dragRef.current.st + dy, vh - 60))
+        c.style.left = nx + 'px'; c.style.top = ny + 'px'
+      } else {
+        const nw = Math.max(420, Math.min(dragRef.current.sw + dx, vw))
+        const nh = Math.max(300, Math.min(dragRef.current.sh + dy, vh))
+        c.style.width = nw + 'px'; c.style.height = nh + 'px'
+      }
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove, { passive: false })
+    document.addEventListener('mouseup', onUp)
+  }, [setState])
+
+  // ── Deal-specific setup (after hooks) ──────────────────────────────────────
   const deal = state.leads.find(l => l.id === state.selectedId)
   if (!deal) return null
 
@@ -227,45 +267,6 @@ export default function DealModal() {
       showToast(t('errLoad', e.message), 'error')
     }
   }
-
-  // ── Drag / resize ──────────────────────────────────────────────────────────
-  const startDrag = useCallback((e: React.MouseEvent, type: 'move' | 'resize') => {
-    e.preventDefault()
-    e.stopPropagation()
-    const card = cardRef.current
-    if (!card) return
-    const r = card.getBoundingClientRect()
-    dragRef.current = { type, sx: e.clientX, sy: e.clientY, sw: r.width, sh: r.height, sl: r.left, st: r.top }
-    // Commit current position to state for pixel-accurate dragging
-    setState({ dmX: r.left, dmY: r.top, dmW: r.width, dmH: r.height })
-    card.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;max-width:none;max-height:none;`
-
-    const onMove = (me: MouseEvent) => {
-      if (!dragRef.current) return
-      me.preventDefault()
-      const dx = me.clientX - dragRef.current.sx
-      const dy = me.clientY - dragRef.current.sy
-      const c = cardRef.current
-      if (!c) return
-      const vw = window.innerWidth, vh = window.innerHeight
-      if (dragRef.current.type === 'move') {
-        const nx = Math.max(0, Math.min(dragRef.current.sl + dx, vw - 120))
-        const ny = Math.max(0, Math.min(dragRef.current.st + dy, vh - 60))
-        c.style.left = nx + 'px'; c.style.top = ny + 'px'
-      } else {
-        const nw = Math.max(420, Math.min(dragRef.current.sw + dx, vw))
-        const nh = Math.max(300, Math.min(dragRef.current.sh + dy, vh))
-        c.style.width = nw + 'px'; c.style.height = nh + 'px'
-      }
-    }
-    const onUp = () => {
-      dragRef.current = null
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove, { passive: false })
-    document.addEventListener('mouseup', onUp)
-  }, [setState])
 
   const cardStyle: React.CSSProperties = state.dmX != null
     ? { position: 'fixed', left: state.dmX, top: state.dmY!, width: state.dmW!, height: state.dmH!, maxWidth: 'none', maxHeight: 'none' }
