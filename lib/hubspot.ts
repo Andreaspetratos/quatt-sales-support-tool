@@ -98,7 +98,7 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       path: '/crm/v3/objects/users/' + rep.hubspotUserId,
-      body: { properties: { lead_router_trigger: 'yes' } },
+      body: { properties: { lead_router_trigger: 'true' } },
     }),
   })
   if (!res.ok) {
