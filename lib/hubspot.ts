@@ -109,22 +109,23 @@ export async function lookupHubspotUserId(email: string): Promise<string | null>
   }
 }
 
-// ── Dynamic owner ID lookup — resolves the CRM owner ID ──────────────────────
-// Owner ID (from /crm/v3/owners) ≠ User ID (from /crm/v3/objects/users).
-// Owner ID is what HubSpot stores as hubspot_owner_id on CRM records.
-// We try userId-based lookup first (more reliable), then email as fallback.
-export async function lookupHubspotOwnerId(email: string, userId?: string): Promise<string | null> {
+// ── Dynamic owner ID lookup — resolves the CRM owner ID by email ─────────────
+// IMPORTANT: Users CRM object ID (hs_object_id) and owners userId are DIFFERENT
+// ID systems. The only safe cross-system key is the rep's email address.
+// DO NOT use userId from /crm/v3/objects/users to query /crm/v3/owners — it
+// returns a random wrong record (confirmed in production debugging).
+export async function lookupHubspotOwnerId(email: string): Promise<string | null> {
   if (isDemo() || !email) return null
   try {
-    if (userId) {
-      const r = await hsProxy('GET', '/crm/v3/owners?userId=' + userId + '&limit=1')
-      console.log('[hubspot] owners?userId status:', r.status)
-      if (r.ok) {
-        const d = await r.json()
-        console.log('[hubspot] owners?userId result:', JSON.stringify(d).slice(0, 300))
-        const id = d.results?.[0]?.id
-        if (id) return String(id)
-      }
+    const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')
+    console.log('[hubspot] owners?email status:', res.status)
+    if (!res.ok) { console.warn('[hubspot] owners?email failed:', res.status); return null }
+    const data = await res.json()
+    console.log('[hubspot] owners?email result:', JSON.stringify(data).slice(0, 200))
+    const id = data.results?.[0]?.id
+    return id ? String(id) : null
+  } catch { return null }
+}
     }
     // Fallback: look up by email
     const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')

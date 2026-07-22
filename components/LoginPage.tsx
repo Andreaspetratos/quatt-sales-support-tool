@@ -56,7 +56,7 @@ export default function LoginPage() {
           if (userId) setState(prev => ({
             currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
           }))
-          return lookupHubspotOwnerId(email, userId || undefined)
+          return lookupHubspotOwnerId(email)
         })
         .then(async ownerId => {
           console.log('[login] ownerId lookup result:', ownerId)
