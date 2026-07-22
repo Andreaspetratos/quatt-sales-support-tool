@@ -76,10 +76,13 @@ export async function patchLead(
     ))
     return
   }
-  const res = await fetch(hsUrl('/crm/v3/objects/leads/' + id), {
-    method: 'PATCH',
-    headers: hsHeaders(),
-    body: JSON.stringify({ properties: props }),
+  const res = await fetch('/api/hs-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: '/crm/v3/objects/leads/' + id,
+      body: { properties: props },
+    }),
   })
   if (!res.ok) throw new Error('HTTP ' + res.status)
 }
@@ -90,10 +93,13 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
     await new Promise(r => setTimeout(r, 700))
     return
   }
-  const res = await fetch(hsUrl('/crm/v3/objects/users/' + rep.hubspotUserId), {
-    method: 'PATCH',
-    headers: hsHeaders(),
-    body: JSON.stringify({ properties: { lead_router_trigger: 'yes' } }),
+  const res = await fetch('/api/hs-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: '/crm/v3/objects/users/' + rep.hubspotUserId,
+      body: { properties: { lead_router_trigger: 'yes' } },
+    }),
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
