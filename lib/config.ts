@@ -58,13 +58,12 @@ export const CONFIG: AppConfig = {
     { name: 'Sales Rep 2',      email: 'rep2@quatt.io',    hubspotUserId: 'FILL', hubspotOwnerId: 'FILL' },
   ],
   ADMINS: ['andreas@quatt.io'],
-  DEMO_MODE: true,
+  DEMO_MODE: false,
   CUSTOM_PLAYBOOKS: [],
   CUSTOM_SCHEDULERS: [],
 }
 
-export const isDemo = (): boolean =>
-  CONFIG.DEMO_MODE || CONFIG.HUBSPOT_TOKEN.includes('YOUR_TOKEN')
+export const isDemo = (): boolean => CONFIG.DEMO_MODE
 
 export const isGoogleConfigured = (): boolean =>
   !CONFIG.GOOGLE_CLIENT_ID.includes('YOUR_CLIENT')
