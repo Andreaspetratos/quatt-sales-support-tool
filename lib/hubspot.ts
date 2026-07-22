@@ -34,8 +34,8 @@ const DEMO_LEADS: Lead[] = [
 ]
 
 // ── API helpers ───────────────────────────────────────────────────────────────
-// All HubSpot traffic is routed through the server-side proxy (/api/hs-write)
-// to avoid CORS preflights being blocked by the browser.
+// All HubSpot traffic routes through the server-side proxy (/api/hs-write)
+// so the browser never makes direct authenticated requests to HubSpot (CORS).
 async function hsProxy(method: string, path: string, body?: unknown): Promise<Response> {
   return fetch('/api/hs-write', {
     method: 'POST',
@@ -43,6 +43,53 @@ async function hsProxy(method: string, path: string, body?: unknown): Promise<Re
     body: JSON.stringify({ method, path, body }),
   })
 }
+
+// Retry wrapper — retries on 429 (rate-limited) and 5xx with exponential backoff.
+// HubSpot private app: 110 req/10s standard; search: 4 req/s.
+async function retryProxy(
+  method: string,
+  path: string,
+  body?: unknown,
+  maxAttempts = 3,
+): Promise<Response> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      // 1s, 2s, 4s backoff
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)))
+    }
+    try {
+      const res = await hsProxy(method, path, body)
+      if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts - 1) continue
+      return res
+    } catch (e) {
+      if (attempt === maxAttempts - 1) throw e
+    }
+  }
+  // unreachable, but TypeScript needs it
+  return hsProxy(method, path, body)
+}
+
+// Per-lead write queue — ensures writes to the same lead are sequential.
+// Prevents race conditions when playbook buttons fire rapidly.
+const _leadQueues = new Map<string, Promise<void>>()
+
+function queueForLead(id: string, task: () => Promise<void>): Promise<void> {
+  const prev = _leadQueues.get(id) ?? Promise.resolve()
+  const execution = prev.then(task)                // propagates errors to caller
+  const chain = execution.catch(() => {})          // chain never breaks on error
+  _leadQueues.set(id, chain)
+  chain.finally(() => { if (_leadQueues.get(id) === chain) _leadQueues.delete(id) })
+  return execution
+}
+
+// Write success event — components subscribe to trigger post-write re-fetches.
+type WriteListener = (leadId: string) => void
+const _writeListeners: WriteListener[] = []
+export function onLeadWrite(cb: WriteListener): () => void {
+  _writeListeners.push(cb)
+  return () => { const i = _writeListeners.indexOf(cb); if (i >= 0) _writeListeners.splice(i, 1) }
+}
+function _notifyWrite(leadId: string): void { _writeListeners.forEach(cb => cb(leadId)) }
 // ── Dynamic user ID lookup — called at login so we never rely on hardcoded IDs ─
 export async function lookupHubspotUserId(email: string): Promise<string | null> {
   if (isDemo() || !email || !CONFIG.HUBSPOT_TOKEN) return null
@@ -80,6 +127,16 @@ export async function fetchLeads(ownerId: string): Promise<Lead[]> {
   return (await res.json()).results || []
 }
 
+// Targeted single-lead refresh — used to confirm state after a write.
+export async function fetchOneLead(id: string): Promise<Lead | null> {
+  if (isDemo()) return null
+  try {
+    const res = await hsProxy('GET', '/crm/v3/objects/leads/' + id + '?properties=' + LEAD_PROPS.join(','))
+    if (!res.ok) return null
+    return await res.json() as Lead
+  } catch { return null }
+}
+
 export async function patchLead(
   id: string,
   props: Record<string, string>,
@@ -92,15 +149,11 @@ export async function patchLead(
     ))
     return
   }
-  const res = await fetch('/api/hs-write', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      path: '/crm/v3/objects/leads/' + id,
-      body: { properties: props },
-    }),
+  return queueForLead(id, async () => {
+    const res = await retryProxy('PATCH', '/crm/v3/objects/leads/' + id, { properties: props })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    _notifyWrite(id) // triggers post-write re-fetch in PipelineBoard
   })
-  if (!res.ok) throw new Error('HTTP ' + res.status)
 }
 
 // ── Request leads — sets lead_router_trigger on the rep's HubSpot User ───────
@@ -109,13 +162,8 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
     await new Promise(r => setTimeout(r, 700))
     return
   }
-  const res = await fetch('/api/hs-write', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      path: '/crm/v3/objects/users/' + rep.hubspotUserId,
-      body: { properties: { lead_router_trigger: 'true' } },
-    }),
+  const res = await retryProxy('PATCH', '/crm/v3/objects/users/' + rep.hubspotUserId, {
+    properties: { lead_router_trigger: 'true' },
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')

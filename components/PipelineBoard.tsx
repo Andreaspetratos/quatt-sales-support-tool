@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
-import { CONFIG, stageLabel } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance } from '@/lib/hubspot'
+import { CONFIG, stageLabel, isDemo } from '@/lib/config'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
@@ -386,6 +386,53 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const openTasks = myOpenTasks(state.currentRep?.email)
+
+  // ── Background sync: poll HubSpot every 30s (pauses when tab hidden) ────────
+  // Catches changes made in HubSpot CRM so they appear in the tool automatically.
+  const syncOwnerId = state.currentRep?.hubspotOwnerId || ''
+  useEffect(() => {
+    if (!syncOwnerId || isDemo()) return
+    const POLL_MS = 30_000
+    async function poll() {
+      if (document.hidden) return // skip when tab not visible
+      try {
+        const leads = await fetchLeads(syncOwnerId)
+        setState(prev => {
+          if (leads.length === 0 && prev.leads.length > 0) return {} // safety: don't clear on empty
+          const changed =
+            leads.length !== prev.leads.length ||
+            leads.some(l => {
+              const pl = prev.leads.find(p => p.id === l.id)
+              return !pl || JSON.stringify(pl.properties) !== JSON.stringify(l.properties)
+            })
+          return changed ? { leads } : {} // only re-render when data actually changed
+        })
+      } catch { /* silent — background errors don't toast */ }
+    }
+    const id = setInterval(poll, POLL_MS)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncOwnerId])
+
+  // ── Post-write re-fetch: 3s after a successful PATCH, refresh just that lead ─
+  // Confirms the write landed and replaces optimistic state with server truth.
+  useEffect(() => {
+    if (isDemo()) return
+    const timers = new Map<string, ReturnType<typeof setTimeout>>()
+    const unsub = onLeadWrite(leadId => {
+      if (timers.has(leadId)) clearTimeout(timers.get(leadId)!)
+      timers.set(leadId, setTimeout(async () => {
+        timers.delete(leadId)
+        const fresh = await fetchOneLead(leadId)
+        if (!fresh) return
+        setState(prev => ({
+          leads: prev.leads.map(l => l.id === leadId ? fresh : l),
+        }))
+      }, 3000))
+    })
+    return () => { unsub(); timers.forEach(t => clearTimeout(t)) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleRefresh() {
     setState({ loading: true })
