@@ -52,16 +52,16 @@ export default function LoginPage() {
 
       lookupHubspotUserId(email)
         .then(userId => {
-          // Patch userId into currentRep as soon as we have it
+          console.log('[login] userId lookup result:', userId)
           if (userId) setState(prev => ({
             currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
           }))
-          // Use userId to look up owner ID (more reliable than email lookup)
           return lookupHubspotOwnerId(email, userId || undefined)
         })
         .then(async ownerId => {
+          console.log('[login] ownerId lookup result:', ownerId)
           if (!ownerId) {
-            showToast('Eigenaar niet gevonden in HubSpot. Controleer of crm.owners.read scope is ingesteld.', 'error')
+            showToast('Eigenaar niet gevonden in HubSpot — zie console voor details.', 'error')
             setState({ loading: false })
             return
           }
@@ -70,13 +70,16 @@ export default function LoginPage() {
           }))
           try {
             const leads = await fetchLeads(ownerId)
+            console.log('[login] fetchLeads result:', leads.length, 'leads for ownerId:', ownerId)
             setState({ leads, loading: false })
           } catch (e: any) {
+            console.error('[login] fetchLeads error:', e)
             showToast(t('errLoad', e.message), 'error')
             setState({ leads: [], loading: false })
           }
         })
         .catch((e: any) => {
+          console.error('[login] chain error:', e)
           showToast(t('errLoad', e.message), 'error')
           setState({ loading: false })
         })

@@ -99,8 +99,10 @@ export async function lookupHubspotUserId(email: string): Promise<string | null>
       properties: ['hs_email'],
       limit: 1,
     })
-    if (!res.ok) return null
+    console.log('[hubspot] users/search status:', res.status)
+    if (!res.ok) { console.warn('[hubspot] users/search failed:', res.status); return null }
     const data = await res.json()
+    console.log('[hubspot] users/search result:', JSON.stringify(data).slice(0, 300))
     return data.results?.[0]?.id ?? null
   } catch {
     return null
@@ -115,18 +117,21 @@ export async function lookupHubspotOwnerId(email: string, userId?: string): Prom
   if (isDemo() || !email) return null
   try {
     if (userId) {
-      // userId from /crm/v3/objects/users maps to the userId field in /crm/v3/owners
       const r = await hsProxy('GET', '/crm/v3/owners?userId=' + userId + '&limit=1')
+      console.log('[hubspot] owners?userId status:', r.status)
       if (r.ok) {
         const d = await r.json()
+        console.log('[hubspot] owners?userId result:', JSON.stringify(d).slice(0, 300))
         const id = d.results?.[0]?.id
         if (id) return String(id)
       }
     }
     // Fallback: look up by email
     const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')
-    if (!res.ok) return null
+    console.log('[hubspot] owners?email status:', res.status)
+    if (!res.ok) { console.warn('[hubspot] owners?email failed:', res.status); return null }
     const data = await res.json()
+    console.log('[hubspot] owners?email result:', JSON.stringify(data).slice(0, 300))
     const id = data.results?.[0]?.id
     return id ? String(id) : null
   } catch { return null }
