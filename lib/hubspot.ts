@@ -126,17 +126,6 @@ export async function lookupHubspotOwnerId(email: string): Promise<string | null
     return id ? String(id) : null
   } catch { return null }
 }
-    }
-    // Fallback: look up by email
-    const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')
-    console.log('[hubspot] owners?email status:', res.status)
-    if (!res.ok) { console.warn('[hubspot] owners?email failed:', res.status); return null }
-    const data = await res.json()
-    console.log('[hubspot] owners?email result:', JSON.stringify(data).slice(0, 300))
-    const id = data.results?.[0]?.id
-    return id ? String(id) : null
-  } catch { return null }
-}
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
 export async function fetchLeads(ownerId: string): Promise<Lead[]> {
