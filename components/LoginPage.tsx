@@ -42,41 +42,44 @@ export default function LoginPage() {
       const rep = {
         name: repConfig?.name || name,
         email,
-        hubspotUserId: repConfig?.hubspotUserId || '',
-        hubspotOwnerId: repConfig?.hubspotOwnerId || '',
+        hubspotUserId: repConfig?.hubspotUserId || '', // will be overridden by dynamic lookup
+        hubspotOwnerId: '',  // always resolved dynamically — NEVER seeded from config
       }
+      // Never use hardcoded owner ID — always resolve dynamically from HubSpot.
+      // Chain: email → userId (Users API) → ownerId (Owners API) → leads
+      // This is the only correct flow: owner ID and user ID are separate systems.
       setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, loading: true })
 
-      fetchLeads(rep.hubspotOwnerId)
-        .then((leads) => setState({ leads, loading: false }))
-        .catch((e: any) => {
-          showToast(t('errLoad', e.message), 'error')
-          setState({ leads: [], loading: false })
+      lookupHubspotUserId(email)
+        .then(userId => {
+          // Patch userId into currentRep as soon as we have it
+          if (userId) setState(prev => ({
+            currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
+          }))
+          // Use userId to look up owner ID (more reliable than email lookup)
+          return lookupHubspotOwnerId(email, userId || undefined)
         })
-
-      // Dynamically resolve HubSpot IDs from the rep's email — works for ALL reps.
-      // userId  → /crm/v3/objects/users (for lead_router_trigger PATCH)
-      // ownerId → /crm/v3/owners       (for hubspot_owner_id filter on leads)
-      // Both run in parallel; each patches currentRep if found.
-      lookupHubspotUserId(email).then(userId => {
-        if (userId) setState(prev => ({
-          currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
-        }))
-      })
-
-      lookupHubspotOwnerId(email).then(ownerId => {
-        if (!ownerId) return
-        setState(prev => ({
-          currentRep: prev.currentRep ? { ...prev.currentRep, hubspotOwnerId: ownerId } : prev.currentRep,
-        }))
-        // Re-fetch leads with the correct owner ID now that we have it
-        fetchLeads(ownerId)
-          .then(leads => setState({ leads, loading: false }))
-          .catch((e: any) => {
+        .then(async ownerId => {
+          if (!ownerId) {
+            showToast('Eigenaar niet gevonden in HubSpot. Controleer of crm.owners.read scope is ingesteld.', 'error')
+            setState({ loading: false })
+            return
+          }
+          setState(prev => ({
+            currentRep: prev.currentRep ? { ...prev.currentRep, hubspotOwnerId: ownerId } : prev.currentRep,
+          }))
+          try {
+            const leads = await fetchLeads(ownerId)
+            setState({ leads, loading: false })
+          } catch (e: any) {
             showToast(t('errLoad', e.message), 'error')
             setState({ leads: [], loading: false })
-          })
-      })
+          }
+        })
+        .catch((e: any) => {
+          showToast(t('errLoad', e.message), 'error')
+          setState({ loading: false })
+        })
     } catch {
       showToast('Inloggen mislukt, probeer opnieuw.', 'error')
     }

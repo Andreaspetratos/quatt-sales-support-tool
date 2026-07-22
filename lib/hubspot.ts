@@ -107,12 +107,23 @@ export async function lookupHubspotUserId(email: string): Promise<string | null>
   }
 }
 
-// ── Dynamic owner ID lookup — resolves the CRM owner ID from the rep's email ──
+// ── Dynamic owner ID lookup — resolves the CRM owner ID ──────────────────────
 // Owner ID (from /crm/v3/owners) ≠ User ID (from /crm/v3/objects/users).
 // Owner ID is what HubSpot stores as hubspot_owner_id on CRM records.
-export async function lookupHubspotOwnerId(email: string): Promise<string | null> {
+// We try userId-based lookup first (more reliable), then email as fallback.
+export async function lookupHubspotOwnerId(email: string, userId?: string): Promise<string | null> {
   if (isDemo() || !email) return null
   try {
+    if (userId) {
+      // userId from /crm/v3/objects/users maps to the userId field in /crm/v3/owners
+      const r = await hsProxy('GET', '/crm/v3/owners?userId=' + userId + '&limit=1')
+      if (r.ok) {
+        const d = await r.json()
+        const id = d.results?.[0]?.id
+        if (id) return String(id)
+      }
+    }
+    // Fallback: look up by email
     const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')
     if (!res.ok) return null
     const data = await res.json()
