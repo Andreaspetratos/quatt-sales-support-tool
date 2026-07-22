@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveLang } from '@/lib/storage'
@@ -7,7 +8,6 @@ import { isDemo } from '@/lib/config'
 import { fetchDeals } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
-// Public Google OAuth client ID
 const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
 
 export default function LoginPage() {
@@ -15,26 +15,12 @@ export default function LoginPage() {
   const t = (key: string, ...args: any[]) => translate(state.lang, key, ...args)
   const demo = isDemo()
 
-  function setLang(l: 'nl' | 'en') {
-    saveLang(l)
-    setState({ lang: l })
-  }
+  // Keep a stable ref to the credential handler so the GSI callback always
+  // calls the latest closure (lang, setState, etc.)
+  const credentialHandlerRef = useRef<(response: { credential: string }) => void>(() => {})
 
-  async function demoLogin() {
-    const rep = { name: 'Demo', email: 'demo@quatt.io', hubspotUserId: 'demo', hubspotOwnerId: 'demo' }
-    setState({ screen: 'dashboard', currentRep: rep, userAvatar: null, loading: true })
+  credentialHandlerRef.current = (response: { credential: string }) => {
     try {
-      const deals = await fetchDeals(rep.hubspotOwnerId)
-      setState({ deals, loading: false })
-    } catch (e: any) {
-      showToast(t('errLoad', e.message), 'error')
-      setState({ deals: [], loading: false })
-    }
-  }
-
-  function handleCredentialResponse(response: { credential: string }) {
-    try {
-      // Decode Google JWT payload (the signature was already verified by Google)
       const parts = response.credential.split('.')
       if (parts.length !== 3) throw new Error('Invalid token')
       const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
@@ -42,14 +28,11 @@ export default function LoginPage() {
         email?: string
         name?: string
         picture?: string
-        hd?: string
       }
-
       const email = payload.email ?? ''
       const name = payload.name ?? email
       const picture = payload.picture ?? ''
 
-      // Enforce @quatt.io domain
       if (!email.endsWith('@quatt.io')) {
         showToast('Gebruik je @quatt.io Google account om in te loggen.', 'error')
         return
@@ -69,19 +52,60 @@ export default function LoginPage() {
     }
   }
 
+  // Initialize GSI once when the script is ready — NOT inside the click handler
+  useEffect(() => {
+    function initGSI() {
+      const w = window as any
+      if (!w.google?.accounts?.id) return
+      w.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (response: { credential: string }) => {
+          credentialHandlerRef.current(response)
+        },
+        auto_select: false,
+      })
+    }
+
+    // GSI might already be loaded (cached)
+    if ((window as any).google?.accounts?.id) {
+      initGSI()
+    } else {
+      // Wait for the async script to load
+      const script = document.querySelector(
+        'script[src="https://accounts.google.com/gsi/client"]'
+      ) as HTMLScriptElement | null
+      if (script) {
+        script.addEventListener('load', initGSI)
+        return () => script.removeEventListener('load', initGSI)
+      }
+    }
+  }, [])
+
+  function setLang(l: 'nl' | 'en') {
+    saveLang(l)
+    setState({ lang: l })
+  }
+
+  async function demoLogin() {
+    const rep = { name: 'Demo', email: 'demo@quatt.io', hubspotUserId: 'demo', hubspotOwnerId: 'demo' }
+    setState({ screen: 'dashboard', currentRep: rep, userAvatar: null, loading: true })
+    try {
+      const deals = await fetchDeals(rep.hubspotOwnerId)
+      setState({ deals, loading: false })
+    } catch (e: any) {
+      showToast(t('errLoad', e.message), 'error')
+      setState({ deals: [], loading: false })
+    }
+  }
+
   function signInWithGoogle() {
     const w = window as any
     if (!w.google?.accounts?.id) {
       showToast('Google Sign-In laadt nog, probeer opnieuw.', 'error')
       return
     }
-    w.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleCredentialResponse,
-      auto_select: false,
-    })
+    // prompt() only — initialize() already ran in useEffect
     w.google.accounts.id.prompt((notification: any) => {
-      // If One Tap is suppressed (e.g. browser blocks it), fall back to popup
       if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
         w.google.accounts.id.renderButton(
           document.getElementById('google-btn-container'),
@@ -139,7 +163,6 @@ export default function LoginPage() {
               </svg>
               {t('loginBtn')}
             </button>
-            {/* Fallback container for Google's rendered button */}
             <div id="google-btn-container" style={{ display: 'flex', justifyContent: 'center' }} />
           </>
         )}
