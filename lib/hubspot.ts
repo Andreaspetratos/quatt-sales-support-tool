@@ -34,23 +34,23 @@ const DEMO_LEADS: Lead[] = [
 ]
 
 // ── API helpers ───────────────────────────────────────────────────────────────
-const hsUrl = (path: string) => CONFIG.CORS_PROXY + 'https://api.hubapi.com' + path
-const hsHeaders = () => ({
-  Authorization: 'Bearer ' + CONFIG.HUBSPOT_TOKEN,
-  'Content-Type': 'application/json',
-})
+// All HubSpot traffic is routed through the server-side proxy (/api/hs-write)
+// to avoid CORS preflights being blocked by the browser.
+async function hsProxy(method: string, path: string, body?: unknown): Promise<Response> {
+  return fetch('/api/hs-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method, path, body }),
+  })
+}
 // ── Dynamic user ID lookup — called at login so we never rely on hardcoded IDs ─
 export async function lookupHubspotUserId(email: string): Promise<string | null> {
   if (isDemo() || !email || !CONFIG.HUBSPOT_TOKEN) return null
   try {
-    const res = await fetch(hsUrl('/crm/v3/objects/users/search'), {
-      method: 'POST',
-      headers: hsHeaders(),
-      body: JSON.stringify({
-        filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
-        properties: ['hs_email'],
-        limit: 1,
-      }),
+    const res = await hsProxy('POST', '/crm/v3/objects/users/search', {
+      filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
+      properties: ['hs_email'],
+      limit: 1,
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -65,20 +65,16 @@ export async function fetchLeads(ownerId: string): Promise<Lead[]> {
   if (isDemo()) return DEMO_LEADS
   if (!ownerId) return []
 
-  const res = await fetch(hsUrl('/crm/v3/objects/leads/search'), {
-    method: 'POST',
-    headers: hsHeaders(),
-    body: JSON.stringify({
-      filterGroups: [{
-        filters: [
-          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
-          { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
-        ],
-      }],
-      properties: LEAD_PROPS,
-      sorts: [{ propertyName: 'screening_call_requested_at', direction: 'DESCENDING' }],
-      limit: 100,
-    }),
+  const res = await hsProxy('POST', '/crm/v3/objects/leads/search', {
+    filterGroups: [{
+      filters: [
+        { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+        { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
+      ],
+    }],
+    properties: LEAD_PROPS,
+    sorts: [{ propertyName: 'screening_call_requested_at', direction: 'DESCENDING' }],
+    limit: 100,
   })
   if (!res.ok) throw new Error('HTTP ' + res.status)
   return (await res.json()).results || []
@@ -140,17 +136,13 @@ export function generateDemoPerf(): PerfData {
 export async function fetchPerformance(ownerId: string): Promise<PerfData> {
   if (isDemo() || !ownerId) return generateDemoPerf()
 
-  const res = await fetch(hsUrl('/crm/v3/objects/leads/search'), {
-    method: 'POST',
-    headers: hsHeaders(),
-    body: JSON.stringify({
-      filterGroups: [{ filters: [
-        { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
-        { propertyName: 'qualificationcalloutcome_lead', operator: 'HAS_PROPERTY' },
-      ]}],
-      properties: ['qualificationcalloutcome_lead', 'hs_lastmodifieddate'],
-      limit: 200,
-    }),
+  const res = await hsProxy('POST', '/crm/v3/objects/leads/search', {
+    filterGroups: [{ filters: [
+      { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+      { propertyName: 'qualificationcalloutcome_lead', operator: 'HAS_PROPERTY' },
+    ]}],
+    properties: ['qualificationcalloutcome_lead', 'hs_lastmodifieddate'],
+    limit: 200,
   })
   if (!res.ok) throw new Error('HTTP ' + res.status)
   const leads = (await res.json()).results || []

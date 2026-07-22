@@ -1,7 +1,9 @@
 /**
  * POST /api/hs-write
- * Server-side proxy for HubSpot PATCH calls (browsers can't PATCH due to CORS).
- * Body: { path: string, body: object }
+ * Universal server-side proxy for HubSpot API calls.
+ * Bypasses CORS — all HubSpot traffic (reads AND writes) goes through here.
+ * Body: { method?: string, path: string, body?: object }
+ * method defaults to 'PATCH' for backward compat with existing callers.
  */
 export async function onRequestPost(context) {
   try {
@@ -15,15 +17,19 @@ export async function onRequestPost(context) {
       })
     }
 
-    var res = await fetch('https://api.hubapi.com' + req.path, {
-      method: 'PATCH',
+    var method = req.method || 'PATCH'
+    var fetchOpts = {
+      method: method,
       headers: {
         'Authorization': 'Bearer ' + token,
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(req.body)
-    })
+      }
+    }
+    if (req.body !== undefined && method !== 'GET') {
+      fetchOpts.body = JSON.stringify(req.body)
+    }
 
+    var res = await fetch('https://api.hubapi.com' + req.path, fetchOpts)
     var data = await res.text()
     return new Response(data, {
       status: res.status,
