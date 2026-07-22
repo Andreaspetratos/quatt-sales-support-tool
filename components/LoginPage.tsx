@@ -7,6 +7,9 @@ import { isDemo } from '@/lib/config'
 import { fetchDeals } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
+// Public Google OAuth client ID
+const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
+
 export default function LoginPage() {
   const { state, setState } = useApp()
   const t = (key: string, ...args: any[]) => translate(state.lang, key, ...args)
@@ -29,9 +32,63 @@ export default function LoginPage() {
     }
   }
 
+  function handleCredentialResponse(response: { credential: string }) {
+    try {
+      // Decode Google JWT payload (the signature was already verified by Google)
+      const parts = response.credential.split('.')
+      if (parts.length !== 3) throw new Error('Invalid token')
+      const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+      const payload = JSON.parse(payloadJson) as {
+        email?: string
+        name?: string
+        picture?: string
+        hd?: string
+      }
+
+      const email = payload.email ?? ''
+      const name = payload.name ?? email
+      const picture = payload.picture ?? ''
+
+      // Enforce @quatt.io domain
+      if (!email.endsWith('@quatt.io')) {
+        showToast('Gebruik je @quatt.io Google account om in te loggen.', 'error')
+        return
+      }
+
+      const rep = { name, email, hubspotUserId: '', hubspotOwnerId: '' }
+      setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, loading: true })
+
+      fetchDeals(rep.hubspotOwnerId)
+        .then((deals) => setState({ deals, loading: false }))
+        .catch((e: any) => {
+          showToast(t('errLoad', e.message), 'error')
+          setState({ deals: [], loading: false })
+        })
+    } catch {
+      showToast('Inloggen mislukt, probeer opnieuw.', 'error')
+    }
+  }
+
   function signInWithGoogle() {
-    const next = encodeURIComponent(window.location.pathname + window.location.search)
-    window.location.href = `/auth/login?next=${next}`
+    const w = window as any
+    if (!w.google?.accounts?.id) {
+      showToast('Google Sign-In laadt nog, probeer opnieuw.', 'error')
+      return
+    }
+    w.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleCredentialResponse,
+      auto_select: false,
+    })
+    w.google.accounts.id.prompt((notification: any) => {
+      // If One Tap is suppressed (e.g. browser blocks it), fall back to popup
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        w.google.accounts.id.renderButton(
+          document.getElementById('google-btn-container'),
+          { theme: 'outline', size: 'large', width: 280 }
+        )
+      }
+    })
   }
 
   return (
@@ -68,19 +125,23 @@ export default function LoginPage() {
             </button>
           </>
         ) : (
-          <button
-            className="btn btn-sc btn-lg btn-full"
-            onClick={signInWithGoogle}
-            style={{ gap: 10 }}
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-              <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
-              <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
-              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
-            </svg>
-            {t('loginSub')}
-          </button>
+          <>
+            <button
+              className="btn btn-sc btn-lg btn-full"
+              onClick={signInWithGoogle}
+              style={{ gap: 10 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+                <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
+              {t('loginSub')}
+            </button>
+            {/* Fallback container for Google's rendered button */}
+            <div id="google-btn-container" style={{ display: 'flex', justifyContent: 'center' }} />
+          </>
         )}
       </div>
     </div>

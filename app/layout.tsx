@@ -18,6 +18,8 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        {/* Google Identity Services */}
+        <script src="https://accounts.google.com/gsi/client" async defer />
         {/* Apply saved theme before paint to prevent flash */}
         <script
           dangerouslySetInnerHTML={{
