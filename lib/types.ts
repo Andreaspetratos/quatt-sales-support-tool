@@ -12,6 +12,9 @@ export interface Deal {
   properties: Record<string, string>
 }
 
+// Lead = same shape, used for HubSpot Leads object
+export type Lead = Deal
+
 export interface TechCheckOutcome {
   condition: string
   result: string
@@ -139,7 +142,7 @@ export interface AppState {
   lang: Lang
   currentRep: Rep | null
   userAvatar: string | null
-  deals: Deal[]
+  leads: Lead[]
   selectedId: string | null
   loading: boolean
   cooldownEnd: number | null

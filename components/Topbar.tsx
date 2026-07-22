@@ -32,7 +32,7 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
   }
 
   function handleLogout() {
-    setState({ screen: 'login', currentRep: null, userAvatar: null, deals: [], selectedId: null })
+    setState({ screen: 'login', currentRep: null, userAvatar: null, leads: [], selectedId: null })
   }
 
   function goAdmin() {

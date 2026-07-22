@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveLang } from '@/lib/storage'
 import { isDemo } from '@/lib/config'
-import { fetchDeals } from '@/lib/hubspot'
+import { fetchLeads } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
@@ -41,11 +41,11 @@ export default function LoginPage() {
       const rep = { name, email, hubspotUserId: '', hubspotOwnerId: '' }
       setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, loading: true })
 
-      fetchDeals(rep.hubspotOwnerId)
-        .then((deals) => setState({ deals, loading: false }))
+      fetchLeads(rep.hubspotOwnerId)
+        .then((leads) => setState({ leads, loading: false }))
         .catch((e: any) => {
           showToast(t('errLoad', e.message), 'error')
-          setState({ deals: [], loading: false })
+          setState({ leads: [], loading: false })
         })
     } catch {
       showToast('Inloggen mislukt, probeer opnieuw.', 'error')
@@ -90,11 +90,11 @@ export default function LoginPage() {
     const rep = { name: 'Demo', email: 'demo@quatt.io', hubspotUserId: 'demo', hubspotOwnerId: 'demo' }
     setState({ screen: 'dashboard', currentRep: rep, userAvatar: null, loading: true })
     try {
-      const deals = await fetchDeals(rep.hubspotOwnerId)
-      setState({ deals, loading: false })
+      const leads = await fetchLeads(rep.hubspotOwnerId)
+      setState({ leads, loading: false })
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
-      setState({ deals: [], loading: false })
+      setState({ leads: [], loading: false })
     }
   }
 

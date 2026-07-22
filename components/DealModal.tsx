@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
 import { loadScheds } from '@/lib/storage'
-import { patchDeal as patchDealApi, aircallDial } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, aircallDial } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -35,8 +35,8 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
     const reason = selRef.current?.value || ''
     if (!reason) { showToast(t('errReason'), 'error'); return }
     try {
-      await patchDealApi(dealId, { dealstage: CONFIG.STAGES.LOST, closed_lost_reason: reason }, state.deals, deals => setState({ deals }))
-      setState({ deals: state.deals.filter(d => d.id !== dealId), selectedId: null, modal: null })
+      await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.LOST, lead_lost_status: reason }, state.leads, leads => setState({ leads }))
+      setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastLost'), 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
@@ -107,19 +107,19 @@ function SchedModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
 
 // ── CallOutcome section ───────────────────────────────────────────────────────
 function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
-  const { state, getPbState, setCallOutcome, setCallOutcomeNote, patchDealLocal } = useApp()
+  const { state, getPbState, setCallOutcome, setCallOutcomeNote, patchLeadLocal } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const pbSt = getPbState(dealId)
-  const deal = state.deals.find(d => d.id === dealId)
+  const deal = state.leads.find(l => l.id === dealId)
   const savedOutcome = deal?.properties?.[CONFIG.PROPS.callOutcome]
 
   async function saveOutcome() {
     if (!pbSt.callOutcome) { showToast(t('errOutcome'), 'error'); return }
     try {
-      await patchDealApi(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome }, state.deals, deals => {
-        patchDealLocal(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome })
+      await patchLeadApi(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome }, state.leads, leads => {
+        patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome })
       })
-      patchDealLocal(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome })
+      patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome })
       showToast(t('toastSaved'), 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
@@ -158,14 +158,14 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
 
 // ── DealModal ─────────────────────────────────────────────────────────────────
 export default function DealModal() {
-  const { state, setState, selectDeal } = useApp()
+  const { state, setState, selectLead } = useApp()
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
 
   const cardRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ type: 'move' | 'resize'; sx: number; sy: number; sw: number; sh: number; sl: number; st: number } | null>(null)
 
-  const deal = state.deals.find(d => d.id === state.selectedId)
+  const deal = state.leads.find(l => l.id === state.selectedId)
   if (!deal) return null
 
   // Capture id so closures below don't re-evaluate the possibly-undefined find result
@@ -175,7 +175,7 @@ export default function DealModal() {
   const pbDefs = getPlaybookDefs(deal)
 
   function closeDeal() {
-    selectDeal(null)
+    selectLead(null)
     setState({ dmX: null, dmY: null, dmW: null, dmH: null })
   }
 
@@ -196,8 +196,8 @@ export default function DealModal() {
 
   async function handleHV() {
     try {
-      await patchDealApi(dealId, { dealstage: CONFIG.STAGES.HOME_VISIT }, state.deals, deals => setState({ deals }))
-      setState({ deals: state.deals.map(d => d.id === dealId ? { ...d, properties: { ...d.properties, dealstage: 'Home Visit' } } : d) })
+      await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.SQL }, state.leads, leads => setState({ leads }))
+      setState({ leads: state.leads.map(l => l.id === dealId ? { ...l, properties: { ...l.properties, hs_pipeline_stage: CONFIG.STAGES.SQL } } : l) })
       showToast(t('toastHV'), 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
@@ -266,7 +266,7 @@ export default function DealModal() {
           <div className="dm-head" onMouseDown={e => startDrag(e, 'move')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="dm-title" title={p.dealname || ''}>{p.dealname || '--'}</div>
+                <div className="dm-title" title={p.hs_lead_name || ''}>{p.hs_lead_name || '--'}</div>
                 <div className="dm-sub">{p[P.product] || '--'}</div>
               </div>
               <button
@@ -277,12 +277,12 @@ export default function DealModal() {
               >✕</button>
             </div>
             <div className="dm-meta">
-              <span className="dm-phone">{p.phone || '--'}</span>
-              {p.phone && (
+              <span className="dm-phone">{p.phone_number || '--'}</span>
+              {p.phone_number && (
                 <button
                   className="btn btn-pr btn-sm"
                   onMouseDown={e => e.stopPropagation()}
-                  onClick={() => aircallDial(p.phone)}
+                  onClick={() => aircallDial(p.phone_number)}
                   style={{ pointerEvents: 'auto' }}
                 >
                   {t('callBtn')}

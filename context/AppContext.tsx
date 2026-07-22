@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useState } from 'react'
-import type { AppState, Deal, Lang, Modal, PerfData, PlaybookState, Task, TaskTab } from '@/lib/types'
+import type { AppState, Lead, Lang, Modal, PerfData, PlaybookState, Task, TaskTab } from '@/lib/types'
 
 // ── Default playbook state factory ────────────────────────────────────────────
 export function defaultPbState(): PlaybookState {
@@ -14,7 +14,7 @@ const initialState: AppState = {
   lang: 'nl',
   currentRep: null,
   userAvatar: null,
-  deals: [],
+  leads: [],
   selectedId: null,
   loading: false,
   cooldownEnd: null,
@@ -51,8 +51,8 @@ interface AppContextValue {
   setCallOutcome: (dealId: string, value: string) => void
   setCallOutcomeNote: (dealId: string, value: string) => void
   // Deal helpers
-  patchDealLocal: (id: string, props: Record<string, string>) => void
-  selectDeal: (id: string | null) => void
+  patchLeadLocal: (id: string, props: Record<string, string>) => void
+  selectLead: (id: string | null) => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -180,16 +180,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [ensurePb])
 
   // ── Deal helpers ───────────────────────────────────────────────────────────
-  const patchDealLocal = useCallback((id: string, props: Record<string, string>) => {
+  const patchLeadLocal = useCallback((id: string, props: Record<string, string>) => {
     setStateRaw(prev => ({
       ...prev,
-      deals: prev.deals.map(d =>
+      leads: prev.leads.map(d =>
         d.id === id ? { ...d, properties: { ...d.properties, ...props } } : d
       ),
     }))
   }, [])
 
-  const selectDeal = useCallback((id: string | null) => {
+  const selectLead = useCallback((id: string | null) => {
     setStateRaw(prev => {
       const next: Partial<AppState> = { selectedId: id }
       if (id && !prev.playbook[id]) {
@@ -212,8 +212,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         donePhase,
         setCallOutcome,
         setCallOutcomeNote,
-        patchDealLocal,
-        selectDeal,
+        patchLeadLocal,
+        selectLead,
       }}
     >
       {children}

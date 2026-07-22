@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
-import { CONFIG } from '@/lib/config'
-import { postWebhook, fetchDeals, fetchPerformance } from '@/lib/hubspot'
+import { CONFIG, stageLabel } from '@/lib/config'
+import { requestLeads, fetchLeads, fetchPerformance } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
-import type { Deal, Task } from '@/lib/types'
+import type { Lead, Task } from '@/lib/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function relTime(iso: string | undefined): string {
@@ -125,7 +125,7 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const draft = state.taskDraft
-  const linkedDeal = state.deals.find(d => d.id === draft.dealId)
+  const linkedLead = state.leads.find(l => l.id === draft.dealId)
 
   function submit() {
     if (!draft.title?.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
@@ -167,10 +167,10 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
               {CONFIG.REPS.map(r => <option key={r.email} value={r.email}>{r.name}</option>)}
             </select>
           </div>
-          {linkedDeal && (
+          {linkedLead && (
             <div className="iw">
               <label className="il">{t('taskDeal')}</label>
-              <div style={{ fontSize: 13, color: 'var(--ct)', padding: '4px 0' }}>📋 {linkedDeal.properties?.dealname || '--'}</div>
+              <div style={{ fontSize: 13, color: 'var(--ct)', padding: '4px 0' }}>📋 {linkedLead.properties?.hs_lead_name || '--'}</div>
             </div>
           )}
           <div className="iw">
@@ -225,14 +225,14 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     <div className="task-list fade-up">
       {tasks.map(task => {
         const dm = dueMeta(task.dueDate)
-        const deal = state.deals.find(d => d.id === task.dealId)
+        const lead = state.leads.find(l => l.id === task.dealId)
         return (
           <div key={task.id} className={`task-card ${dm.cls === 'task-due-over' ? 'overdue' : ''}`}>
             <div className="task-card-title">{task.title || '(no title)'}</div>
             {task.note && <div className="task-card-note">{task.note}</div>}
             <div className="task-card-meta">
               {dm.label && <span className={`task-card-due ${dm.cls}`}>{dm.label}</span>}
-              {deal && <span className="task-card-deal">📋 {deal.properties?.dealname || '--'}</span>}
+              {lead && <span className="task-card-deal">📋 {lead.properties?.hs_lead_name || '--'}</span>}
             </div>
             <div className="task-card-actions">
               <button className="btn btn-gn btn-xs" onClick={() => { completeTask(task.id); forceUpdate(n => n + 1) }}>{t('taskDone')}</button>
@@ -247,11 +247,11 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
 
 // ── Deals table ───────────────────────────────────────────────────────────────
 function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
-  const { state, selectDeal } = useApp()
+  const { state, selectLead } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const P = CONFIG.PROPS
 
-  if (!state.deals.length) {
+  if (!state.leads.length) {
     return (
       <div className="es">
         <div className="ei">📋</div>
@@ -271,32 +271,32 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
             <th>{t('colPhone')}</th>
             <th>{t('colProduct')}</th>
             <th>{t('colOutcome')}</th>
-            <th>{t('colOrigin')}</th>
+            <th>Stage</th>
           </tr>
         </thead>
         <tbody>
-          {state.deals.map(deal => {
+          {state.leads.map(deal => {
             const p = deal.properties
             const tasks = dealOpenTasks(deal.id)
             return (
               <tr
                 key={deal.id}
                 className={deal.id === state.selectedId ? 'ra' : ''}
-                onClick={() => selectDeal(deal.id)}
+                onClick={() => selectLead(deal.id)}
               >
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, maxWidth: 200 }}>
                     <span className="tn" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                      {p.dealname || '--'}
+                      {p.hs_lead_name || '--'}
                     </span>
                     {tasks.length > 0 && <span className="task-badge">{tasks.length}</span>}
                   </div>
                 </td>
                 <td className="tm">{relTime(p[P.requestedAt])}</td>
-                <td style={{ fontSize: 12, color: 'var(--cs)' }}>{p.phone || '--'}</td>
+                <td style={{ fontSize: 12, color: 'var(--cs)' }}>{p.phone_number || '--'}</td>
                 <td>{prodBadge(p[P.product])}</td>
                 <td className="tm">{p[P.callOutcome] || '--'}</td>
-                <td className="tm">{p[P.formOrigin] || '--'}</td>
+                <td><span className="badge bg" style={{fontSize:11}}>{stageLabel(p.hs_pipeline_stage)}</span></td>
               </tr>
             )
           })}
@@ -336,14 +336,14 @@ function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
     if (onCD || state.loading || !state.currentRep) return
     setState({ loading: true })
     try {
-      await postWebhook(state.currentRep)
+      await requestLeads(state.currentRep)
       const newEnd = Date.now() + CONFIG.REQUEST_COOLDOWN * 1000
       setState({ cooldownEnd: newEnd })
       showToast(t('toastLeads'), 'success')
       setTimeout(async () => {
         try {
-          const deals = await fetchDeals(state.currentRep!.hubspotOwnerId)
-          setState({ deals })
+          const leads = await fetchLeads(state.currentRep!.hubspotOwnerId)
+          setState({ leads })
         } catch {}
       }, 3000)
     } catch (e: any) {
@@ -382,7 +382,7 @@ interface PipelineBoardProps {
 }
 
 export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: PipelineBoardProps) {
-  const { state, setState, selectDeal } = useApp()
+  const { state, setState, selectLead } = useApp()
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const openTasks = myOpenTasks(state.currentRep?.email)
@@ -390,8 +390,8 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
   async function handleRefresh() {
     setState({ loading: true })
     try {
-      const deals = await fetchDeals(state.currentRep?.hubspotOwnerId || '')
-      setState({ deals, loading: false })
+      const leads = await fetchLeads(state.currentRep?.hubspotOwnerId || '')
+      setState({ leads, loading: false })
       showToast(t('toastRefreshed'), 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
@@ -416,7 +416,7 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
             onClick={() => setState({ taskTab: 'leads' })}
           >
             {t('taskTabLeads')}
-            <span className={`tab-count ${state.deals.length ? 'has' : ''}`}>{state.deals.length}</span>
+            <span className={`tab-count ${state.leads.length ? 'has' : ''}`}>{state.leads.length}</span>
           </button>
           <button
             className={`tab-btn ${state.taskTab === 'tasks' ? 'on' : ''}`}
@@ -441,7 +441,7 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
 
         {/* Tab content */}
         {state.taskTab === 'leads'
-          ? (state.loading && !state.deals.length
+          ? (state.loading && !state.leads.length
             ? <div className="es"><div className="sp spd" /></div>
             : <DealsTable lang={lang} />)
           : <TasksTab lang={lang} />

@@ -1,9 +1,11 @@
 import type { Rep, Playbook, Scheduler } from './types'
 
 interface StageIds {
-  HOME_VISIT: string
+  UQL: string
+  MQL: string
+  SQL: string
   LOST: string
-  LONG_TERM: string
+  DUPLICATE_CHECK: string
 }
 
 interface PropNames {
@@ -12,7 +14,6 @@ interface PropNames {
   callOutcome: string
   formOrigin: string
   partner: string
-  temp: string
   requestedAt: string
 }
 
@@ -22,6 +23,7 @@ interface AppConfig {
   HUBSPOT_TOKEN: string
   CORS_PROXY: string
   SCHEDULER_URL: string
+  PIPELINE_ID: string
   STAGES: StageIds
   PROPS: PropNames
   REQUEST_COOLDOWN: number
@@ -33,30 +35,50 @@ interface AppConfig {
 }
 
 export const CONFIG: AppConfig = {
-  GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? 'YOUR_CLIENT_ID.apps.googleusercontent.com',
-  MAKE_WEBHOOK_URL: process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL ?? 'https://hook.eu1.make.com/YOUR_ID',
-  HUBSPOT_TOKEN: process.env.NEXT_PUBLIC_HUBSPOT_TOKEN ?? 'pat-eu1-YOUR_TOKEN',
+  GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com',
+  MAKE_WEBHOOK_URL: process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL ?? '',
+  // Set NEXT_PUBLIC_HUBSPOT_TOKEN in Cloudflare Pages environment variables
+  HUBSPOT_TOKEN: process.env.NEXT_PUBLIC_HUBSPOT_TOKEN ?? '',
   CORS_PROXY: '',
   SCHEDULER_URL: '',
+
+  // Consumer Orders lead pipeline
+  PIPELINE_ID: '3837045967',
   STAGES: {
-    HOME_VISIT: 'YOUR_HV_STAGE',
-    LOST: 'YOUR_LOST_STAGE',
-    LONG_TERM: 'YOUR_LT_STAGE',
+    UQL:             '5404393700',
+    MQL:             '5404393694',
+    SQL:             '5404393697',
+    LOST:            '5404393698',
+    DUPLICATE_CHECK: '5404393699',
   },
+
+  // Lead object property names
   PROPS: {
-    leadScore: 'hubspot_score',
-    product: 'selected_product',
-    callOutcome: 'qualification_call_outcome',
-    formOrigin: 'recent_form_origin',
-    partner: 'partner_name',
-    temp: 'lead_temperature',
+    leadScore:   'lead_router_qualification_score_lead',
+    product:     'most_recent_selected_product_lead',
+    callOutcome: 'qualificationcalloutcome_lead',
+    formOrigin:  'most_recent_form_origin_lead',
+    partner:     'partner_name_lead',
     requestedAt: 'screening_call_requested_at',
   },
+
   REQUEST_COOLDOWN: 60,
+
   REPS: [
-    { name: 'Andreas Petratos', email: 'andreas@quatt.io', hubspotUserId: 'FILL', hubspotOwnerId: 'FILL' },
-    { name: 'Sales Rep 2',      email: 'rep2@quatt.io',    hubspotUserId: 'FILL', hubspotOwnerId: 'FILL' },
+    {
+      name: 'Andreas Petratos',
+      email: 'andreas@quatt.io',
+      hubspotUserId: '1204233134299',
+      hubspotOwnerId: '32361483',
+    },
+    {
+      name: 'Jan Hamburger',
+      email: 'jan.hamburger@quatt.io',
+      hubspotUserId: '1204242382059',
+      hubspotOwnerId: '', // fill in once Jan has leads assigned in sandbox
+    },
   ],
+
   ADMINS: ['andreas@quatt.io'],
   DEMO_MODE: false,
   CUSTOM_PLAYBOOKS: [],
@@ -67,3 +89,14 @@ export const isDemo = (): boolean => CONFIG.DEMO_MODE
 
 export const isGoogleConfigured = (): boolean =>
   !CONFIG.GOOGLE_CLIENT_ID.includes('YOUR_CLIENT')
+
+export const stageLabel = (stageId: string): string => {
+  const map: Record<string, string> = {
+    [CONFIG.STAGES.UQL]:            'UQL',
+    [CONFIG.STAGES.MQL]:            'MQL',
+    [CONFIG.STAGES.SQL]:            'SQL',
+    [CONFIG.STAGES.LOST]:           'Lost',
+    [CONFIG.STAGES.DUPLICATE_CHECK]:'Dup. Check',
+  }
+  return map[stageId] ?? stageId
+}

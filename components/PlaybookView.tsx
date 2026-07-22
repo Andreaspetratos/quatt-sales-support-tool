@@ -5,7 +5,7 @@ import type { Playbook, Phase, Question, PlaybookState, TechCheckOutcome } from 
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchDeal } from '@/lib/hubspot'
+import { patchLead } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 // ── InfoBlock — collapsible wb element ────────────────────────────────────────
@@ -358,7 +358,7 @@ interface PlaybookViewProps {
 }
 
 export default function PlaybookView({ dealId, pbDefs }: PlaybookViewProps) {
-  const { state, getPbState, setPbAnswer, setPbNote, setPhase, setActivePb, donePhase, patchDealLocal } = useApp()
+  const { state, getPbState, setPbAnswer, setPbNote, setPhase, setActivePb, donePhase, patchLeadLocal } = useApp()
   const lang = state.lang
   const t = (key: string, ...args: any[]) => translate(lang, key, ...args)
   const pbState = getPbState(dealId)
@@ -389,7 +389,7 @@ export default function PlaybookView({ dealId, pbDefs }: PlaybookViewProps) {
     // Patch deal if we have values to save
     if (Object.keys(props).length) {
       try {
-        await patchDeal(dealId, props, state.deals, deals => patchDealLocal(dealId, props))
+        await patchLead(dealId, props, state.leads, leads => patchLeadLocal(dealId, props))
       } catch {}
     }
     donePhase(dealId, phase.id, idx + 1)
