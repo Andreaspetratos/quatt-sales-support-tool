@@ -95,7 +95,10 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
     headers: hsHeaders(),
     body: JSON.stringify({ properties: { lead_router_trigger: 'yes' } }),
   })
-  if (!res.ok) throw new Error('HTTP ' + res.status)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error('HTTP ' + res.status + ': ' + body.slice(0, 200))
+  }
 }
 
 // ── Performance ───────────────────────────────────────────────────────────────
