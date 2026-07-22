@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveLang } from '@/lib/storage'
-import { isDemo } from '@/lib/config'
+import { isDemo, CONFIG } from '@/lib/config'
 import { fetchLeads } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
@@ -38,7 +38,13 @@ export default function LoginPage() {
         return
       }
 
-      const rep = { name, email, hubspotUserId: '', hubspotOwnerId: '' }
+      const repConfig = CONFIG.REPS.find(r => r.email === email)
+      const rep = {
+        name: repConfig?.name || name,
+        email,
+        hubspotUserId: repConfig?.hubspotUserId || '',
+        hubspotOwnerId: repConfig?.hubspotOwnerId || '',
+      }
       setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, loading: true })
 
       fetchLeads(rep.hubspotOwnerId)
