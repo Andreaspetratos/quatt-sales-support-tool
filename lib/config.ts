@@ -68,7 +68,7 @@ export const CONFIG: AppConfig = {
     {
       name: 'Andreas Petratos',
       email: 'andreas@quatt.io',
-      hubspotUserId: '1204233134299',
+      hubspotUserId: '1204243064004',
       hubspotOwnerId: '32361483',
     },
     {
