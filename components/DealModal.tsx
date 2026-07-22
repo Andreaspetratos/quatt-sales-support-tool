@@ -197,7 +197,8 @@ export default function DealModal() {
   async function handleHV() {
     try {
       await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.SQL }, state.leads, leads => setState({ leads }))
-      setState({ leads: state.leads.map(l => l.id === dealId ? { ...l, properties: { ...l.properties, hs_pipeline_stage: CONFIG.STAGES.SQL } } : l) })
+      // Lead moves to SQL → no longer in MQL view → remove from list
+      setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastHV'), 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')

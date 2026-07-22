@@ -107,6 +107,20 @@ export async function lookupHubspotUserId(email: string): Promise<string | null>
   }
 }
 
+// ── Dynamic owner ID lookup — resolves the CRM owner ID from the rep's email ──
+// Owner ID (from /crm/v3/owners) ≠ User ID (from /crm/v3/objects/users).
+// Owner ID is what HubSpot stores as hubspot_owner_id on CRM records.
+export async function lookupHubspotOwnerId(email: string): Promise<string | null> {
+  if (isDemo() || !email) return null
+  try {
+    const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')
+    if (!res.ok) return null
+    const data = await res.json()
+    const id = data.results?.[0]?.id
+    return id ? String(id) : null
+  } catch { return null }
+}
+
 // ── Leads ─────────────────────────────────────────────────────────────────────
 export async function fetchLeads(ownerId: string): Promise<Lead[]> {
   if (isDemo()) return DEMO_LEADS
@@ -117,6 +131,7 @@ export async function fetchLeads(ownerId: string): Promise<Lead[]> {
       filters: [
         { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
         { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
+        { propertyName: 'hs_pipeline_stage', operator: 'EQ', value: CONFIG.STAGES.MQL },
       ],
     }],
     properties: LEAD_PROPS,

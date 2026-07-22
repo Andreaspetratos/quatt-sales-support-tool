@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveLang } from '@/lib/storage'
 import { isDemo, CONFIG } from '@/lib/config'
-import { fetchLeads, lookupHubspotUserId } from '@/lib/hubspot'
+import { fetchLeads, lookupHubspotUserId, lookupHubspotOwnerId } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
@@ -54,14 +54,28 @@ export default function LoginPage() {
           setState({ leads: [], loading: false })
         })
 
-      // Dynamically look up the real HubSpot User ID for this email — works for ALL reps,
-      // not just Andreas. Falls back to the config value if the lookup fails or returns nothing.
+      // Dynamically resolve HubSpot IDs from the rep's email — works for ALL reps.
+      // userId  → /crm/v3/objects/users (for lead_router_trigger PATCH)
+      // ownerId → /crm/v3/owners       (for hubspot_owner_id filter on leads)
+      // Both run in parallel; each patches currentRep if found.
       lookupHubspotUserId(email).then(userId => {
-        if (userId) {
-          setState(prev => ({
-            currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
-          }))
-        }
+        if (userId) setState(prev => ({
+          currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
+        }))
+      })
+
+      lookupHubspotOwnerId(email).then(ownerId => {
+        if (!ownerId) return
+        setState(prev => ({
+          currentRep: prev.currentRep ? { ...prev.currentRep, hubspotOwnerId: ownerId } : prev.currentRep,
+        }))
+        // Re-fetch leads with the correct owner ID now that we have it
+        fetchLeads(ownerId)
+          .then(leads => setState({ leads, loading: false }))
+          .catch((e: any) => {
+            showToast(t('errLoad', e.message), 'error')
+            setState({ leads: [], loading: false })
+          })
       })
     } catch {
       showToast('Inloggen mislukt, probeer opnieuw.', 'error')

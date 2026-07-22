@@ -425,9 +425,16 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
         timers.delete(leadId)
         const fresh = await fetchOneLead(leadId)
         if (!fresh) return
-        setState(prev => ({
-          leads: prev.leads.map(l => l.id === leadId ? fresh : l),
-        }))
+        setState(prev => {
+          // If the lead is no longer in MQL or no longer owned by this rep, remove it
+          const stage = fresh.properties?.hs_pipeline_stage
+          const owner = fresh.properties?.hubspot_owner_id
+          const myOwner = prev.currentRep?.hubspotOwnerId
+          if (stage !== CONFIG.STAGES.MQL || (myOwner && owner !== myOwner)) {
+            return { leads: prev.leads.filter(l => l.id !== leadId) }
+          }
+          return { leads: prev.leads.map(l => l.id === leadId ? fresh : l) }
+        })
       }, 3000))
     })
     return () => { unsub(); timers.forEach(t => clearTimeout(t)) }
