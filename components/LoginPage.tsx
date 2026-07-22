@@ -137,7 +137,7 @@ export default function LoginPage() {
                 <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
                 <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
               </svg>
-              {t('loginSub')}
+              {t('loginBtn')}
             </button>
             {/* Fallback container for Google's rendered button */}
             <div id="google-btn-container" style={{ display: 'flex', justifyContent: 'center' }} />

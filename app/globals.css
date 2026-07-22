@@ -146,7 +146,7 @@ tbody td{padding:9px 13px;vertical-align:middle}
 .ls{flex:1;display:flex;align-items:center;justify-content:center;background:transparent;overflow:auto;padding:24px}
 .lc{background:rgba(13,26,22,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--cb);border-radius:22px;padding:38px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:20px;box-shadow:0 24px 80px rgba(0,0,0,.65),0 0 0 1px rgba(204,248,34,.06)}
 .lt2{font-size:22px;font-weight:700;color:var(--ct)}
-.ls2{font-size:13px;color:var(--cs);margin-top:-12px}
+.ls2{font-size:13px;color:var(--cs);margin-top:4px}
 
 /* ── MODALS ── */
 .mb{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px}
