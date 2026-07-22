@@ -99,6 +99,7 @@ export default function LoginPage() {
           credentialHandlerRef.current(response)
         },
         auto_select: false,
+        use_fedcm_for_prompt: true, // opt-in to FedCM — silences deprecation warning
       })
     }
 
@@ -141,14 +142,8 @@ export default function LoginPage() {
       return
     }
     // prompt() only — initialize() already ran in useEffect
-    w.google.accounts.id.prompt((notification: any) => {
-      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        w.google.accounts.id.renderButton(
-          document.getElementById('google-btn-container'),
-          { theme: 'outline', size: 'large', width: 280 }
-        )
-      }
-    })
+    // With FedCM the browser controls prompt display — just call prompt()
+    w.google.accounts.id.prompt()
   }
 
   return (
