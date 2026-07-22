@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveLang } from '@/lib/storage'
 import { isDemo, CONFIG } from '@/lib/config'
-import { fetchLeads } from '@/lib/hubspot'
+import { fetchLeads, lookupHubspotUserId } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
@@ -53,6 +53,16 @@ export default function LoginPage() {
           showToast(t('errLoad', e.message), 'error')
           setState({ leads: [], loading: false })
         })
+
+      // Dynamically look up the real HubSpot User ID for this email — works for ALL reps,
+      // not just Andreas. Falls back to the config value if the lookup fails or returns nothing.
+      lookupHubspotUserId(email).then(userId => {
+        if (userId) {
+          setState(prev => ({
+            currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
+          }))
+        }
+      })
     } catch {
       showToast('Inloggen mislukt, probeer opnieuw.', 'error')
     }

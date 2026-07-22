@@ -39,6 +39,26 @@ const hsHeaders = () => ({
   Authorization: 'Bearer ' + CONFIG.HUBSPOT_TOKEN,
   'Content-Type': 'application/json',
 })
+// ── Dynamic user ID lookup — called at login so we never rely on hardcoded IDs ─
+export async function lookupHubspotUserId(email: string): Promise<string | null> {
+  if (isDemo() || !email || !CONFIG.HUBSPOT_TOKEN) return null
+  try {
+    const res = await fetch(hsUrl('/crm/v3/objects/users/search'), {
+      method: 'POST',
+      headers: hsHeaders(),
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
+        properties: ['hs_email'],
+        limit: 1,
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.results?.[0]?.id ?? null
+  } catch {
+    return null
+  }
+}
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
 export async function fetchLeads(ownerId: string): Promise<Lead[]> {
