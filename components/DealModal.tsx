@@ -1,11 +1,11 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
 import { loadScheds } from '@/lib/storage'
-import { patchLead as patchLeadApi, aircallDial } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, aircallDial, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -29,13 +29,24 @@ function getScheduler(deal: Deal): Scheduler | null {
 function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
-  const selRef = useRef<HTMLSelectElement>(null)
+  const [options, setOptions] = useState<Array<{ label: string; value: string }>>([])
+  const [selectedValue, setSelectedValue] = useState('')
+
+  useEffect(() => {
+    fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(opts => {
+      if (opts.length > 0) {
+        setOptions(opts)
+      } else {
+        // fallback to i18n options for demo mode
+        setOptions(translateArr(lang, 'lostReasons').map(o => ({ label: o, value: o })))
+      }
+    })
+  }, [])
 
   async function confirmLost() {
-    const reason = selRef.current?.value || ''
-    if (!reason) { showToast(t('errReason'), 'error'); return }
+    if (!selectedValue) { showToast(t('errReason'), 'error'); return }
     try {
-      await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.LOST, lead_lost_status: reason }, state.leads, leads => setState({ leads }))
+      await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.LOST, [CONFIG.PROPS.lostReasons]: selectedValue }, state.leads, leads => setState({ leads }))
       setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastLost'), 'success')
     } catch (e: any) {
@@ -53,9 +64,9 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
         <div className="mob">
           <div className="iw">
             <label className="il">{t('lostReason')} <span style={{ color: 'var(--rd)' }}>*</span></label>
-            <select className="sel" ref={selRef} defaultValue="">
+            <select className="sel" value={selectedValue} onChange={e => setSelectedValue(e.target.value)}>
               <option value="">--</option>
-              {translateArr(lang, 'lostReasons').map(o => <option key={o} value={o}>{o}</option>)}
+              {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div className="iw">
@@ -112,6 +123,18 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
   const pbSt = getPbState(dealId)
   const deal = state.leads.find(l => l.id === dealId)
   const savedOutcome = deal?.properties?.[CONFIG.PROPS.callOutcome]
+  const [options, setOptions] = useState<Array<{ label: string; value: string }>>([])
+
+  useEffect(() => {
+    fetchLeadPropertyOptions(CONFIG.PROPS.callOutcome).then(opts => {
+      if (opts.length > 0) {
+        setOptions(opts)
+      } else {
+        // fallback for demo mode
+        setOptions(translateArr(lang, 'callOutcomes').map(o => ({ label: o, value: o })))
+      }
+    })
+  }, [])
 
   async function saveOutcome() {
     if (!pbSt.callOutcome) { showToast(t('errOutcome'), 'error'); return }
@@ -129,13 +152,13 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
   return (
     <div className="co-section">
       <div className="cr2">
-        {translateArr(lang, 'callOutcomes').map(o => (
+        {options.map(o => (
           <button
-            key={o}
-            className={`chip ${pbSt.callOutcome === o ? 'on' : ''}`}
-            onClick={() => setCallOutcome(dealId, o)}
+            key={o.value}
+            className={`chip ${pbSt.callOutcome === o.value ? 'on' : ''}`}
+            onClick={() => setCallOutcome(dealId, o.value)}
           >
-            {o}
+            {o.label}
           </button>
         ))}
       </div>

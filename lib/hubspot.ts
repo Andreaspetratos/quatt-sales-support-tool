@@ -99,10 +99,8 @@ export async function lookupHubspotUserId(email: string): Promise<string | null>
       properties: ['hs_email'],
       limit: 1,
     })
-    console.log('[hubspot] users/search status:', res.status)
     if (!res.ok) { console.warn('[hubspot] users/search failed:', res.status); return null }
     const data = await res.json()
-    console.log('[hubspot] users/search result:', JSON.stringify(data).slice(0, 300))
     return data.results?.[0]?.id ?? null
   } catch {
     return null
@@ -118,10 +116,8 @@ export async function lookupHubspotOwnerId(email: string): Promise<string | null
   if (isDemo() || !email) return null
   try {
     const res = await hsProxy('GET', '/crm/v3/owners?email=' + encodeURIComponent(email) + '&limit=1')
-    console.log('[hubspot] owners?email status:', res.status)
     if (!res.ok) { console.warn('[hubspot] owners?email failed:', res.status); return null }
     const data = await res.json()
-    console.log('[hubspot] owners?email result:', JSON.stringify(data).slice(0, 200))
     const id = data.results?.[0]?.id
     return id ? String(id) : null
   } catch { return null }
@@ -237,6 +233,47 @@ export async function fetchPerformance(ownerId: string): Promise<PerfData> {
     if (mod >= todayMs) add(data.today, outcome)
   }
   return data
+}
+
+// Fetch a HubSpot Lead property's options (dropdown/checkbox/radio).
+// Returns [{label, value}] sorted by displayOrder, hidden options excluded.
+export async function fetchLeadPropertyOptions(
+  propName: string,
+): Promise<Array<{ label: string; value: string }>> {
+  if (isDemo() || !propName) return []
+  try {
+    const res = await hsProxy('GET', '/crm/v3/properties/leads/' + propName)
+    if (!res.ok) return []
+    const data = await res.json()
+    const opts = (data.options || []) as Array<{
+      label: string; value: string; hidden: boolean; displayOrder: number
+    }>
+    return opts
+      .filter(o => !o.hidden)
+      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+      .map(o => ({ label: o.label, value: o.value }))
+  } catch { return [] }
+}
+
+// Fetch all Lead object properties (for admin property picker).
+export async function fetchAllLeadProperties(): Promise<Array<{
+  name: string; label: string; type: string; fieldType: string
+}>> {
+  if (isDemo()) return []
+  try {
+    const res = await hsProxy('GET', '/crm/v3/properties/leads?limit=500')
+    if (!res.ok) return []
+    const data = await res.json()
+    return ((data.results || []) as any[])
+      .filter((p: any) => !p.hidden && p.name && p.label)
+      .map((p: any) => ({
+        name: String(p.name),
+        label: String(p.label),
+        type: String(p.type),
+        fieldType: String(p.fieldType),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  } catch { return [] }
 }
 
 // ── Aircall CTI ────────────────────────────────────────────────────────────────

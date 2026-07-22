@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Playbook, Phase, Question, PlaybookState, TechCheckOutcome } from '@/lib/types'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead } from '@/lib/hubspot'
+import { patchLead, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 // ── InfoBlock — collapsible wb element ────────────────────────────────────────
@@ -161,6 +161,191 @@ function TechCheckBlock({
   )
 }
 
+// ── Choice question with optional immediate HubSpot save ─────────────────────
+function ChoiceQuestion({
+  q, dealId, pbState, setPbAnswer, setPbNote, lang,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState
+  setPbAnswer: (k: string, v: string) => void
+  setPbNote: (k: string, v: string) => void
+  lang: 'nl' | 'en'
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const [hsOptions, setHsOptions] = useState<Array<{ label: string; value: string }> | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (q.hsProperty) {
+      fetchLeadPropertyOptions(q.hsProperty).then(opts => {
+        setHsOptions(opts.length > 0 ? opts : null)
+      })
+    }
+  }, [q.hsProperty])
+
+  // Use HubSpot options if loaded, otherwise fall back to manual options
+  const displayOptions: Array<{ label: string; value: string }> = hsOptions
+    ? hsOptions
+    : (q.options || []).map(o => ({ label: o, value: (q.hsValueMap?.[o] || o) }))
+
+  const currentValue = pbState.answers[q.id] || ''
+
+  async function handleChipClick(opt: { label: string; value: string }) {
+    setPbAnswer(q.id, opt.value)
+    if (q.hsProperty) {
+      const prop = q.hsProperty
+      try {
+        await patchLead(dealId, { [prop]: opt.value }, state.leads, () => patchLeadLocal(dealId, { [prop]: opt.value }))
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      } catch (e: any) {
+        showToast(e.message || 'Save failed', 'error')
+      }
+    }
+  }
+
+  return (
+    <div>
+      <div className="ql">
+        {q.label}
+        {q.required && <span className="qr"> *</span>}
+      </div>
+      <div className="cr2">
+        {displayOptions.map(opt => (
+          <button
+            key={opt.value}
+            className={`chip ${currentValue === opt.value ? 'on' : ''}`}
+            onClick={() => handleChipClick(opt)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {q.hsProperty && (
+        <div className="hs-badge" style={{ marginTop: 4 }}>
+          → {q.hsProperty}{saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+        </div>
+      )}
+      <textarea
+        className="inp"
+        style={{ marginTop: 5 }}
+        rows={2}
+        placeholder={translate(lang, 'callNotesPlaceholder')}
+        defaultValue={pbState.notes[q.id + '_n'] || ''}
+        onBlur={e => setPbNote(q.id + '_n', e.target.value)}
+      />
+    </div>
+  )
+}
+
+// ── Textarea question with optional immediate HubSpot save ────────────────────
+function TextareaQuestion({
+  q, dealId, pbState, setPbNote,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState
+  setPbNote: (k: string, v: string) => void
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function handleBlur(value: string) {
+    setPbNote(q.id, value)
+    if (q.hsProperty && value) {
+      const prop = q.hsProperty
+      setSaving(true)
+      try {
+        await patchLead(dealId, { [prop]: value }, state.leads, () => patchLeadLocal(dealId, { [prop]: value }))
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      } catch (e: any) {
+        showToast(e.message || 'Save failed', 'error')
+      } finally {
+        setSaving(false)
+      }
+    }
+  }
+
+  return (
+    <div className="iw">
+      <label className="il">
+        {q.label}
+        {q.required && <span style={{ color: 'var(--rd)' }}> *</span>}
+      </label>
+      <textarea
+        className="inp"
+        rows={3}
+        placeholder={q.placeholder || ''}
+        defaultValue={pbState.notes[q.id] || ''}
+        onBlur={e => handleBlur(e.target.value)}
+      />
+      {q.hsProperty && (
+        <div className="hs-badge">
+          → {q.hsProperty}
+          {saving && <span style={{ marginLeft: 4 }}>…</span>}
+          {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Intent question with optional immediate HubSpot save ──────────────────────
+function IntentQuestion({
+  q, dealId, pbState, setPbAnswer, lang,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState
+  setPbAnswer: (k: string, v: string) => void
+  lang: 'nl' | 'en'
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const [saved, setSaved] = useState(false)
+
+  async function handleIntentClick(val: 'hot' | 'warm' | 'cold') {
+    setPbAnswer(q.id, val)
+    if (q.hsProperty) {
+      const prop = q.hsProperty
+      const hsVal = q.hsValueMap?.[val] || val
+      try {
+        await patchLead(dealId, { [prop]: hsVal }, state.leads, () => patchLeadLocal(dealId, { [prop]: hsVal }))
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      } catch (e: any) {
+        showToast(e.message || 'Save failed', 'error')
+      }
+    }
+  }
+
+  const sel = pbState.answers[q.id] || ''
+
+  return (
+    <div>
+      <div className="ql">
+        {q.label || translate(lang, 'phIntent')}
+        <span className="qr"> *</span>
+      </div>
+      <div>
+        <div className={`io ${sel === 'hot' ? 'sh' : ''}`} onClick={() => handleIntentClick('hot')}>
+          <div className="iot">🔥 Hot</div>
+          {q.hotDesc}
+        </div>
+        <div className={`io ${sel === 'warm' ? 'sw' : ''}`} onClick={() => handleIntentClick('warm')}>
+          <div className="iot">🌤 Warm</div>
+          {q.warmDesc}
+        </div>
+        <div className={`io ${sel === 'cold' ? 'sc' : ''}`} onClick={() => handleIntentClick('cold')}>
+          <div className="iot">❄️ Cold</div>
+          {q.coldDesc}
+        </div>
+      </div>
+      {q.hsProperty && (
+        <div className="hs-badge" style={{ marginTop: 4 }}>
+          → {q.hsProperty}{saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Single question renderer ──────────────────────────────────────────────────
 function QuestionItem({
   q, dealId, pbState, setPbAnswer, setPbNote, lang,
@@ -211,77 +396,35 @@ function QuestionItem({
 
     case 'choice':
       return (
-        <div>
-          <div className="ql">
-            {q.label}
-            {q.required && <span className="qr"> *</span>}
-          </div>
-          <div className="cr2">
-            {(q.options || []).map(opt => (
-              <button
-                key={opt}
-                className={`chip ${getA(q.id) === opt ? 'on' : ''}`}
-                onClick={() => setPbAnswer(q.id, opt)}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          {q.hsProperty && (
-            <div className="hs-badge" style={{ marginTop: 4 }}>→ {q.hsProperty}</div>
-          )}
-          <textarea
-            className="inp"
-            style={{ marginTop: 5 }}
-            rows={2}
-            placeholder={translate(lang, 'callNotesPlaceholder')}
-            defaultValue={getN(q.id + '_n')}
-            onBlur={e => setPbNote(q.id + '_n', e.target.value)}
-          />
-        </div>
+        <ChoiceQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbAnswer={setPbAnswer}
+          setPbNote={setPbNote}
+          lang={lang}
+        />
       )
 
     case 'textarea':
       return (
-        <div className="iw">
-          <label className="il">
-            {q.label}
-            {q.required && <span style={{ color: 'var(--rd)' }}> *</span>}
-          </label>
-          <textarea
-            className="inp"
-            rows={3}
-            placeholder={q.placeholder || ''}
-            defaultValue={getN(q.id)}
-            onBlur={e => setPbNote(q.id, e.target.value)}
-          />
-          {q.hsProperty && <div className="hs-badge">→ {q.hsProperty}</div>}
-        </div>
+        <TextareaQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbNote={setPbNote}
+        />
       )
 
     case 'intent':
       return (
-        <div>
-          <div className="ql">
-            {q.label || translate(lang, 'phIntent')}
-            <span className="qr"> *</span>
-          </div>
-          <div>
-            <div className={`io ${getA(q.id) === 'hot' ? 'sh' : ''}`} onClick={() => setPbAnswer(q.id, 'hot')}>
-              <div className="iot">🔥 Hot</div>
-              {q.hotDesc}
-            </div>
-            <div className={`io ${getA(q.id) === 'warm' ? 'sw' : ''}`} onClick={() => setPbAnswer(q.id, 'warm')}>
-              <div className="iot">🌤 Warm</div>
-              {q.warmDesc}
-            </div>
-            <div className={`io ${getA(q.id) === 'cold' ? 'sc' : ''}`} onClick={() => setPbAnswer(q.id, 'cold')}>
-              <div className="iot">❄️ Cold</div>
-              {q.coldDesc}
-            </div>
-          </div>
-          {q.hsProperty && <div className="hs-badge" style={{ marginTop: 4 }}>→ {q.hsProperty}</div>}
-        </div>
+        <IntentQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbAnswer={setPbAnswer}
+          lang={lang}
+        />
       )
 
     default:

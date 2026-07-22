@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
 import { loadPbs, savePbs, loadScheds, saveScheds, uid } from '@/lib/storage'
+import { fetchAllLeadProperties } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome } from '@/lib/types'
 
@@ -11,6 +12,63 @@ type AdminTab = 'playbooks' | 'schedulers'
 
 // ── Deep clone helper ─────────────────────────────────────────────────────────
 function clone<T>(x: T): T { return JSON.parse(JSON.stringify(x)) }
+
+// ── HubSpot property picker (searchable dropdown) ────────────────────────────
+function HsPropPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [inputVal, setInputVal] = useState(value || '')
+  const [allProps, setAllProps] = useState<Array<{ name: string; label: string; type: string; fieldType: string }>>([])
+  const [loaded, setLoaded] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  async function loadProps() {
+    if (loaded) return
+    const props = await fetchAllLeadProperties()
+    setAllProps(props)
+    setLoaded(true)
+  }
+
+  const filtered = inputVal.length > 0
+    ? allProps.filter(p =>
+        p.name.toLowerCase().includes(inputVal.toLowerCase()) ||
+        p.label.toLowerCase().includes(inputVal.toLowerCase())
+      ).slice(0, 20)
+    : allProps.slice(0, 20)
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        className="inp inp-sm"
+        value={inputVal}
+        placeholder="Type to search or paste API name…"
+        onChange={e => { setInputVal(e.target.value); onChange(e.target.value) }}
+        onFocus={() => { setOpen(true); loadProps() }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && loaded && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', zIndex: 999, left: 0, right: 0, top: '100%',
+          background: 'var(--wh)', border: '1px solid var(--gl)', borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,.1)', maxHeight: 220, overflowY: 'auto',
+        }}>
+          {filtered.map(p => (
+            <div
+              key={p.name}
+              style={{ padding: '6px 10px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid var(--gl)' }}
+              onMouseDown={() => {
+                setInputVal(p.name)
+                onChange(p.name)
+                setOpen(false)
+              }}
+            >
+              <div style={{ fontWeight: 600, color: 'var(--bk)' }}>{p.label}</div>
+              <div style={{ color: 'var(--gm)', fontFamily: 'monospace', fontSize: 10 }}>{p.name} · {p.fieldType}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Playbook editor ───────────────────────────────────────────────────────────
 function PlaybookEditor({
@@ -265,8 +323,7 @@ function PlaybookEditor({
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="iw" style={{ flex: 1, minWidth: 140 }}>
               <label className="il">{t('adQHsProp')}</label>
-              <input className="inp inp-sm" placeholder="bijv. lead_temperature" defaultValue={q.hsProperty || ''}
-                onBlur={e => updateQField(pi, qi, 'hsProperty', e.target.value)} />
+              <HsPropPicker value={q.hsProperty || ''} onChange={v => updateQField(pi, qi, 'hsProperty', v)} />
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer', flexShrink: 0 }}>
               <input type="checkbox" className="chk" defaultChecked={!!q.required}

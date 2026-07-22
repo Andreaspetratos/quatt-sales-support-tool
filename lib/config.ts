@@ -15,6 +15,7 @@ interface PropNames {
   formOrigin: string
   partner: string
   requestedAt: string
+  lostReasons: string
 }
 
 interface AppConfig {
@@ -60,6 +61,7 @@ export const CONFIG: AppConfig = {
     formOrigin:  'most_recent_form_origin_lead',
     partner:     'partner_name_lead',
     requestedAt: 'screening_call_requested_at',
+    lostReasons: 'lost_reasons_lead',
   },
 
   REQUEST_COOLDOWN: 60,
