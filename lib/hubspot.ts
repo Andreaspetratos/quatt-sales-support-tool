@@ -297,7 +297,7 @@ export async function fetchAllLeadProperties(): Promise<Array<{ name: string; la
 }
 
 // ── HubSpot Tasks ─────────────────────────────────────────────────────────────
-const TASK_PROPS = ['hs_task_subject', 'hs_task_body', 'hs_task_due_date', 'hs_task_status', 'hubspot_owner_id', 'hs_timestamp']
+const TASK_PROPS = ['hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_task_status', 'hubspot_owner_id', 'hs_timestamp']
 
 function _encodeLeadInBody(leadId: string | null, notes: string): string {
   return leadId ? `[lead:${leadId}]\n${notes}` : notes
@@ -356,8 +356,9 @@ export async function createHsTask(
     hs_timestamp:    String(Date.now()),   // required by HubSpot tasks API
     hubspot_owner_id: ownerId,
   }
-  const ms = _dateToHsMs(dueDate)
-  if (ms) props.hs_task_due_date = ms
+  // Note: hs_task_due_date does not exist in this HubSpot portal.
+  // hs_timestamp (already set above) serves as the task date.
+  // TODO: query task schema at startup to detect the correct due-date property name.
   // hsProxy logs the full error body on failure — we just parse and throw for the caller
   const res = await retryProxy('POST', '/crm/v3/objects/tasks', { properties: props })
   if (!res.ok) {
@@ -392,7 +393,7 @@ export async function fetchHsTasks(ownerId: string): Promise<HsTask[]> {
     const data = await res.json()
     return ((data.results || []) as any[]).map(t => {
       const { leadId, notes } = _decodeLeadFromBody(t.properties?.hs_task_body || '')
-      return { hsId: String(t.id), title: t.properties?.hs_task_subject || '', notes, dueDate: _hsMsToDate(t.properties?.hs_task_due_date), leadId, ownerId: t.properties?.hubspot_owner_id || '' } as HsTask
+      return { hsId: String(t.id), title: t.properties?.hs_task_subject || '', notes, dueDate: _hsMsToDate(t.properties?.hs_timestamp), leadId, ownerId: t.properties?.hubspot_owner_id || '' } as HsTask
     })
   } catch (e) {
     console.error('[hs] fetchHsTasks error:', e)

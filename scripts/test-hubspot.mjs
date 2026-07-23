@@ -67,6 +67,9 @@ async function testTaskSchema() {
 
   const required = props.filter(p => p.formField).map(p => p.name)
   console.log(`  ℹ  Form-required: [${required.join(', ') || 'none'}]`)
+  // Print all date/datetime properties — helps find the correct due-date field name
+  const dateProps = props.filter(p => p.type === 'date' || p.type === 'datetime' || p.name.includes('due') || p.name.includes('date'))
+  console.log(`  ℹ  Date/due properties: [${dateProps.map(p => p.name + ':' + p.type).join(', ')}]`)
 }
 
 async function tryCreate(label, properties) {
@@ -103,22 +106,14 @@ async function testTaskVariants(ownerId) {
     hs_timestamp: now,
     hubspot_owner_id: ownerId,
   })
-  await tryCreate('+ hs_task_due_date', {
-    hs_task_subject: '[CI] with due date',
-    hs_task_status: 'NOT_STARTED',
-    hs_task_type: 'TODO',
-    hs_timestamp: now,
-    hubspot_owner_id: ownerId,
-    hs_task_due_date: due,
-  })
-  await tryCreate('full tool payload', {
+  // hs_task_due_date does not exist in this portal — skip until correct property found above
+  await tryCreate('full tool payload (no due date)', {
     hs_task_subject: '[CI] full payload',
     hs_task_body: '[lead:999]\nCI note',
     hs_task_status: 'NOT_STARTED',
     hs_task_type: 'TODO',
     hs_timestamp: now,
     hubspot_owner_id: ownerId,
-    hs_task_due_date: due,
   })
 }
 
