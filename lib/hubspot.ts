@@ -324,9 +324,10 @@ async function _linkTaskToLead(taskId: string, leadId: string): Promise<void> {
     const labelsRes = await retryProxy('GET', '/crm/v4/associations/tasks/leads/labels')
     if (!labelsRes.ok) return // logged by hsProxy
     const labelsData = await labelsRes.json()
+    // Known fallback: task→lead association type ID is 647 in this portal
     const types: Array<{ typeId: number; label?: string; category?: string }> = labelsData.results || []
-    if (!types.length) { console.warn('[hs] _linkTaskToLead: no association types returned'); return }
-    const t = types.find(x => !x.label) ?? types[0]
+    const t = types.find(x => !x.label) ?? types[0] ?? { typeId: 647, category: 'HUBSPOT_DEFINED' }
+    if (!types.length) console.warn('[hs] _linkTaskToLead: no types from API, using fallback typeId=647')
     const assocRes = await retryProxy(
       'PUT',
       `/crm/v4/objects/tasks/${taskId}/associations/leads/${leadId}`,
@@ -352,6 +353,7 @@ export async function createHsTask(
     hs_task_body:    _encodeLeadInBody(leadId, notes),
     hs_task_status:  'NOT_STARTED',
     hs_task_type:    'TODO',
+    hs_timestamp:    String(Date.now()),   // required by HubSpot tasks API
     hubspot_owner_id: ownerId,
   }
   const ms = _dateToHsMs(dueDate)
