@@ -356,6 +356,12 @@ export async function createHsTask(
     try {
       const parsed = JSON.parse(errBody)
       if (parsed.message) friendlyMsg = parsed.message
+      // Append the specific field names from validationResults
+      const vr = parsed.validationResults
+      if (Array.isArray(vr) && vr.length) {
+        const fields = vr.map((r: {name?: string; message?: string}) => r.name || r.message || '?').join(', ')
+        friendlyMsg += ' [' + fields + ']'
+      }
     } catch {}
     throw new Error(friendlyMsg)
   }
