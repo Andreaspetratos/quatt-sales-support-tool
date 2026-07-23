@@ -106,13 +106,13 @@ async function testTaskVariants(ownerId) {
     hs_timestamp: now,
     hubspot_owner_id: ownerId,
   })
-  // hs_task_due_date does not exist in this portal — skip until correct property found above
-  await tryCreate('full tool payload (no due date)', {
+  // hs_task_due_date doesn't exist in this portal; hs_timestamp doubles as due date
+  await tryCreate('full tool payload (due date via hs_timestamp)', {
     hs_task_subject: '[CI] full payload',
     hs_task_body: '[lead:999]\nCI note',
     hs_task_status: 'NOT_STARTED',
     hs_task_type: 'TODO',
-    hs_timestamp: now,
+    hs_timestamp: due,  // user-selected due date
     hubspot_owner_id: ownerId,
   })
 }
