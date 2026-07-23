@@ -81,27 +81,33 @@ async function tryCreate(label, properties) {
 
 async function testTaskVariants(ownerId) {
   section('Task creation variants')
+  const now = String(Date.now())
   const due = String(Date.now() + 86400000)
 
-  await tryCreate('minimal (subject + status only)', {
+  // hs_timestamp is required by HubSpot on all task creates (confirmed from CI output)
+  await tryCreate('minimal (subject + status + timestamp)', {
     hs_task_subject: '[CI] minimal',
     hs_task_status: 'NOT_STARTED',
+    hs_timestamp: now,
   })
   await tryCreate('+ hubspot_owner_id', {
     hs_task_subject: '[CI] with owner',
     hs_task_status: 'NOT_STARTED',
+    hs_timestamp: now,
     hubspot_owner_id: ownerId,
   })
   await tryCreate('+ hs_task_type TODO', {
     hs_task_subject: '[CI] with type',
     hs_task_status: 'NOT_STARTED',
     hs_task_type: 'TODO',
+    hs_timestamp: now,
     hubspot_owner_id: ownerId,
   })
   await tryCreate('+ hs_task_due_date', {
     hs_task_subject: '[CI] with due date',
     hs_task_status: 'NOT_STARTED',
     hs_task_type: 'TODO',
+    hs_timestamp: now,
     hubspot_owner_id: ownerId,
     hs_task_due_date: due,
   })
@@ -110,6 +116,7 @@ async function testTaskVariants(ownerId) {
     hs_task_body: '[lead:999]\nCI note',
     hs_task_status: 'NOT_STARTED',
     hs_task_type: 'TODO',
+    hs_timestamp: now,
     hubspot_owner_id: ownerId,
     hs_task_due_date: due,
   })
