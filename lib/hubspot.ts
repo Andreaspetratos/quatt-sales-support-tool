@@ -302,7 +302,36 @@ function _hsMsToDate(ms: string | undefined): string {
   try { return new Date(Number(ms)).toISOString().slice(0, 10) } catch { return '' }
 }
 
-/** Create a task in HubSpot and return the new task's HubSpot ID (or null on failure). */
+/**
+ * Link an existing HubSpot task to a lead record via the v4 associations API.
+ * Best-effort — errors are logged but not re-thrown.
+ */
+async function _linkTaskToLead(taskId: string, leadId: string): Promise<void> {
+  try {
+    // Discover the association type ID for task → lead
+    const labelsRes = await retryProxy('GET', '/crm/v4/associations/tasks/leads/labels')
+    if (!labelsRes.ok) {
+      console.warn('[hubspot] task→lead labels fetch failed:', labelsRes.status)
+      return
+    }
+    const labelsData = await labelsRes.json()
+    const types: Array<{ typeId: number; label?: string; category?: string }> =
+      labelsData.results || []
+    if (!types.length) { console.warn('[hubspot] no task→lead association types found'); return }
+    // Use the unlabeled (default) type — first entry without a label
+    const t = types.find(x => !x.label) ?? types[0]
+    await retryProxy(
+      'PUT',
+      `/crm/v4/objects/tasks/${taskId}/associations/leads/${leadId}`,
+      [{ associationCategory: t.category ?? 'HUBSPOT_DEFINED', associationTypeId: t.typeId }],
+    )
+  } catch (e) {
+    console.warn('[hubspot] _linkTaskToLead error:', e)
+  }
+}
+
+/** Create a task in HubSpot and return the new task's HubSpot ID.
+ *  Throws an Error (with HubSpot's message) on failure so the caller can show a toast. */
 export async function createHsTask(
   title: string,
   notes: string,
@@ -311,21 +340,32 @@ export async function createHsTask(
   leadId: string | null,
 ): Promise<string | null> {
   if (isDemo() || !ownerId) return null
-  try {
-    const props: Record<string, string> = {
-      hs_task_subject: title || '(no title)',
-      hs_task_body: _encodeLeadInBody(leadId, notes),
-      hs_task_status: 'NOT_STARTED',
-      hs_task_type: 'TODO',
-      hubspot_owner_id: ownerId,
-    }
-    const ms = _dateToHsMs(dueDate)
-    if (ms) props.hs_task_due_date = ms
-    const res = await retryProxy('POST', '/crm/v3/objects/tasks', { properties: props })
-    if (!res.ok) { console.warn('[hubspot] createHsTask failed:', res.status); return null }
-    const data = await res.json()
-    return data.id ? String(data.id) : null
-  } catch (e) { console.warn('[hubspot] createHsTask error:', e); return null }
+  const props: Record<string, string> = {
+    hs_task_subject: title || '(no title)',
+    hs_task_body: _encodeLeadInBody(leadId, notes),
+    hs_task_status: 'NOT_STARTED',
+    hs_task_type: 'TODO',
+    hubspot_owner_id: ownerId,
+  }
+  const ms = _dateToHsMs(dueDate)
+  if (ms) props.hs_task_due_date = ms
+  const res = await retryProxy('POST', '/crm/v3/objects/tasks', { properties: props })
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '')
+    let friendlyMsg = `HTTP ${res.status}`
+    try {
+      const parsed = JSON.parse(errBody)
+      if (parsed.message) friendlyMsg = parsed.message
+    } catch {}
+    throw new Error(friendlyMsg)
+  }
+  const data = await res.json()
+  const taskId = data.id ? String(data.id) : null
+  // Associate task with lead record so it appears on the lead timeline
+  if (taskId && leadId) {
+    await _linkTaskToLead(taskId, leadId)
+  }
+  return taskId
 }
 
 export interface HsTask {

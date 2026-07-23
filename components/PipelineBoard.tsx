@@ -135,17 +135,25 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
     createTask({ ...draft, creatorEmail: state.currentRep?.email || '' })
     setState({ taskModal: null, taskDraft: {} })
     showToast(t('toastSaved'), 'success')
-    // Sync to HubSpot in background, then update local task with hsTaskId
+    // Sync to HubSpot in background — surface real errors via toast
     if (ownerId) {
-      createHsTask(draft.title || '', draft.note || '', draft.dueDate || '', ownerId, leadId)
+      const titleSnapshot = draft.title || ''
+      createHsTask(titleSnapshot, draft.note || '', draft.dueDate || '', ownerId, leadId)
         .then(hsId => {
           if (!hsId) return
+          // Back-patch the local task with the HubSpot ID
           const tasks = loadTasks()
-          // Find the task we just added (most recent one without hsTaskId matching this title)
-          const task = [...tasks].reverse().find(t => !t.hsTaskId && t.title === draft.title)
+          const task = [...tasks].reverse().find(t => !t.hsTaskId && t.title === titleSnapshot)
           if (task) { task.hsTaskId = hsId; task.id = hsId; saveTasks(tasks) }
         })
-        .catch(() => {})
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          showToast('⚠ HubSpot sync mislukt: ' + msg.slice(0, 100), 'error')
+          console.error('[task] HubSpot sync error:', msg)
+        })
+    } else {
+      // No owner ID — task saved locally only, no HubSpot sync
+      showToast('⚠ Geen owner ID — taak alleen lokaal opgeslagen', 'error')
     }
   }
 
