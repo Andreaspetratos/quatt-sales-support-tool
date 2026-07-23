@@ -322,8 +322,8 @@ export default function DealModal() {
             <div className="sl2">{t('leadInfo')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
-              <div className="kv"><span className="kk">{t('partner')}</span><span className="vv">{p[P.partner] || '--'}</span></div>
-              <div className="kv"><span className="kk">{t('stage')}</span><span className="vv">{p.dealstage || '--'}</span></div>
+              <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
+              <div className="kv"><span className="kk">{t('address')}</span><span className="vv">{[p['street_lead'], p['house_number'], p['house_number_suffix']].filter(Boolean).join(' ') || '--'}</span></div>
               <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
             </div>
 
@@ -351,7 +351,6 @@ export default function DealModal() {
               {t('taskAddFromDeal')}
               {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
             </button>
-            <button className="btn btn-dn btn-sm" style={{ marginLeft: 'auto' }} onClick={openLost}>{t('markLost')}</button>
             {/* Resize grip */}
             <div className="dm-grip" onMouseDown={e => startDrag(e, 'resize')}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
