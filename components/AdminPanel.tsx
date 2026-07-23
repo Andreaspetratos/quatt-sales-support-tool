@@ -8,7 +8,7 @@ import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome } from '@/lib/types'
 
-type AdminTab = 'playbooks' | 'schedulers'
+type AdminTab = 'playbooks' | 'schedulers' | 'diagnostics'
 
 // ── Deep clone helper ─────────────────────────────────────────────────────────
 function clone<T>(x: T): T { return JSON.parse(JSON.stringify(x)) }
@@ -562,6 +562,133 @@ function SchedEditor({
   )
 }
 
+
+// ── HubSpot Diagnostics ────────────────────────────────────────────────────────
+type DiagResult = { label: string; ok: boolean; detail: string }
+
+async function hsCall(method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; text: string }> {
+  const res = await fetch('/api/hs-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method, path, body }),
+  })
+  const text = await res.text()
+  return { ok: res.ok, status: res.status, text }
+}
+
+function parseHsErr(text: string): string {
+  try {
+    const d = JSON.parse(text)
+    let msg = d.message || d.error || text.slice(0, 500)
+    if (Array.isArray(d.validationResults) && d.validationResults.length) {
+      const fields = d.validationResults
+        .map((r: { name?: string; error?: string; message?: string }) =>
+          [r.name, r.error, r.message].filter(Boolean).join(':'))
+        .join(', ')
+      msg += ` → missing/invalid fields: [${fields}]`
+    }
+    return msg
+  } catch { return text.slice(0, 500) }
+}
+
+function HsDiagnostics({ ownerId }: { ownerId: string }) {
+  const [running, setRunning] = useState(false)
+  const [results, setResults] = useState<DiagResult[]>([])
+
+  async function runTests() {
+    setRunning(true)
+    setResults([])
+    const out: DiagResult[] = []
+
+    function add(label: string, ok: boolean, detail: string) {
+      out.push({ label, ok, detail })
+      setResults([...out])
+    }
+
+    // 1. Token / auth
+    const auth = await hsCall('GET', '/crm/v3/owners?limit=1')
+    add('Auth (token valid)', auth.ok, auth.ok ? `HTTP ${auth.status}` : parseHsErr(auth.text))
+
+    // 2. Task schema — show required properties
+    const schema = await hsCall('GET', '/crm/v3/properties/tasks')
+    if (schema.ok) {
+      const props: any[] = JSON.parse(schema.text).results || []
+      const hasType = props.some((p: any) => p.name === 'hs_task_type')
+      const typeVals = props.find((p: any) => p.name === 'hs_task_type')?.options?.map((o: any) => o.value).join(', ') || '—'
+      const required = props.filter((p: any) => p.formField).map((p: any) => p.name)
+      add('Task schema readable', true, `${props.length} props. hs_task_type exists: ${hasType}. Valid values: ${typeVals}. Form-required: [${required.join(', ') || 'none'}]`)
+    } else {
+      add('Task schema readable', false, parseHsErr(schema.text))
+    }
+
+    // 3. Minimal task (subject + status only)
+    const due = String(Date.now() + 86400000)
+    const t1 = await hsCall('POST', '/crm/v3/objects/tasks', {
+      properties: { hs_task_subject: '[diag] minimal', hs_task_status: 'NOT_STARTED' },
+    })
+    const t1id = t1.ok ? JSON.parse(t1.text).id : null
+    add('Create: minimal (subject+status)', t1.ok, t1.ok ? `id=${t1id}` : parseHsErr(t1.text))
+
+    // 4. + hs_task_type TODO
+    const t2 = await hsCall('POST', '/crm/v3/objects/tasks', {
+      properties: { hs_task_subject: '[diag] +type', hs_task_status: 'NOT_STARTED', hs_task_type: 'TODO' },
+    })
+    const t2id = t2.ok ? JSON.parse(t2.text).id : null
+    add('Create: +hs_task_type TODO', t2.ok, t2.ok ? `id=${t2id}` : parseHsErr(t2.text))
+
+    // 5. Full tool payload
+    const t3 = await hsCall('POST', '/crm/v3/objects/tasks', {
+      properties: {
+        hs_task_subject: '[diag] full payload',
+        hs_task_body: 'diagnostic test',
+        hs_task_status: 'NOT_STARTED',
+        hs_task_type: 'TODO',
+        hubspot_owner_id: ownerId,
+        hs_task_due_date: due,
+      },
+    })
+    const t3id = t3.ok ? JSON.parse(t3.text).id : null
+    add('Create: full tool payload', t3.ok, t3.ok ? `id=${t3id}` : parseHsErr(t3.text))
+
+    // 6. Association labels
+    const assoc = await hsCall('GET', '/crm/v4/associations/tasks/leads/labels')
+    add('Task→Lead association labels', assoc.ok,
+      assoc.ok ? `types: ${JSON.stringify(JSON.parse(assoc.text).results?.map((r: any) => `${r.typeId}:${r.label||'unlabeled'}`))}` : parseHsErr(assoc.text))
+
+    const created = [t1id, t2id, t3id].filter(Boolean)
+    if (created.length) {
+      add('⚠ Cleanup needed', false, `Delete these test tasks from HubSpot: ${created.join(', ')}`)
+    }
+    setRunning(false)
+  }
+
+  return (
+    <div style={{ padding: 20 }}>
+      <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--gm)' }}>
+        Tests every HubSpot operation the tool uses. Runs directly from this browser — no DevTools needed.
+        Test tasks created here must be deleted manually from HubSpot.
+      </p>
+      <button className="btn btn-pr" onClick={runTests} disabled={running}>
+        {running ? '⏳ Running…' : '▶ Run HubSpot diagnostics'}
+      </button>
+      {results.length > 0 && (
+        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {results.map((r, i) => (
+            <div key={i} style={{
+              padding: '8px 12px', borderRadius: 8, fontSize: 12,
+              background: r.ok ? 'var(--gn, #d1fae5)' : 'var(--rd-bg, #fee2e2)',
+              border: `1px solid ${r.ok ? 'var(--gn-bd, #6ee7b7)' : 'var(--rd-bd, #fca5a5)'}`,
+            }}>
+              <span style={{ fontWeight: 600 }}>{r.ok ? '✓' : '✗'} {r.label}</span>
+              <div style={{ marginTop: 3, color: 'var(--tx)', opacity: 0.8, wordBreak: 'break-all' }}>{r.detail}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
 export default function AdminPanel() {
   const { state } = useApp()
@@ -633,6 +760,7 @@ export default function AdminPanel() {
       <div className="adm-nav">
         <button className={`adm-tab ${tab === 'playbooks' ? 'on' : ''}`} onClick={() => setTab('playbooks')}>{t('adPb')}</button>
         <button className={`adm-tab ${tab === 'schedulers' ? 'on' : ''}`} onClick={() => setTab('schedulers')}>{t('adSch')}</button>
+        <button className={`adm-tab ${tab === 'diagnostics' ? 'on' : ''}`} onClick={() => setTab('diagnostics')}>🔧 Diagnostics</button>
       </div>
 
       <div className="adm-body">
@@ -710,6 +838,11 @@ export default function AdminPanel() {
                 lang={lang}
               />
             )}
+          </div>
+        )}
+        {tab === 'diagnostics' && (
+          <div className="adm-scroll">
+            <HsDiagnostics ownerId={state.currentRep?.hubspotOwnerId || ''} />
           </div>
         )}
       </div>

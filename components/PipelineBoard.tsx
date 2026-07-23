@@ -148,7 +148,7 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
         })
         .catch((e: unknown) => {
           const msg = e instanceof Error ? e.message : String(e)
-          showToast('⚠ HubSpot sync mislukt: ' + msg.slice(0, 100), 'error')
+          showToast('⚠ HubSpot: ' + msg, 'error')
           console.error('[task] HubSpot sync error:', msg)
         })
     } else {
