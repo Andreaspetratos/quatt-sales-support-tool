@@ -344,7 +344,6 @@ export async function createHsTask(
     hs_task_subject: title || '(no title)',
     hs_task_body: _encodeLeadInBody(leadId, notes),
     hs_task_status: 'NOT_STARTED',
-    hs_task_type: 'TODO',
     hubspot_owner_id: ownerId,
   }
   const ms = _dateToHsMs(dueDate)
