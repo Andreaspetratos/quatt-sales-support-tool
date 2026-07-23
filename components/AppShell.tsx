@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { seedBuiltinPlaybooks } from '@/lib/playbooks'
-import { initAircallCTI } from '@/lib/hubspot'
+import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
@@ -39,6 +39,15 @@ function Shell() {
     })
     return unsub
   }, [currentRep?.email])
+
+  // Pre-fetch performance data on login so the drawer is ready immediately
+  useEffect(() => {
+    if (!currentRep?.hubspotOwnerId) return
+    setState({ perfLoading: true })
+    fetchPerformance(currentRep.hubspotOwnerId)
+      .then(data => setState({ perfData: data, perfLoading: false }))
+      .catch(() => setState({ perfLoading: false }))
+  }, [currentRep?.hubspotOwnerId])
 
   return (
     <div
