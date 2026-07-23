@@ -276,6 +276,117 @@ export async function fetchAllLeadProperties(): Promise<Array<{
   } catch { return [] }
 }
 
+// ── HubSpot Tasks ─────────────────────────────────────────────────────────────
+
+const TASK_PROPS = [
+  'hs_task_subject', 'hs_task_body', 'hs_task_due_date',
+  'hs_task_status', 'hubspot_owner_id', 'hs_timestamp',
+]
+
+// Encode/decode lead ID inside task body so we can link tasks ↔ leads
+// without needing to resolve association type IDs dynamically.
+function _encodeLeadInBody(leadId: string | null, notes: string): string {
+  return leadId ? `[lead:${leadId}]\n${notes}` : notes
+}
+function _decodeLeadFromBody(body: string): { leadId: string | null; notes: string } {
+  const m = (body || '').match(/^\[lead:([^\]]+)\]\n?/)
+  if (m) return { leadId: m[1], notes: body.slice(m[0].length) }
+  return { leadId: null, notes: body || '' }
+}
+function _dateToHsMs(date: string): string | undefined {
+  if (!date) return undefined
+  return String(new Date(date + 'T00:00:00Z').getTime())
+}
+function _hsMsToDate(ms: string | undefined): string {
+  if (!ms) return ''
+  try { return new Date(Number(ms)).toISOString().slice(0, 10) } catch { return '' }
+}
+
+/** Create a task in HubSpot and return the new task's HubSpot ID (or null on failure). */
+export async function createHsTask(
+  title: string,
+  notes: string,
+  dueDate: string,
+  ownerId: string,
+  leadId: string | null,
+): Promise<string | null> {
+  if (isDemo() || !ownerId) return null
+  try {
+    const props: Record<string, string> = {
+      hs_task_subject: title || '(no title)',
+      hs_task_body: _encodeLeadInBody(leadId, notes),
+      hs_task_status: 'NOT_STARTED',
+      hs_task_type: 'TODO',
+      hubspot_owner_id: ownerId,
+    }
+    const ms = _dateToHsMs(dueDate)
+    if (ms) props.hs_task_due_date = ms
+    const res = await retryProxy('POST', '/crm/v3/objects/tasks', { properties: props })
+    if (!res.ok) { console.warn('[hubspot] createHsTask failed:', res.status); return null }
+    const data = await res.json()
+    return data.id ? String(data.id) : null
+  } catch (e) { console.warn('[hubspot] createHsTask error:', e); return null }
+}
+
+export interface HsTask {
+  hsId: string
+  title: string
+  notes: string
+  dueDate: string
+  leadId: string | null
+  ownerId: string
+}
+
+/** Fetch all open (non-completed) tasks assigned to this owner from HubSpot. */
+export async function fetchHsTasks(ownerId: string): Promise<HsTask[]> {
+  if (isDemo() || !ownerId) return []
+  try {
+    const res = await retryProxy('POST', '/crm/v3/objects/tasks/search', {
+      filterGroups: [{
+        filters: [
+          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+          { propertyName: 'hs_task_status', operator: 'NEQ', value: 'COMPLETED' },
+        ],
+      }],
+      properties: TASK_PROPS,
+      sorts: [{ propertyName: 'hs_task_due_date', direction: 'ASCENDING' }],
+      limit: 100,
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return ((data.results || []) as any[]).map(t => {
+      const { leadId, notes } = _decodeLeadFromBody(t.properties?.hs_task_body || '')
+      return {
+        hsId: String(t.id),
+        title: t.properties?.hs_task_subject || '',
+        notes,
+        dueDate: _hsMsToDate(t.properties?.hs_task_due_date),
+        leadId,
+        ownerId: t.properties?.hubspot_owner_id || '',
+      } as HsTask
+    })
+  } catch { return [] }
+}
+
+/** Mark a HubSpot task as COMPLETED. */
+export async function completeHsTask(hsTaskId: string): Promise<void> {
+  if (isDemo() || !hsTaskId) return
+  try {
+    await retryProxy('PATCH', '/crm/v3/objects/tasks/' + hsTaskId, {
+      properties: { hs_task_status: 'COMPLETED' },
+    })
+  } catch { /* best effort */ }
+}
+
+/** Archive (delete) a HubSpot task. */
+export async function deleteHsTask(hsTaskId: string): Promise<void> {
+  if (isDemo() || !hsTaskId) return
+  try {
+    // DELETE with no body — proxy sends no body when req.body is undefined
+    await retryProxy('DELETE', '/crm/v3/objects/tasks/' + hsTaskId)
+  } catch { /* best effort */ }
+}
+
 // ── Aircall CTI ────────────────────────────────────────────────────────────────
 export function aircallDial(phone: string): void {
   const clean = phone.replace(/\s/g, '')

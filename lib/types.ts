@@ -111,6 +111,7 @@ export interface Task {
   completed: boolean
   completedAt: string | null
   createdAt: string
+  hsTaskId?: string
 }
 
 // ─── Performance ──────────────────────────────────────────────────────────────

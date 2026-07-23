@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite } from '@/lib/hubspot'
-import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks } from '@/lib/storage'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask } from '@/lib/hubspot'
+import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
 import type { Lead, Task } from '@/lib/types'
@@ -127,11 +127,26 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
   const draft = state.taskDraft
   const linkedLead = state.leads.find(l => l.id === draft.dealId)
 
-  function submit() {
+  async function submit() {
     if (!draft.title?.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
+    const ownerId = state.currentRep?.hubspotOwnerId || ''
+    const leadId = draft.dealId || null
+    // Save locally first (optimistic)
     createTask({ ...draft, creatorEmail: state.currentRep?.email || '' })
     setState({ taskModal: null, taskDraft: {} })
     showToast(t('toastSaved'), 'success')
+    // Sync to HubSpot in background, then update local task with hsTaskId
+    if (ownerId) {
+      createHsTask(draft.title || '', draft.note || '', draft.dueDate || '', ownerId, leadId)
+        .then(hsId => {
+          if (!hsId) return
+          const tasks = loadTasks()
+          // Find the task we just added (most recent one without hsTaskId matching this title)
+          const task = [...tasks].reverse().find(t => !t.hsTaskId && t.title === draft.title)
+          if (task) { task.hsTaskId = hsId; task.id = hsId; saveTasks(tasks) }
+        })
+        .catch(() => {})
+    }
   }
 
   return (
@@ -235,8 +250,16 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
               {lead && <span className="task-card-deal">📋 {lead.properties?.hs_lead_name || '--'}</span>}
             </div>
             <div className="task-card-actions">
-              <button className="btn btn-gn btn-xs" onClick={() => { completeTask(task.id); forceUpdate(n => n + 1) }}>{t('taskDone')}</button>
-              <button className="btn btn-dn btn-xs" onClick={() => { deleteTask(task.id); forceUpdate(n => n + 1) }}>{t('taskDelete')}</button>
+              <button className="btn btn-gn btn-xs" onClick={async () => {
+                completeTask(task.id)
+                forceUpdate(n => n + 1)
+                if (task.hsTaskId) await completeHsTask(task.hsTaskId)
+              }}>{t('taskDone')}</button>
+              <button className="btn btn-dn btn-xs" onClick={async () => {
+                deleteTask(task.id)
+                forceUpdate(n => n + 1)
+                if (task.hsTaskId) await deleteHsTask(task.hsTaskId)
+              }}>{t('taskDelete')}</button>
             </div>
           </div>
         )
@@ -386,6 +409,7 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const openTasks = myOpenTasks(state.currentRep?.email)
+  const [tasksVersion, setTasksVersion] = useState(0)
 
   // ── Background sync: poll HubSpot every 30s (pauses when tab hidden) ────────
   // Catches changes made in HubSpot CRM so they appear in the tool automatically.
@@ -440,6 +464,38 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
     return () => { unsub(); timers.forEach(t => clearTimeout(t)) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Sync tasks from HubSpot on login
+  useEffect(() => {
+    if (!syncOwnerId || isDemo()) return
+    fetchHsTasks(syncOwnerId).then(hsTasks => {
+      if (!hsTasks.length) return
+      // Convert HsTask → Task and merge into localStorage
+      // (keep any local-only tasks that don't have a HubSpot ID yet)
+      const existing = loadTasks()
+      const hsIds = new Set(hsTasks.map(t => t.hsId))
+      const localOnly = existing.filter(t => !t.hsTaskId || !hsIds.has(t.hsTaskId))
+      const merged = [
+        ...hsTasks.map(t => ({
+          id: t.hsId,
+          hsTaskId: t.hsId,
+          dealId: t.leadId,
+          assigneeEmail: state.currentRep?.email || '',
+          creatorEmail: state.currentRep?.email || '',
+          title: t.title,
+          note: t.notes,
+          dueDate: t.dueDate,
+          completed: false,
+          completedAt: null,
+          createdAt: '',
+        })),
+        ...localOnly,
+      ]
+      saveTasks(merged)
+      setTasksVersion(v => v + 1)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncOwnerId])
 
   async function handleRefresh() {
     setState({ loading: true })
