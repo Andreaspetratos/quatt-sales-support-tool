@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchAllOwners } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
@@ -126,10 +126,23 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const draft = state.taskDraft
   const linkedLead = state.leads.find(l => l.id === draft.dealId)
+  const [owners, setOwners] = useState<Array<{ id: string; email: string; name: string }>>([])
+
+  // Load all HubSpot owners once when modal opens
+  useEffect(() => {
+    fetchAllOwners().then(list => {
+      setOwners(list)
+      // Pre-select current rep if not already set
+      if (!draft.assigneeOwnerId && state.currentRep?.hubspotOwnerId) {
+        setState({ taskDraft: { ...state.taskDraft, assigneeOwnerId: state.currentRep.hubspotOwnerId } })
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function submit() {
     if (!draft.title?.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
-    const ownerId = state.currentRep?.hubspotOwnerId || ''
+    const ownerId = draft.assigneeOwnerId || state.currentRep?.hubspotOwnerId || ''
     const leadId = draft.dealId || null
     // Save locally first (optimistic)
     createTask({ ...draft, creatorEmail: state.currentRep?.email || '' })
@@ -184,10 +197,11 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
             <label className="il">{t('taskAssign')}</label>
             <select
               className="sel"
-              defaultValue={draft.assigneeEmail}
-              onChange={e => setState({ taskDraft: { ...state.taskDraft, assigneeEmail: e.target.value } })}
+              value={draft.assigneeOwnerId || state.currentRep?.hubspotOwnerId || ''}
+              onChange={e => setState({ taskDraft: { ...state.taskDraft, assigneeOwnerId: e.target.value } })}
             >
-              {CONFIG.REPS.map(r => <option key={r.email} value={r.email}>{r.name}</option>)}
+              {owners.length === 0 && <option value={state.currentRep?.hubspotOwnerId || ''}>{state.currentRep?.name || '…'}</option>}
+              {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
           {linkedLead && (

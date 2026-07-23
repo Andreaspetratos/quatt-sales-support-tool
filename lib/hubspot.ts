@@ -155,6 +155,25 @@ export async function lookupHubspotOwnerId(email: string): Promise<string | null
   }
 }
 
+
+/** Fetch all HubSpot owners (for task assignee picker). */
+export async function fetchAllOwners(): Promise<Array<{ id: string; email: string; name: string }>> {
+  if (isDemo()) return []
+  try {
+    const res = await hsProxy('GET', '/crm/v3/owners?limit=100&archived=false')
+    if (!res.ok) return [] // logged by hsProxy
+    const data = await res.json()
+    return ((data.results || []) as any[]).map(o => ({
+      id: String(o.id),
+      email: String(o.email || ''),
+      name: [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email || String(o.id),
+    }))
+  } catch (e) {
+    console.error('[hs] fetchAllOwners error:', e)
+    return []
+  }
+}
+
 // ── Leads ─────────────────────────────────────────────────────────────────────
 export async function fetchLeads(ownerId: string): Promise<Lead[]> {
   if (isDemo()) return DEMO_LEADS

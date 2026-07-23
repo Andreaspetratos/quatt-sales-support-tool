@@ -104,6 +104,7 @@ export interface Task {
   id: string
   dealId: string | null
   assigneeEmail: string
+  assigneeOwnerId?: string   // HubSpot owner ID of the assignee
   creatorEmail: string
   title: string
   note: string
