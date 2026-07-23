@@ -1,5 +1,4 @@
-import type { Lead } from './types'
-import type { PerfData } from './types'
+import type { Lead, PerfData, PerfPeriodData } from './types'
 import { CONFIG, isDemo } from './config'
 
 // ── Properties to fetch for every lead ───────────────────────────────────────
@@ -238,44 +237,85 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
 
 // ── Performance ───────────────────────────────────────────────────────────────
 export function generateDemoPerf(): PerfData {
-  const mk = (arr: [string, number][]) => ({ total: arr.reduce((s, x) => s + x[1], 0), outcomes: Object.fromEntries(arr) })
   return {
-    today: mk([['Plan HV', 2], ['Plan Call', 3], ['Send brochure (cold lead)', 2], ['Lost', 1]]),
-    week:  mk([['Plan HV', 8], ['Plan Call', 12], ['Quote sent', 3], ['On hold due to renovation', 2], ['Send Configurator Link', 4], ['Send brochure (cold lead)', 4], ['Lost', 2]]),
-    month: mk([['Plan HV', 28], ['Plan Call', 45], ['Quote sent', 12], ['On hold due to renovation', 7], ['On hold due to district heating', 3], ['Send Configurator Link', 15], ['Send brochure (cold lead)', 18], ['Lost', 14]]),
+    today: { processed: 8,  sql: 3,  lost: 1  },
+    week:  { processed: 35, sql: 12, lost: 5  },
+    month: { processed: 142, sql: 48, lost: 21 },
   }
 }
 
+/**
+ * Fetches leads that exited the MQL stage (hs_v2_date_exited_5404393694 is set)
+ * for the given owner, then buckets by exit date into today / week / month.
+ * For each bucket: processed = total exited, sql = now in SQL stage, lost = now in Lost stage.
+ *
+ * HubSpot search paginates at 200 results max per page — we follow `paging.next.after`
+ * to collect up to 1 000 records (5 pages), which is plenty for a single rep.
+ */
 export async function fetchPerformance(ownerId: string): Promise<PerfData> {
   if (isDemo() || !ownerId) return generateDemoPerf()
-  const res = await hsProxy('POST', '/crm/v3/objects/leads/search', {
-    filterGroups: [{ filters: [
-      { propertyName: 'hubspot_owner_id',              operator: 'EQ',           value: ownerId },
-      { propertyName: 'qualificationcalloutcome_lead', operator: 'HAS_PROPERTY' },
-    ]}],
-    properties: ['qualificationcalloutcome_lead', 'hs_lastmodifieddate'],
-    limit: 200,
-  })
-  if (!res.ok) throw new Error('fetchPerformance HTTP ' + res.status)
-  const leads = (await res.json()).results || []
 
-  const now = new Date()
-  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const weekMs  = todayMs - ((now.getDay() || 7) - 1) * 86400000
-  const monthMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  const SQL_STAGE  = '5404393697'
+  const LOST_STAGE = '5404393698'
 
-  const empty = () => ({ total: 0, outcomes: {} as Record<string, number> })
-  const add = (b: ReturnType<typeof empty>, o: string) => { b.total++; b.outcomes[o] = (b.outcomes[o] || 0) + 1 }
+  const now      = new Date()
+  const todayMs  = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const weekMs   = todayMs - ((now.getDay() || 7) - 1) * 86400000
+  const monthMs  = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+
+  const empty = (): PerfPeriodData => ({ processed: 0, sql: 0, lost: 0 })
   const data: PerfData = { today: empty(), week: empty(), month: empty() }
 
-  for (const lead of leads) {
-    const outcome = (lead.properties?.qualificationcalloutcome_lead || '').trim()
-    if (!outcome || outcome === '--') continue
-    const mod = new Date(lead.properties?.hs_lastmodifieddate || 0).getTime()
-    if (mod >= monthMs) add(data.month, outcome)
-    if (mod >= weekMs)  add(data.week,  outcome)
-    if (mod >= todayMs) add(data.today, outcome)
+  // HubSpot timestamps for start-of-month so we can filter server-side
+  // (reduces data transferred — still bucket client-side for today/week)
+  const monthStart = String(monthMs)
+
+  let after: string | undefined
+  let pagesFetched = 0
+  const MAX_PAGES = 5
+
+  while (pagesFetched < MAX_PAGES) {
+    const body: Record<string, unknown> = {
+      filterGroups: [{ filters: [
+        { propertyName: 'hubspot_owner_id',              operator: 'EQ',                    value: ownerId },
+        { propertyName: 'hs_v2_date_exited_5404393694', operator: 'GTE',                   value: monthStart },
+      ]}],
+      properties: ['hs_v2_date_exited_5404393694', 'hs_pipeline_stage'],
+      limit: 200,
+      sorts: [{ propertyName: 'hs_v2_date_exited_5404393694', direction: 'DESCENDING' }],
+    }
+    if (after) body.after = after
+
+    const res = await hsProxy('POST', '/crm/v3/objects/leads/search', body)
+    if (!res.ok) throw new Error('fetchPerformance HTTP ' + res.status)
+    const json = await res.json()
+    const results: any[] = json.results || []
+    pagesFetched++
+
+    for (const lead of results) {
+      const exitTs = lead.properties?.hs_v2_date_exited_5404393694
+      if (!exitTs) continue
+      const exitMs = new Date(exitTs).getTime()
+      const stage  = lead.properties?.hs_pipeline_stage || ''
+      const isSql  = stage === SQL_STAGE
+      const isLost = stage === LOST_STAGE
+
+      const buckets: PerfPeriodData[] = []
+      if (exitMs >= monthMs)  buckets.push(data.month)
+      if (exitMs >= weekMs)   buckets.push(data.week)
+      if (exitMs >= todayMs)  buckets.push(data.today)
+
+      for (const b of buckets) {
+        b.processed++
+        if (isSql)  b.sql++
+        if (isLost) b.lost++
+      }
+    }
+
+    after = json.paging?.next?.after
+    if (!after || results.length < 200) break
   }
+
   return data
 }
 

@@ -35,23 +35,10 @@ function prodBadge(p: string | undefined): React.ReactNode {
 }
 
 // ── Performance drawer ────────────────────────────────────────────────────────
-const PERF_OUTCOME_COLORS: Record<string, string> = {
-  'Plan HV': 'var(--gr)',
-  'Plan Call': '#0ea5e9',
-  'Quote sent': 'var(--or)',
-  'On hold due to renovation': '#f59e0b',
-  'On hold due to district heating': '#f59e0b',
-  'Send Configurator Link': '#8b5cf6',
-  'Send brochure (cold lead)': 'var(--gd)',
-  'Lost': 'var(--rd)',
-}
-
 function PerfDrawer({ lang }: { lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
-  const pd = state.perfData?.[state.perfPeriod] || { total: 0, outcomes: {} }
-  const entries = Object.entries(pd.outcomes).sort((a, b) => b[1] - a[1])
-  const maxVal = entries[0]?.[1] || 1
+  const pd = state.perfData?.[state.perfPeriod] || { processed: 0, sql: 0, lost: 0 }
 
   async function refresh() {
     setState({ perfLoading: true, perfData: null })
@@ -63,6 +50,9 @@ function PerfDrawer({ lang }: { lang: 'nl' | 'en' }) {
       setState({ perfLoading: false })
     }
   }
+
+  const sqlPct  = pd.processed ? Math.round(pd.sql  / pd.processed * 100) : 0
+  const lostPct = pd.processed ? Math.round(pd.lost / pd.processed * 100) : 0
 
   return (
     <>
@@ -87,28 +77,44 @@ function PerfDrawer({ lang }: { lang: 'nl' | 'en' }) {
           ? <div className="perf-loading"><div className="sp spd" /></div>
           : (
             <div className="perf-body">
+              {/* ── Main stat: processed ── */}
               <div className="perf-tot">
-                <span className="perf-tot-n">{pd.total}</span>
-                <span className="perf-tot-l">{t('perfTotal')}</span>
+                <span className="perf-tot-n">{pd.processed}</span>
+                <span className="perf-tot-l">{t('perfProcessed')}</span>
               </div>
-              {entries.length === 0
-                ? <div className="perf-empty">{t('perfEmpty')}</div>
-                : entries.map(([name, count]) => {
-                  const pct = pd.total ? Math.round(count / pd.total * 100) : 0
-                  const bar = Math.round(count / maxVal * 100)
-                  return (
-                    <div className="perf-row" key={name}>
-                      <div className="perf-row-top">
-                        <span className="perf-row-name" title={name}>{name}</span>
-                        <span className="perf-row-val">{count}<span className="perf-row-pct">{pct}%</span></span>
-                      </div>
-                      <div className="perf-bar-bg">
-                        <div className="perf-bar-fill" style={{ width: bar + '%', background: PERF_OUTCOME_COLORS[name] || 'var(--gm)' }} />
-                      </div>
-                    </div>
-                  )
-                })
-              }
+
+              {/* ── SQL stat ── */}
+              <div className="perf-row" style={{ marginTop: 16 }}>
+                <div className="perf-row-top">
+                  <span className="perf-row-name">{t('perfSQL')}</span>
+                  <span className="perf-row-val">
+                    {pd.sql}
+                    <span className="perf-row-pct">{sqlPct}%</span>
+                  </span>
+                </div>
+                <div className="perf-bar-bg">
+                  <div className="perf-bar-fill" style={{ width: sqlPct + '%', background: 'var(--gm)' }} />
+                </div>
+              </div>
+
+              {/* ── Lost stat ── */}
+              <div className="perf-row">
+                <div className="perf-row-top">
+                  <span className="perf-row-name">{t('perfLost')}</span>
+                  <span className="perf-row-val">
+                    {pd.lost}
+                    <span className="perf-row-pct">{lostPct}%</span>
+                  </span>
+                </div>
+                <div className="perf-bar-bg">
+                  <div className="perf-bar-fill" style={{ width: lostPct + '%', background: '#ef4444' }} />
+                </div>
+              </div>
+
+              {pd.processed === 0 && (
+                <div className="perf-empty">{t('perfEmpty')}</div>
+              )}
+
               <div className="perf-refresh">
                 <button className="btn btn-sc btn-xs" onClick={refresh}>{t('perfRefresh')}</button>
               </div>

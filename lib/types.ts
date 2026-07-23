@@ -118,13 +118,14 @@ export interface Task {
 // ─── Performance ──────────────────────────────────────────────────────────────
 
 export interface PerfPeriodData {
-  total: number
-  outcomes: Record<string, number>
+  processed: number   // leads that exited MQL in this period
+  sql: number         // of those, now in SQL stage
+  lost: number        // of those, now in Lost stage
 }
 
 export interface PerfData {
   today: PerfPeriodData
-  week: PerfPeriodData
+  week:  PerfPeriodData
   month: PerfPeriodData
 }
 
