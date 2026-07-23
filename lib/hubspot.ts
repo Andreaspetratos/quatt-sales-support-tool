@@ -348,17 +348,18 @@ export async function createHsTask(
   leadId: string | null,
 ): Promise<string | null> {
   if (isDemo() || !ownerId) return null
+  // hs_timestamp = the task's "due date" as shown in HubSpot.
+  // hs_task_due_date does not exist in this portal (confirmed by CI).
+  // Use the user-selected due date if provided, otherwise default to now.
+  const tsMs = _dateToHsMs(dueDate) ?? String(Date.now())
   const props: Record<string, string> = {
     hs_task_subject: title || '(no title)',
     hs_task_body:    _encodeLeadInBody(leadId, notes),
     hs_task_status:  'NOT_STARTED',
     hs_task_type:    'TODO',
-    hs_timestamp:    String(Date.now()),   // required by HubSpot tasks API
+    hs_timestamp:    tsMs,
     hubspot_owner_id: ownerId,
   }
-  // Note: hs_task_due_date does not exist in this HubSpot portal.
-  // hs_timestamp (already set above) serves as the task date.
-  // TODO: query task schema at startup to detect the correct due-date property name.
   // hsProxy logs the full error body on failure — we just parse and throw for the caller
   const res = await retryProxy('POST', '/crm/v3/objects/tasks', { properties: props })
   if (!res.ok) {
