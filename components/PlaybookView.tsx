@@ -196,6 +196,7 @@ function ChoiceQuestion({
       try {
         await patchLead(dealId, { [prop]: opt.value }, state.leads, () => patchLeadLocal(dealId, { [prop]: opt.value }))
         setSaved(true)
+        showToast('✓ Opgeslagen in HubSpot', 'success')
         setTimeout(() => setSaved(false), 2000)
       } catch (e: any) {
         showToast(e.message || 'Save failed', 'error')
@@ -256,6 +257,7 @@ function TextareaQuestion({
       try {
         await patchLead(dealId, { [prop]: value }, state.leads, () => patchLeadLocal(dealId, { [prop]: value }))
         setSaved(true)
+        showToast('✓ Opgeslagen in HubSpot', 'success')
         setTimeout(() => setSaved(false), 2000)
       } catch (e: any) {
         showToast(e.message || 'Save failed', 'error')
@@ -308,6 +310,7 @@ function IntentQuestion({
       try {
         await patchLead(dealId, { [prop]: hsVal }, state.leads, () => patchLeadLocal(dealId, { [prop]: hsVal }))
         setSaved(true)
+        showToast('✓ Opgeslagen in HubSpot', 'success')
         setTimeout(() => setSaved(false), 2000)
       } catch (e: any) {
         showToast(e.message || 'Save failed', 'error')

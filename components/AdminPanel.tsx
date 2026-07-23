@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
 import { loadPbs, savePbs, loadScheds, saveScheds, uid } from '@/lib/storage'
-import { fetchAllLeadProperties } from '@/lib/hubspot'
+import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome } from '@/lib/types'
 
@@ -15,10 +15,13 @@ function clone<T>(x: T): T { return JSON.parse(JSON.stringify(x)) }
 
 // ── HubSpot property picker (searchable dropdown) ────────────────────────────
 function HsPropPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [inputVal, setInputVal] = useState(value || '')
+  const [query, setQuery] = useState('')
   const [allProps, setAllProps] = useState<Array<{ name: string; label: string; type: string; fieldType: string }>>([])
   const [loaded, setLoaded] = useState(false)
   const [open, setOpen] = useState(false)
+
+  const currentProp = allProps.find(p => p.name === value)
+  const displayValue = currentProp ? currentProp.label : value
 
   async function loadProps() {
     if (loaded) return
@@ -27,37 +30,54 @@ function HsPropPicker({ value, onChange }: { value: string; onChange: (v: string
     setLoaded(true)
   }
 
-  const filtered = inputVal.length > 0
+  const filtered = query.length > 0
     ? allProps.filter(p =>
-        p.name.toLowerCase().includes(inputVal.toLowerCase()) ||
-        p.label.toLowerCase().includes(inputVal.toLowerCase())
-      ).slice(0, 20)
-    : allProps.slice(0, 20)
+        p.label.toLowerCase().includes(query.toLowerCase()) ||
+        p.name.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 40)
+    : allProps.slice(0, 40)
 
   return (
     <div style={{ position: 'relative' }}>
       <input
         className="inp inp-sm"
-        value={inputVal}
-        placeholder="Type to search or paste API name…"
-        onChange={e => { setInputVal(e.target.value); onChange(e.target.value) }}
-        onFocus={() => { setOpen(true); loadProps() }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        value={open ? query : displayValue}
+        placeholder="Zoek property op naam…"
+        onChange={e => setQuery(e.target.value)}
+        onFocus={() => { setOpen(true); setQuery(''); loadProps() }}
+        onBlur={() => setTimeout(() => { setOpen(false); setQuery('') }, 200)}
       />
-      {open && loaded && filtered.length > 0 && (
+      {value && !open && (
+        <div style={{ fontSize: 10, color: 'var(--gm)', fontFamily: 'monospace', marginTop: 2 }}>
+          {value}
+          <span
+            style={{ marginLeft: 6, cursor: 'pointer', color: 'var(--rd)' }}
+            onMouseDown={e => { e.preventDefault(); onChange('') }}
+          >✕</span>
+        </div>
+      )}
+      {open && loaded && (
         <div style={{
-          position: 'absolute', zIndex: 999, left: 0, right: 0, top: '100%',
+          position: 'absolute', zIndex: 9999, left: 0, right: 0,
+          bottom: 'calc(100% + 2px)',
           background: 'var(--wh)', border: '1px solid var(--gl)', borderRadius: 8,
-          boxShadow: '0 4px 16px rgba(0,0,0,.1)', maxHeight: 220, overflowY: 'auto',
+          boxShadow: '0 -6px 24px rgba(0,0,0,.15)', maxHeight: 280, overflowY: 'auto',
         }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '10px', fontSize: 12, color: 'var(--gm)' }}>Geen properties gevonden</div>
+          )}
           {filtered.map(p => (
             <div
               key={p.name}
-              style={{ padding: '6px 10px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid var(--gl)' }}
+              style={{
+                padding: '7px 10px', cursor: 'pointer', fontSize: 12,
+                borderBottom: '1px solid var(--gl)',
+                background: p.name === value ? 'rgba(26,122,107,.08)' : undefined,
+              }}
               onMouseDown={() => {
-                setInputVal(p.name)
                 onChange(p.name)
                 setOpen(false)
+                setQuery('')
               }}
             >
               <div style={{ fontWeight: 600, color: 'var(--bk)' }}>{p.label}</div>
@@ -78,6 +98,13 @@ function PlaybookEditor({
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
   const [showExport, setShowExport] = useState(false)
   const matchInputRef = useRef<HTMLInputElement>(null)
+  const [productOptions, setProductOptions] = useState<Array<{ label: string; value: string }>>([])
+
+  useEffect(() => {
+    fetchLeadPropertyOptions('most_recent_selected_product_lead').then(opts => {
+      setProductOptions(opts)
+    })
+  }, [])
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const typeLabels = translateMap(lang, 'adQTypeLabels')
   const qTypes = translateArr(lang, 'adQTypes')
@@ -298,7 +325,7 @@ function PlaybookEditor({
               onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
           </div>
         )}
-        {q.type === 'choice' && (
+        {q.type === 'choice' && !q.hsProperty && (
           <div className="iw">
             <label className="il">{t('adQOptions')}</label>
             <div className="opt-chips">
@@ -358,18 +385,47 @@ function PlaybookEditor({
       {/* Product match tags */}
       <div className="iw">
         <label className="il">{t('adPbTrigger')}</label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          {(ep.productMatches || []).map((m, i) => (
-            <span key={i} className="opt-chip">{m}<span className="opt-rm" onClick={() => removeMatch(i)}>×</span></span>
-          ))}
-          <input
-            ref={matchInputRef}
-            className="inp inp-sm" style={{ width: 140 }}
-            placeholder={t('adPbTriggerHint') as string}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addMatch((e.target as HTMLInputElement).value); e.preventDefault() } }}
-          />
-          <span style={{ fontSize: 11, color: 'var(--gm)' }}>{t('adEnterToAdd')}</span>
-        </div>
+        {productOptions.length > 0 ? (
+          <div className="cr2" style={{ flexWrap: 'wrap' }}>
+            {productOptions.map(opt => {
+              const isSelected = (ep.productMatches || []).some(
+                m => m.toLowerCase() === opt.value.toLowerCase() || m.toLowerCase() === opt.label.toLowerCase()
+              )
+              return (
+                <button
+                  key={opt.value}
+                  className={`chip ${isSelected ? 'on' : ''}`}
+                  style={{ fontSize: 12 }}
+                  onClick={() => {
+                    if (isSelected) {
+                      update({ productMatches: (ep.productMatches || []).filter(
+                        m => m.toLowerCase() !== opt.value.toLowerCase() && m.toLowerCase() !== opt.label.toLowerCase()
+                      )})
+                    } else {
+                      update({ productMatches: [...(ep.productMatches || []), opt.value] })
+                    }
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          /* Fallback: text input if HubSpot options couldn't load */
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {(ep.productMatches || []).map((m, i) => (
+              <span key={i} className="opt-chip">{m}<span className="opt-rm" onClick={() => removeMatch(i)}>×</span></span>
+            ))}
+            <input
+              ref={matchInputRef}
+              className="inp inp-sm" style={{ width: 140 }}
+              placeholder={t('adPbTriggerHint') as string}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addMatch((e.target as HTMLInputElement).value); e.preventDefault() } }}
+            />
+            <span style={{ fontSize: 11, color: 'var(--gm)' }}>{t('adEnterToAdd')}</span>
+          </div>
+        )}
       </div>
 
       {/* Phases */}
