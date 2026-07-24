@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main]   # gate on PRs into main (develop → main promotions)
 
 jobs:
   typecheck:
@@ -18,13 +18,15 @@ jobs:
       - run: npx tsc --noEmit
 
   hubspot-integration:
-    name: HubSpot API integration
+    name: HubSpot API integration (sandbox)
     runs-on: ubuntu-latest
+    # Always test against sandbox — avoids creating test data in production.
+    # By the time develop is merged to main, these tests have already passed.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - name: Run HubSpot integration tests
         env:
-          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
+          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN_SANDBOX }}
         run: node scripts/test-hubspot.mjs
