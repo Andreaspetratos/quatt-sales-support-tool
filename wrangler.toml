@@ -1,3 +1,7 @@
 name = "quatt-sales-support-tool"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "./out"
+
+[[kv_namespaces]]
+binding = "PLAYBOOKS_KV"
+id = "313049fad0e849eba6b68dca3fec9131"
