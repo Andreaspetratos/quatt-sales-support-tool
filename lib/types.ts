@@ -164,6 +164,7 @@ export interface AppState {
   dmH: number | null
   // performance drawer
   perfOpen: boolean
+  helpOpen: boolean
   perfPeriod: PerfPeriod
   perfData: PerfData | null
   perfLoading: boolean

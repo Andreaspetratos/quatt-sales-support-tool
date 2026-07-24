@@ -78,6 +78,16 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
             {currentTheme === 'light' ? '🌙' : '☀️'}
           </button>
 
+          {/* Help button */}
+          <button
+            className="btn btn-xs"
+            title={t('help') || 'Help'}
+            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: '14px', padding: '4px 8px' }}
+            onClick={() => setState({ helpOpen: true })}
+          >
+            ℹ
+          </button>
+
           {/* Performance button */}
           {state.screen === 'dashboard' && (
             <button

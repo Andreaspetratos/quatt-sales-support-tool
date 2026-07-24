@@ -30,6 +30,7 @@ const initialState: AppState = {
   dmW: null,
   dmH: null,
   perfOpen: false,
+  helpOpen: false,
   perfPeriod: 'today',
   perfData: null,
   perfLoading: false,

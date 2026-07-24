@@ -8,6 +8,7 @@ import { fetchSharedPbs } from '@/lib/storage'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
+import HelpModal from './HelpModal'
 import LoginPage from './LoginPage'
 import PipelineBoard from './PipelineBoard'
 import AdminPanel from './AdminPanel'
@@ -69,6 +70,9 @@ function Shell() {
     >
       {/* Global toast overlay */}
       <Toast />
+
+      {/* Help modal — available from any screen */}
+      <HelpModal />
 
       {/* Top navigation bar — hidden on login screen */}
       {screen !== 'login' && currentRep && (
