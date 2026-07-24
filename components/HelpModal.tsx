@@ -13,10 +13,11 @@ const SECTIONS_NL: Section[] = [
   {
     title: '📥 Hoe werkt leads aanvragen?',
     steps: [
-      'Klik op de "Vraag leads aan" knop onderaan het dashboard.',
-      'Er is een wachttijd van 2 uur tussen aanvragen — dit zorgt voor eerlijke verdeling.',
+      'Klik op de "Vraag leads aan" knop bovenaan het dashboard.',
+      'Er is een wachttijd van 60 seconden tussen aanvragen.',
       'Leads worden toegewezen op basis van beschikbaarheid in de MQL-fase.',
       'Na ontvangst zie je de nieuwe leads direct in de tabel.',
+      'Als je na de aftelling geen leads ziet, klik dan op vernieuwen en check of je een Slack-bericht van HubSpot hebt ontvangen. (Er zijn mogelijk geen beschikbare leads voor jou op dat moment.)',
     ],
   },
   {
@@ -54,7 +55,7 @@ const SECTIONS_NL: Section[] = [
       'Ga naar Admin via de knop rechtsboven (alleen zichtbaar voor admins).',
       'Klik op "Nieuw playbook" en geef het een naam.',
       'Voeg fases toe met de "+ Fase" knop en geef elke fase een titel.',
-      'Voeg per fase vragen toe — dit zijn ja/nee-vragen die reps tijdens het gesprek beantwoorden.',
+      'Voeg per fase vragen toe — je kunt vragen direct koppelen aan HubSpot-properties. Je kunt ook instructies schrijven voor sales reps.',
       'Sla op — de wijzigingen zijn direct zichtbaar voor alle gebruikers.',
     ],
   },
@@ -62,10 +63,10 @@ const SECTIONS_NL: Section[] = [
     title: '🗓 Hoe koppel je een planner? (Admin)',
     adminOnly: true,
     steps: [
-      'Open een lead en klik op "Schedule Videocall" onderin.',
-      'Vul in het schedulervenster de Calendly- of kalenderlink in via de admin-instelling.',
-      'De link wordt weergegeven aan alle reps in het schedulervenster.',
-      'Reps kunnen de link kopiëren of direct openen om een afspraak in te plannen.',
+      'Ga naar Admin via de knop rechtsboven (alleen zichtbaar voor admins).',
+      'Klik op het tabblad "Planners".',
+      'Voeg een nieuwe planner toe en koppel je HubSpot-planner.',
+      'Je kunt specifieke planners toewijzen aan specifieke producttypes.',
     ],
   },
 ]
@@ -74,10 +75,11 @@ const SECTIONS_EN: Section[] = [
   {
     title: '📥 How does requesting leads work?',
     steps: [
-      'Click the "Request leads" button at the bottom of the dashboard.',
-      'There is a 2-hour cooldown between requests — this ensures fair distribution.',
+      'Click the "Request leads" button at the top of the dashboard.',
+      'There is a 60-second cooldown between requests.',
       'Leads are assigned based on availability in the MQL stage.',
       'After requesting, new leads appear in the table immediately.',
+      'If you do not see leads appearing after the countdown ended, click refresh and check if you received a Slack message from HubSpot. (There may be no available leads for you at the time.)',
     ],
   },
   {
@@ -115,7 +117,7 @@ const SECTIONS_EN: Section[] = [
       'Go to Admin via the button in the top right (only visible to admins).',
       'Click "New playbook" and give it a name.',
       'Add phases with the "+ Phase" button and give each a title.',
-      'Add questions per phase — these are yes/no questions reps answer during the call.',
+      'Add questions per phase — you can directly map questions to HubSpot properties. You can also write instructions for sales reps.',
       'Save — changes are immediately visible to all users.',
     ],
   },
@@ -123,10 +125,10 @@ const SECTIONS_EN: Section[] = [
     title: '🗓 How do you connect a scheduler? (Admin)',
     adminOnly: true,
     steps: [
-      'Open a lead and click "Schedule Videocall" at the bottom.',
-      'In the scheduler window, set the Calendly or calendar link via the admin setting.',
-      'The link is shown to all reps in the scheduler window.',
-      'Reps can copy or open the link directly to book an appointment.',
+      'Go to Admin via the button in the top right (only visible to admins).',
+      'Click on the "Schedulers" tab.',
+      'There you can add a new scheduler and connect your HubSpot scheduler.',
+      'You can assign specific schedulers to specific product types.',
     ],
   },
 ]
