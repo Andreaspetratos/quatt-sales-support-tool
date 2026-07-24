@@ -10,7 +10,7 @@
 export async function onRequestPost(context) {
   try {
     const req = await context.request.json()
-    const token = context.env.HUBSPOT_TOKEN || ''
+    const token = context.env.HUBSPOT_TOKEN_PROD || context.env.HUBSPOT_TOKEN || ''
 
     if (!token) {
       console.error('[proxy] HUBSPOT_TOKEN is not set')

@@ -120,7 +120,7 @@ function _notifyWrite(leadId: string): void { _writeListeners.forEach(cb => cb(l
 
 // ── User / Owner ID lookup ────────────────────────────────────────────────────
 export async function lookupHubspotUserId(email: string): Promise<string | null> {
-  if (isDemo() || !email || !CONFIG.HUBSPOT_TOKEN) return null
+  if (isDemo() || !email) return null
   try {
     const res = await hsProxy('POST', '/crm/v3/objects/users/search', {
       filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],

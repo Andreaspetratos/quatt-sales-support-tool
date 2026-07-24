@@ -21,7 +21,6 @@ interface PropNames {
 interface AppConfig {
   GOOGLE_CLIENT_ID: string
   MAKE_WEBHOOK_URL: string
-  HUBSPOT_TOKEN: string
   CORS_PROXY: string
   SCHEDULER_URL: string
   PIPELINE_ID: string
@@ -38,8 +37,6 @@ interface AppConfig {
 export const CONFIG: AppConfig = {
   GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com',
   MAKE_WEBHOOK_URL: process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL ?? '',
-  // Set NEXT_PUBLIC_HUBSPOT_TOKEN in Cloudflare Pages environment variables
-  HUBSPOT_TOKEN: process.env.NEXT_PUBLIC_HUBSPOT_TOKEN ?? '',
   CORS_PROXY: '',
   SCHEDULER_URL: '',
 
