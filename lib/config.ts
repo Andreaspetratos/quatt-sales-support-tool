@@ -16,6 +16,7 @@ interface PropNames {
   partner: string
   requestedAt: string
   lostReasons: string
+  callResult: string
 }
 
 interface AppConfig {
@@ -59,6 +60,7 @@ export const CONFIG: AppConfig = {
     partner:     'partner_name_lead',
     requestedAt: 'screening_call_requested_at',
     lostReasons: 'lost_reasons_lead',
+    callResult:   'qualification_call_result_lead',
   },
 
   REQUEST_COOLDOWN: 60,

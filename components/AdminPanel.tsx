@@ -763,6 +763,13 @@ export default function AdminPanel() {
 
   return (
     <div className="adm">
+      <button
+        className="btn btn-xs"
+        style={{ marginBottom: 8, color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent' }}
+        onClick={() => setState({ screen: 'dashboard' })}
+      >
+        ← {t('backToSales')}
+      </button>
       <div className="adm-nav">
         <button className={`adm-tab ${tab === 'playbooks' ? 'on' : ''}`} onClick={() => setTab('playbooks')}>{t('adPb')}</button>
         <button className={`adm-tab ${tab === 'schedulers' ? 'on' : ''}`} onClick={() => setTab('schedulers')}>{t('adSch')}</button>

@@ -161,6 +161,13 @@ const nl: Dict = {
   taskOverdue: 'Verlopen',
   taskToday: 'Vandaag',
   taskAddFromDeal: '+ Taak',
+  filterProduct: 'Filter product',
+  filterOutcome: 'Filter uitkomst',
+  filterClear: 'Wissen',
+  schedBooked: 'Afspraak gemaakt?',
+  schedBookedQ: 'Heb je een afspraak kunnen maken met de klant?',
+  yes: 'Ja',
+  no: 'Nee',
 }
 
 const en: Dict = {
@@ -316,6 +323,13 @@ const en: Dict = {
   taskOverdue: 'Overdue',
   taskToday: 'Today',
   taskAddFromDeal: '+ Task',
+  filterProduct: 'Filter product',
+  filterOutcome: 'Filter outcome',
+  filterClear: 'Clear',
+  schedBooked: 'Appointment booked?',
+  schedBookedQ: 'Were you able to book an appointment with the customer?',
+  yes: 'Yes',
+  no: 'No',
 }
 
 const dicts: Record<Lang, Dict> = { nl, en }

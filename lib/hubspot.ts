@@ -20,6 +20,7 @@ const LEAD_PROPS = [
   'screening_call_requested_at',
   'lead_router_qualification_score_lead',
   'contact_email',
+  'qualification_call_result_lead',
 ]
 
 // ── Demo data ─────────────────────────────────────────────────────────────────
@@ -169,6 +170,46 @@ export async function fetchAllOwners(): Promise<Array<{ id: string; email: strin
     }))
   } catch (e) {
     console.error('[hs] fetchAllOwners error:', e)
+    return []
+  }
+}
+
+
+/** Fetch owners belonging to specific HubSpot team IDs (primary team check). */
+export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id: string; email: string; name: string }>> {
+  if (isDemo() || !teamIds.length) return []
+  try {
+    // Search CRM users where primary team is one of the given IDs (OR logic via multiple filterGroups)
+    const searchRes = await hsProxy('POST', '/crm/v3/objects/users/search', {
+      filterGroups: teamIds.map(id => ({
+        filters: [{ propertyName: 'hubspot_team_id', operator: 'EQ', value: id }],
+      })),
+      properties: ['hs_email'],
+      limit: 100,
+    })
+    if (!searchRes.ok) {
+      console.error('[hs] fetchOwnersByTeams search failed:', searchRes.status)
+      return []
+    }
+    const users = (await searchRes.json()).results || []
+    const emails = new Set<string>(
+      (users as any[]).map(u => u.properties?.hs_email).filter(Boolean)
+    )
+    if (!emails.size) return []
+
+    // Cross-reference with owners to get owner IDs
+    const ownersRes = await hsProxy('GET', '/crm/v3/owners?limit=100&archived=false')
+    if (!ownersRes.ok) return []
+    const owners = (await ownersRes.json()).results || []
+    return (owners as any[])
+      .filter(o => emails.has(o.email))
+      .map(o => ({
+        id: String(o.id),
+        email: o.email,
+        name: [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email,
+      }))
+  } catch (e) {
+    console.error('[hs] fetchOwnersByTeams error:', e)
     return []
   }
 }

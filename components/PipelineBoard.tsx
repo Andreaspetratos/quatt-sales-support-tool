@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchAllOwners } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchAllOwners, fetchOwnersByTeams } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
@@ -136,7 +136,7 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
 
   // Load all HubSpot owners once when modal opens
   useEffect(() => {
-    fetchAllOwners().then(list => {
+    fetchOwnersByTeams(['140339728', '146169755', '146180338', '187118858']).then(list => {
       setOwners(list)
       // Pre-select current rep if not already set
       if (!draft.assigneeOwnerId && state.currentRep?.hubspotOwnerId) {
@@ -302,6 +302,11 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const P = CONFIG.PROPS
 
+  const [filterProduct, setFilterProduct] = useState<string>('')
+  const [filterOutcome, setFilterOutcome] = useState<string>('')
+  const [sortCol, setSortCol] = useState<'time' | 'product' | 'outcome' | ''>('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
   if (!state.leads.length) {
     return (
       <div className="es">
@@ -312,21 +317,82 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
     )
   }
 
+  // Unique values for filter dropdowns
+  const products = Array.from(new Set(state.leads.map(l => l.properties[P.product] || '').filter(Boolean))).sort()
+  const outcomes = Array.from(new Set(state.leads.map(l => l.properties[P.callOutcome] || '').filter(Boolean))).sort()
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
+  function sortIcon(col: typeof sortCol) {
+    if (sortCol !== col) return ' ↕'
+    return sortDir === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  let leads = [...state.leads]
+  if (filterProduct) leads = leads.filter(l => l.properties[P.product] === filterProduct)
+  if (filterOutcome) leads = leads.filter(l => l.properties[P.callOutcome] === filterOutcome)
+  if (sortCol === 'time') leads.sort((a, b) => {
+    const av = new Date(a.properties[P.requestedAt] || 0).getTime()
+    const bv = new Date(b.properties[P.requestedAt] || 0).getTime()
+    return sortDir === 'asc' ? av - bv : bv - av
+  })
+  if (sortCol === 'product') leads.sort((a, b) => {
+    const av = a.properties[P.product] || ''
+    const bv = b.properties[P.product] || ''
+    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+  })
+  if (sortCol === 'outcome') leads.sort((a, b) => {
+    const av = a.properties[P.callOutcome] || ''
+    const bv = b.properties[P.callOutcome] || ''
+    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+  })
+
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--gl)', flexWrap: 'wrap' }}>
+        <select
+          value={filterProduct}
+          onChange={e => setFilterProduct(e.target.value)}
+          style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gl)', background: 'var(--bg)', color: 'var(--tx)', cursor: 'pointer' }}
+        >
+          <option value="">{t('filterProduct')}</option>
+          {products.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select
+          value={filterOutcome}
+          onChange={e => setFilterOutcome(e.target.value)}
+          style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gl)', background: 'var(--bg)', color: 'var(--tx)', cursor: 'pointer' }}
+        >
+          <option value="">{t('filterOutcome')}</option>
+          {outcomes.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        {(filterProduct || filterOutcome) && (
+          <button
+            onClick={() => { setFilterProduct(''); setFilterOutcome('') }}
+            style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gl)', background: 'transparent', color: 'var(--cs)', cursor: 'pointer' }}
+          >✕ {t('filterClear')}</button>
+        )}
+        <span style={{ fontSize: 11, color: 'var(--cs)', marginLeft: 'auto', alignSelf: 'center' }}>
+          {leads.length} / {state.leads.length}
+        </span>
+      </div>
       <table>
         <thead>
           <tr>
             <th>{t('colName')}</th>
-            <th>{t('colTime')}</th>
+            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('time')}>{t('colTime')}{sortIcon('time')}</th>
             <th>{t('colPhone')}</th>
-            <th>{t('colProduct')}</th>
-            <th>{t('colOutcome')}</th>
+            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('product')}>{t('colProduct')}{sortIcon('product')}</th>
+            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('outcome')}>{t('colOutcome')}{sortIcon('outcome')}</th>
             <th>Stage</th>
           </tr>
         </thead>
         <tbody>
-          {state.leads.map(deal => {
+          {leads.map(deal => {
             const p = deal.properties
             const tasks = dealOpenTasks(deal.id)
             return (

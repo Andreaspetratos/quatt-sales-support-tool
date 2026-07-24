@@ -83,17 +83,28 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
   )
 }
 
-function SchedModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
+function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; onBooked: () => void }) {
   const { setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const sched = getScheduler(deal)
+  const [confirming, setConfirming] = useState(false)
+
+  function handleClose() {
+    setConfirming(true)
+  }
+
+  function handleBooked(yes: boolean) {
+    setConfirming(false)
+    if (yes) onBooked()
+    setState({ modal: null })
+  }
 
   return (
-    <div className="mb" onClick={e => { if (e.target === e.currentTarget) setState({ modal: null }) }}>
+    <div className="mb" onClick={e => { if (e.target === e.currentTarget) handleClose() }}>
       <div className="mo">
         <div className="moh">
           <div className="mot">{sched?.name || t('schedTitle')}</div>
-          <button className="xb" onClick={() => setState({ modal: null })}>✕</button>
+          <button className="xb" onClick={handleClose}>✕</button>
         </div>
         <div className="mob">
           {!sched
@@ -109,9 +120,26 @@ function SchedModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
           }
         </div>
         <div className="mof">
-          <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: null })}>{t('close')}</button>
+          <button className="btn btn-sc btn-sm" onClick={handleClose}>{t('close')}</button>
         </div>
       </div>
+      {/* Booking confirmation overlay */}
+      {confirming && (
+        <div className="mb" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+          <div className="mo" style={{ maxWidth: 380 }}>
+            <div className="moh">
+              <div className="mot">{t('schedBooked')}</div>
+            </div>
+            <div className="mob" style={{ textAlign: 'center', padding: '16px 0' }}>
+              <p style={{ marginBottom: 16, color: 'var(--tx)' }}>{t('schedBookedQ')}</p>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button className="btn btn-gn btn-sm" onClick={() => handleBooked(true)}>{t('yes')}</button>
+                <button className="btn btn-sc btn-sm" onClick={() => handleBooked(false)}>{t('no')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -181,7 +209,7 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
 
 // ── DealModal ─────────────────────────────────────────────────────────────────
 export default function DealModal() {
-  const { state, setState, selectLead } = useApp()
+  const { state, setState, selectLead, patchLeadLocal } = useApp()
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
 
@@ -257,12 +285,11 @@ export default function DealModal() {
     })
   }
 
-  async function handleHV() {
+  async function handleCallResult(value: string) {
     try {
-      await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.SQL }, state.leads, leads => setState({ leads }))
-      // Lead moves to SQL → no longer in MQL view → remove from list
-      setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
-      showToast(t('toastHV'), 'success')
+      await patchLeadApi(dealId, { [CONFIG.PROPS.callResult]: value }, state.leads, leads => setState({ leads }))
+      patchLeadLocal(dealId, { [CONFIG.PROPS.callResult]: value })
+      showToast(value, 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
     }
@@ -329,24 +356,24 @@ export default function DealModal() {
 
             <div className="dv" />
 
-            {/* Call outcome */}
-            <div className="sl2">{t('callOutcomeLabel')}</div>
-            <CallOutcomeSection dealId={deal.id} lang={lang} />
-
-            <div className="dv" />
-
-            {/* Playbook */}
-            <div className="sl2">{t('pbLabel')}</div>
-            <PlaybookView
-              dealId={deal.id}
-              pbDefs={pbDefs.map(pi => ({ key: pi.key, def: pi.def }))}
-            />
+            {/* Playbook — only when product is selected */}
+            {p[P.product] && pbDefs.length > 0 && (
+              <>
+                <div className="dv" />
+                <div className="sl2">{t('pbLabel')}</div>
+                <PlaybookView
+                  dealId={deal.id}
+                  pbDefs={pbDefs.map(pi => ({ key: pi.key, def: pi.def }))}
+                />
+              </>
+            )}
           </div>
 
           {/* Footer */}
           <div className="dm-foot" style={{ position: 'relative' }}>
-            <button className="btn btn-gn btn-sm" onClick={handleHV}>{t('homeVisit')}</button>
+            <button className="btn btn-gn btn-sm" onClick={() => handleCallResult('Plan HV')}>{t('homeVisit')}</button>
             <button className="btn btn-sc btn-sm" onClick={openSched}>{schedLabel}</button>
+            <button className="btn btn-dn btn-sm" onClick={() => handleCallResult('Lost')}>{t('markLost')}</button>
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
               {t('taskAddFromDeal')}
               {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
@@ -366,7 +393,7 @@ export default function DealModal() {
         <LostModal dealId={deal.id} lang={lang} />
       )}
       {state.modal === 'sched' && state.modalDealId === deal.id && (
-        <SchedModal deal={deal} lang={lang} />
+        <SchedModal deal={deal} lang={lang} onBooked={() => handleCallResult('Plan Call')} />
       )}
     </>
   )

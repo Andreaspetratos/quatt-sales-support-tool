@@ -58,15 +58,7 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
           </svg>
           <span className="tb-tag">{t('appTitle')}</span>
           {demo && <span className="dp">DEMO</span>}
-          {state.screen === 'admin' && (
-            <button
-              className="btn btn-xs"
-              style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent' }}
-              onClick={goBack}
-            >
-              {t('backToSales')}
-            </button>
-          )}
+
         </div>
 
         <div className="tb-r">
