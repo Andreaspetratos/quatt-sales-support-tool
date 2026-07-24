@@ -136,7 +136,7 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
 
   // Load all HubSpot owners once when modal opens
   useEffect(() => {
-    fetchOwnersByTeams(['140339728', '146169755', '146180338', '187118858']).then(list => {
+    fetchOwnersByTeams(['140339728', '146169755', '146180338', '187118858', '187124885']).then(list => {
       setOwners(list)
       // Pre-select current rep if not already set
       if (!draft.assigneeOwnerId && state.currentRep?.hubspotOwnerId) {
@@ -306,6 +306,19 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
   const [filterOutcome, setFilterOutcome] = useState<string>('')
   const [sortCol, setSortCol] = useState<'time' | 'product' | 'outcome' | ''>('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [openFilter, setOpenFilter] = useState<'product' | 'outcome' | null>(null)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!openFilter) return
+    function onClickOutside(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setOpenFilter(null)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [openFilter])
 
   if (!state.leads.length) {
     return (
@@ -350,44 +363,79 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
     return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
   })
 
+  const filterDropStyle: React.CSSProperties = {
+    position: 'absolute', top: '100%', left: 0, zIndex: 200,
+    background: 'var(--bg)', border: '1px solid var(--gl)',
+    borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.18)',
+    minWidth: 160, padding: '4px 0', marginTop: 2,
+  }
+  const filterItemStyle = (active: boolean): React.CSSProperties => ({
+    display: 'block', width: '100%', textAlign: 'left',
+    padding: '5px 12px', fontSize: 12, border: 'none',
+    background: active ? 'var(--cp)' : 'transparent',
+    color: active ? '#fff' : 'var(--tx)', cursor: 'pointer',
+  })
+
+  function FilterTh({ col, label, value, values, onSet, sortable }: {
+    col: 'product' | 'outcome', label: string, value: string,
+    values: string[], onSet: (v: string) => void, sortable?: boolean
+  }) {
+    const isOpen = openFilter === col
+    const hasFilter = !!value
+    return (
+      <th style={{ position: 'relative', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {sortable
+            ? <span style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSort(col)}>{label}{sortIcon(col)}</span>
+            : <span style={{ flex: 1 }}>{label}</span>
+          }
+          <button
+            onClick={e => { e.stopPropagation(); setOpenFilter(isOpen ? null : col) }}
+            title="Filter"
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer', padding: '0 2px',
+              color: hasFilter ? 'var(--cp)' : 'var(--cs)', fontSize: 11, lineHeight: 1,
+            }}
+          >{hasFilter ? '▼' : '▽'}</button>
+        </div>
+        {isOpen && (
+          <div ref={filterRef} style={filterDropStyle} onClick={e => e.stopPropagation()}>
+            <button style={filterItemStyle(!value)} onClick={() => { onSet(''); setOpenFilter(null) }}>
+              {t('filterClear')} (all)
+            </button>
+            {values.map(v => (
+              <button key={v} style={filterItemStyle(value === v)} onClick={() => { onSet(v); setOpenFilter(null) }}>
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
+      </th>
+    )
+  }
+
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-      {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--gl)', flexWrap: 'wrap' }}>
-        <select
-          value={filterProduct}
-          onChange={e => setFilterProduct(e.target.value)}
-          style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gl)', background: 'var(--bg)', color: 'var(--tx)', cursor: 'pointer' }}
-        >
-          <option value="">{t('filterProduct')}</option>
-          {products.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select
-          value={filterOutcome}
-          onChange={e => setFilterOutcome(e.target.value)}
-          style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gl)', background: 'var(--bg)', color: 'var(--tx)', cursor: 'pointer' }}
-        >
-          <option value="">{t('filterOutcome')}</option>
-          {outcomes.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-        {(filterProduct || filterOutcome) && (
-          <button
-            onClick={() => { setFilterProduct(''); setFilterOutcome('') }}
-            style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gl)', background: 'transparent', color: 'var(--cs)', cursor: 'pointer' }}
-          >✕ {t('filterClear')}</button>
-        )}
-        <span style={{ fontSize: 11, color: 'var(--cs)', marginLeft: 'auto', alignSelf: 'center' }}>
-          {leads.length} / {state.leads.length}
-        </span>
-      </div>
       <table>
         <thead>
           <tr>
-            <th>{t('colName')}</th>
+            <th>
+              {t('colName')}
+              {(filterProduct || filterOutcome) && (
+                <span
+                  onClick={() => { setFilterProduct(''); setFilterOutcome('') }}
+                  title={t('filterClear')}
+                  style={{ marginLeft: 6, cursor: 'pointer', color: 'var(--cp)', fontSize: 10 }}
+                >✕</span>
+              )}
+              <span style={{ float: 'right', fontSize: 10, color: 'var(--cs)', fontWeight: 400 }}>
+                {leads.length}/{state.leads.length}
+              </span>
+            </th>
             <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('time')}>{t('colTime')}{sortIcon('time')}</th>
             <th>{t('colPhone')}</th>
-            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('product')}>{t('colProduct')}{sortIcon('product')}</th>
-            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('outcome')}>{t('colOutcome')}{sortIcon('outcome')}</th>
+            <FilterTh col="product" label={t('colProduct')} value={filterProduct} values={products} onSet={setFilterProduct} sortable />
+            <FilterTh col="outcome" label={t('colOutcome')} value={filterOutcome} values={outcomes} onSet={setFilterOutcome} sortable />
             <th>Stage</th>
           </tr>
         </thead>

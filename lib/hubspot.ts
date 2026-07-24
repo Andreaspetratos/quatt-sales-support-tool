@@ -278,7 +278,7 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
 
 
 // ── Admin team check ──────────────────────────────────────────────────────────
-const ADMIN_TEAM_ID = '187118858'
+const ADMIN_TEAM_IDS = ['187118858', '187124885']
 
 export async function fetchIsAdmin(userId: string): Promise<boolean> {
   if (isDemo() || !userId) return false
@@ -290,7 +290,7 @@ export async function fetchIsAdmin(userId: string): Promise<boolean> {
     const primary   = (data.properties?.hubspot_team_id          || '').trim()
     const secondary = (data.properties?.hs_user_secondary_teams  || '').trim()
     const allTeams  = [primary, ...secondary.split(';')].map(t => t.trim()).filter(Boolean)
-    const isAdm = allTeams.includes(ADMIN_TEAM_ID)
+    const isAdm = allTeams.some(t => ADMIN_TEAM_IDS.includes(t))
     console.log('[hs] fetchIsAdmin teams:', allTeams, '→', isAdm)
     return isAdm
   } catch (e) {
