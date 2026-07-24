@@ -235,7 +235,7 @@ export default function DealModal() {
   const dealId = deal.id
   const p = deal.properties
   const P = CONFIG.PROPS
-  const pbDefs = getPlaybookDefs(deal)
+  const pbDefs = getPlaybookDefs(deal, state.playbooks.length > 0 ? state.playbooks : undefined)
 
   function closeDeal() {
     selectLead(null)

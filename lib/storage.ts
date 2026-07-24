@@ -112,3 +112,29 @@ export function completeTask(id: string): void {
 export function deleteTask(id: string): void {
   saveTasks(loadTasks().filter(t => t.id !== id))
 }
+
+// ── Shared playbooks (Cloudflare KV via /api/playbooks) ───────────────────────
+export async function fetchSharedPbs(): Promise<import('./types').Playbook[]> {
+  try {
+    const res = await fetch('/api/playbooks')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return await res.json()
+  } catch (e) {
+    console.error('[storage] fetchSharedPbs error:', e)
+    return []
+  }
+}
+
+export async function storeSharedPbs(pbs: import('./types').Playbook[]): Promise<void> {
+  try {
+    const res = await fetch('/api/playbooks', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pbs),
+    })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+  } catch (e) {
+    console.error('[storage] storeSharedPbs error:', e)
+    throw e
+  }
+}

@@ -145,6 +145,8 @@ export interface AppState {
   lang: Lang
   currentRep: Rep | null
   userAvatar: string | null
+  isAdmin: boolean
+  playbooks: Playbook[]
   leads: Lead[]
   selectedId: string | null
   loading: boolean

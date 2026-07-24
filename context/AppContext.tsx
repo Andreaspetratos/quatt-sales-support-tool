@@ -14,6 +14,8 @@ const initialState: AppState = {
   lang: 'nl',
   currentRep: null,
   userAvatar: null,
+  isAdmin: false,
+  playbooks: [],
   leads: [],
   selectedId: null,
   loading: false,

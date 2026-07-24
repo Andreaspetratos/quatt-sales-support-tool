@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { loadPbs, savePbs, loadScheds, saveScheds, uid } from '@/lib/storage'
+import { loadScheds, saveScheds, storeSharedPbs, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome } from '@/lib/types'
@@ -363,7 +363,8 @@ function PlaybookEditor({
     )
   }
 
-  const pbJson = JSON.stringify(loadPbs(), null, 2)
+  const { state } = useApp()
+  const pbJson = JSON.stringify(state.playbooks, null, 2)
   const schJson = JSON.stringify(loadScheds(), null, 2)
 
   return (
@@ -691,7 +692,7 @@ function HsDiagnostics({ ownerId }: { ownerId: string }) {
 
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
 export default function AdminPanel() {
-  const { state } = useApp()
+  const { state, setState } = useApp()
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
 
@@ -702,28 +703,33 @@ export default function AdminPanel() {
   const [, forceUpdate] = useState(0)
   const refresh = () => forceUpdate(n => n + 1)
 
-  const pbs = loadPbs()
+  const pbs = state.playbooks
   const scheds = loadScheds()
   const selectedPb = pbs.find(p => p.id === selectedPbId) || null
 
   function newPb() {
     const nb: Playbook = { id: uid(), name: '', productMatches: [], phases: [] }
-    savePbs([nb, ...loadPbs()])
+    const updated = [nb, ...state.playbooks]
+    setState({ playbooks: updated })
+    storeSharedPbs(updated).catch(e => console.error('[admin] save playbooks failed:', e))
     setSelectedPbId(nb.id)
     refresh()
   }
 
   function savePb(pb: Playbook) {
-    const all = loadPbs()
+    const all = [...state.playbooks]
     const idx = all.findIndex(p => p.id === pb.id)
     if (idx >= 0) all[idx] = pb; else all.unshift(pb)
-    savePbs(all)
+    setState({ playbooks: all })
+    storeSharedPbs(all).catch(e => console.error('[admin] save playbooks failed:', e))
     showToast(t('toastSaved'), 'success')
     refresh()
   }
 
   function deletePb(id: string) {
-    savePbs(loadPbs().filter(p => p.id !== id))
+    const filtered = state.playbooks.filter(p => p.id !== id)
+    setState({ playbooks: filtered })
+    storeSharedPbs(filtered).catch(e => console.error('[admin] save playbooks failed:', e))
     if (selectedPbId === id) setSelectedPbId(null)
     refresh()
   }

@@ -167,9 +167,9 @@ export function seedBuiltinPlaybooks(): void {
 }
 
 // ── Get matching playbooks for a deal ─────────────────────────────────────────
-export function getPlaybookDefs(deal: Deal): PlaybookInfo[] {
+export function getPlaybookDefs(deal: Deal, customs?: Playbook[]): PlaybookInfo[] {
   const prod = (deal?.properties?.[CONFIG.PROPS.product] || '').toLowerCase()
-  const customs = loadPbs()
+  if (!customs) customs = loadPbs()
   const results: PlaybookInfo[] = []
 
   customs.forEach(p => {

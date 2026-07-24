@@ -235,6 +235,29 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
   }
 }
 
+
+// ── Admin team check ──────────────────────────────────────────────────────────
+const ADMIN_TEAM_ID = '187118858'
+
+export async function fetchIsAdmin(userId: string): Promise<boolean> {
+  if (isDemo() || !userId) return false
+  try {
+    const res = await hsProxy('GET',
+      `/crm/v3/objects/users/${userId}?properties=hubspot_team_id,hs_user_secondary_teams`)
+    if (!res.ok) return false
+    const data = await res.json()
+    const primary   = (data.properties?.hubspot_team_id          || '').trim()
+    const secondary = (data.properties?.hs_user_secondary_teams  || '').trim()
+    const allTeams  = [primary, ...secondary.split(';')].map(t => t.trim()).filter(Boolean)
+    const isAdm = allTeams.includes(ADMIN_TEAM_ID)
+    console.log('[hs] fetchIsAdmin teams:', allTeams, '→', isAdm)
+    return isAdm
+  } catch (e) {
+    console.error('[hs] fetchIsAdmin error:', e)
+    return false
+  }
+}
+
 // ── Performance ───────────────────────────────────────────────────────────────
 export function generateDemoPerf(): PerfData {
   return {

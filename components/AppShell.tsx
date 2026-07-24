@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { seedBuiltinPlaybooks } from '@/lib/playbooks'
 import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
+import { fetchSharedPbs } from '@/lib/storage'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
@@ -48,6 +49,13 @@ function Shell() {
       .then(data => setState({ perfData: data, perfLoading: false }))
       .catch(() => setState({ perfLoading: false }))
   }, [currentRep?.hubspotOwnerId])
+
+  // Load shared playbooks from KV on mount (and whenever user logs in)
+  useEffect(() => {
+    fetchSharedPbs().then(pbs => {
+      if (pbs.length > 0) setState({ playbooks: pbs })
+    })
+  }, [currentRep?.email])
 
   return (
     <div

@@ -43,7 +43,7 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
     setState({ screen: 'dashboard' })
   }
 
-  const isAdmin = state.currentRep && CONFIG.ADMINS.includes(state.currentRep.email)
+  const isAdmin = state.isAdmin
   const currentTheme = typeof document !== 'undefined'
     ? document.documentElement.getAttribute('data-theme')
     : 'light'
