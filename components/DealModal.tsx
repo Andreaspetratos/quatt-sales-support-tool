@@ -292,12 +292,16 @@ export default function DealModal() {
   }
 
   async function handleCallResult(value: string) {
+    const needsDeal = value === 'Plan HV' || value === 'Plan Call'
+    if (needsDeal) {
+      // Show loading overlay immediately — before any await — so it renders in the same tick
+      setDealLoading(true)
+      setDealNotif(null)
+    }
     try {
       await patchLeadApi(dealId, { [CONFIG.PROPS.callResult]: value }, state.leads, leads => setState({ leads }))
       patchLeadLocal(dealId, { [CONFIG.PROPS.callResult]: value })
-      if (value === 'Plan HV' || value === 'Plan Call') {
-        setDealLoading(true)
-        setDealNotif(null)
+      if (needsDeal) {
         // Poll for associated deal — HubSpot creates it ~30s after lead moves to SQL
         const MAX_ATTEMPTS = 12
         const INTERVAL_MS = 5000
