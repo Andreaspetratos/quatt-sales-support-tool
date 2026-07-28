@@ -165,6 +165,8 @@ export interface AppState {
   // performance drawer
   perfOpen: boolean
   helpOpen: boolean
+  dealLoading: boolean
+  dealNotif: { id: string; name: string; hvSchedulerUrl: string | null } | null
   perfPeriod: PerfPeriod
   perfData: PerfData | null
   perfLoading: boolean

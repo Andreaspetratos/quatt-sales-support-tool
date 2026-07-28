@@ -31,6 +31,8 @@ const initialState: AppState = {
   dmH: null,
   perfOpen: false,
   helpOpen: false,
+  dealLoading: false,
+  dealNotif: null,
   perfPeriod: 'today',
   perfData: null,
   perfLoading: false,
