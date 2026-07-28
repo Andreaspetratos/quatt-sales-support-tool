@@ -257,6 +257,10 @@ export default function DealModal() {
     document.addEventListener('mouseup', onUp)
   }, [setState])
 
+  // ── Deal notification state (must be before early return) ───────────────────
+  const [dealNotif, setDealNotif] = useState<AssociatedDeal | null>(null)
+  const [dealLoading, setDealLoading] = useState(false)
+
   // ── Deal-specific setup (after hooks) ──────────────────────────────────────
   const deal = state.leads.find(l => l.id === state.selectedId)
   if (!deal) return null
@@ -271,8 +275,6 @@ export default function DealModal() {
     selectLead(null)
     setState({ dmX: null, dmY: null, dmW: null, dmH: null })
   }
-
-  const [dealNotif, setDealNotif] = useState<AssociatedDeal | null>(null)
 
   function openLost() {
     setState({ modal: 'lost', modalDealId: dealId })
@@ -293,13 +295,34 @@ export default function DealModal() {
     try {
       await patchLeadApi(dealId, { [CONFIG.PROPS.callResult]: value }, state.leads, leads => setState({ leads }))
       patchLeadLocal(dealId, { [CONFIG.PROPS.callResult]: value })
-      showToast(value, 'success')
       if (value === 'Plan HV' || value === 'Plan Call') {
-        fetchAssociatedDeal(dealId).then(deal => {
-          if (deal) setDealNotif(deal)
-        })
+        setDealLoading(true)
+        setDealNotif(null)
+        // Poll for associated deal — HubSpot creates it ~30s after lead moves to SQL
+        const MAX_ATTEMPTS = 12
+        const INTERVAL_MS = 5000
+        let attempts = 0
+        const poll = async (): Promise<void> => {
+          attempts++
+          const found = await fetchAssociatedDeal(dealId)
+          if (found) {
+            setDealLoading(false)
+            setDealNotif({ ...found, hvSchedulerUrl: value === 'Plan HV' ? found.hvSchedulerUrl : null })
+            return
+          }
+          if (attempts < MAX_ATTEMPTS) {
+            setTimeout(poll, INTERVAL_MS)
+          } else {
+            setDealLoading(false)
+            showToast(lang === 'nl' ? 'Deal nog niet beschikbaar' : 'Deal not yet available — check HubSpot shortly', 'error')
+          }
+        }
+        poll()
+      } else {
+        showToast(value, 'success')
       }
     } catch (e: any) {
+      setDealLoading(false)
       showToast(t('errLoad', e.message), 'error')
     }
   }
@@ -397,20 +420,38 @@ export default function DealModal() {
         </div>
       </div>
 
+      {/* Deal loading overlay */}
+      {dealLoading && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 400,
+          background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(3px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16,
+        }}>
+          <div style={{ fontSize: 48, animation: 'spin 2s linear infinite' }}>⏳</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
+            {lang === 'nl' ? 'Afspraak boeken…' : 'Booking appointment…'}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.7)' }}>
+            {lang === 'nl' ? 'Deal wordt aangemaakt in HubSpot' : 'Deal is being created in HubSpot'}
+          </div>
+          <style>{`@keyframes spin { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(20deg)} }`}</style>
+        </div>
+      )}
+
       {/* Deal notification banner */}
       {dealNotif && (
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--bg)', border: '1px solid var(--cp)',
-          borderRadius: 12, padding: '14px 20px', zIndex: 500,
-          boxShadow: '0 4px 24px rgba(0,0,0,.2)', minWidth: 320, maxWidth: 480,
+          background: 'var(--bg)', border: '2px solid var(--cp)',
+          borderRadius: 12, padding: '16px 20px', zIndex: 500,
+          boxShadow: '0 4px 24px rgba(0,0,0,.25)', minWidth: 320, maxWidth: 480,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, color: 'var(--cs)', marginBottom: 4 }}>
                 {lang === 'nl' ? '🎉 Deal aangemaakt in Consumer Orders' : '🎉 Deal created in Consumer Orders'}
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)', marginBottom: dealNotif.hvSchedulerUrl ? 8 : 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--tx)', marginBottom: dealNotif.hvSchedulerUrl ? 10 : 0 }}>
                 {dealNotif.name}
               </div>
               {dealNotif.hvSchedulerUrl && (
@@ -418,15 +459,19 @@ export default function DealModal() {
                   href={dealNotif.hvSchedulerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ fontSize: 12, color: 'var(--cp)', textDecoration: 'underline', wordBreak: 'break-all' }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontSize: 13, color: '#fff', background: 'var(--cp)',
+                    padding: '6px 12px', borderRadius: 8, textDecoration: 'none', fontWeight: 600,
+                  }}
                 >
-                  {lang === 'nl' ? '🗓 Open Home Visit planner' : '🗓 Open Home Visit scheduler'}
+                  🗓 {lang === 'nl' ? 'Open Home Visit planner' : 'Open Home Visit scheduler'}
                 </a>
               )}
             </div>
             <button
               onClick={() => setDealNotif(null)}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--cs)', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--cs)', fontSize: 18, lineHeight: 1, flexShrink: 0 }}
             >✕</button>
           </div>
         </div>
