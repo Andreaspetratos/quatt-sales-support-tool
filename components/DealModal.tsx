@@ -30,23 +30,32 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [options, setOptions] = useState<Array<{ label: string; value: string }>>([])
-  const [selectedValue, setSelectedValue] = useState('')
+  const [selected, setSelected] = useState<string[]>([])
 
   useEffect(() => {
     fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(opts => {
       if (opts.length > 0) {
         setOptions(opts)
       } else {
-        // fallback to i18n options for demo mode
         setOptions(translateArr(lang, 'lostReasons').map(o => ({ label: o, value: o })))
       }
     })
   }, [])
 
+  function toggleOption(value: string) {
+    setSelected(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
+  }
+
   async function confirmLost() {
-    if (!selectedValue) { showToast(t('errReason'), 'error'); return }
+    if (!selected.length) { showToast(t('errReason'), 'error'); return }
     try {
-      await patchLeadApi(dealId, { hs_pipeline_stage: CONFIG.STAGES.LOST, [CONFIG.PROPS.lostReasons]: selectedValue }, state.leads, leads => setState({ leads }))
+      // HubSpot multi-checkbox values are semicolon-separated
+      const reasonsValue = selected.join(';')
+      await patchLeadApi(dealId, {
+        hs_pipeline_stage: CONFIG.STAGES.LOST,
+        [CONFIG.PROPS.lostReasons]: reasonsValue,
+        [CONFIG.PROPS.callResult]: 'Lost',
+      }, state.leads, leads => setState({ leads }))
       setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastLost'), 'success')
     } catch (e: any) {
@@ -64,19 +73,29 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
         <div className="mob">
           <div className="iw">
             <label className="il">{t('lostReason')} <span style={{ color: 'var(--rd)' }}>*</span></label>
-            <select className="sel" value={selectedValue} onChange={e => setSelectedValue(e.target.value)}>
-              <option value="">--</option>
-              {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="iw">
-            <label className="il">{t('lostNote')}</label>
-            <textarea className="ta" rows={3} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              {options.map(o => (
+                <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--tx)' }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(o.value)}
+                    onChange={() => toggleOption(o.value)}
+                    style={{ width: 16, height: 16, accentColor: 'var(--rd)', cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  {o.label}
+                </label>
+              ))}
+              {options.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--cs)' }}>Loading…</span>
+              )}
+            </div>
           </div>
         </div>
         <div className="mof">
           <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: null })}>{t('cancel')}</button>
-          <button className="btn btn-dn btn-sm" onClick={confirmLost}>{t('confirm')}</button>
+          <button className="btn btn-dn btn-sm" onClick={confirmLost} disabled={!selected.length}>
+            {t('confirm')}
+          </button>
         </div>
       </div>
     </div>
@@ -373,7 +392,7 @@ export default function DealModal() {
           <div className="dm-foot" style={{ position: 'relative' }}>
             <button className="btn btn-gn btn-sm" onClick={() => handleCallResult('Plan HV')}>{t('homeVisit')}</button>
             <button className="btn btn-sc btn-sm" onClick={openSched}>{schedLabel}</button>
-            <button className="btn btn-dn btn-sm" onClick={() => handleCallResult('Lost')}>{t('markLost')}</button>
+            <button className="btn btn-dn btn-sm" onClick={openLost}>{t('markLost')}</button>
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
               {t('taskAddFromDeal')}
               {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
