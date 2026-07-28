@@ -5,7 +5,8 @@ import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
 import { loadScheds } from '@/lib/storage'
-import { patchLead as patchLeadApi, aircallDial, fetchLeadPropertyOptions } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, aircallDial, fetchLeadPropertyOptions, fetchAssociatedDeal } from '@/lib/hubspot'
+import type { AssociatedDeal } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -271,6 +272,8 @@ export default function DealModal() {
     setState({ dmX: null, dmY: null, dmW: null, dmH: null })
   }
 
+  const [dealNotif, setDealNotif] = useState<AssociatedDeal | null>(null)
+
   function openLost() {
     setState({ modal: 'lost', modalDealId: dealId })
   }
@@ -291,6 +294,11 @@ export default function DealModal() {
       await patchLeadApi(dealId, { [CONFIG.PROPS.callResult]: value }, state.leads, leads => setState({ leads }))
       patchLeadLocal(dealId, { [CONFIG.PROPS.callResult]: value })
       showToast(value, 'success')
+      if (value === 'Plan HV' || value === 'Plan Call') {
+        fetchAssociatedDeal(dealId).then(deal => {
+          if (deal) setDealNotif(deal)
+        })
+      }
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
     }
@@ -388,6 +396,41 @@ export default function DealModal() {
           </div>
         </div>
       </div>
+
+      {/* Deal notification banner */}
+      {dealNotif && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--bg)', border: '1px solid var(--cp)',
+          borderRadius: 12, padding: '14px 20px', zIndex: 500,
+          boxShadow: '0 4px 24px rgba(0,0,0,.2)', minWidth: 320, maxWidth: 480,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'var(--cs)', marginBottom: 4 }}>
+                {lang === 'nl' ? '🎉 Deal aangemaakt in Consumer Orders' : '🎉 Deal created in Consumer Orders'}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--tx)', marginBottom: dealNotif.hvSchedulerUrl ? 8 : 0 }}>
+                {dealNotif.name}
+              </div>
+              {dealNotif.hvSchedulerUrl && (
+                <a
+                  href={dealNotif.hvSchedulerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 12, color: 'var(--cp)', textDecoration: 'underline', wordBreak: 'break-all' }}
+                >
+                  {lang === 'nl' ? '🗓 Open Home Visit planner' : '🗓 Open Home Visit scheduler'}
+                </a>
+              )}
+            </div>
+            <button
+              onClick={() => setDealNotif(null)}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--cs)', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+            >✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Nested modals */}
       {state.modal === 'lost' && state.modalDealId === deal.id && (

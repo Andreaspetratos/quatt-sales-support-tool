@@ -403,6 +403,48 @@ export async function fetchLeadPropertyOptions(
   }
 }
 
+// ── Fetch the deal associated with a lead (created when lead moves to SQL) ────
+export interface AssociatedDeal {
+  id: string
+  name: string
+  hvSchedulerUrl: string | null
+}
+
+export async function fetchAssociatedDeal(leadId: string): Promise<AssociatedDeal | null> {
+  if (isDemo() || !leadId) return null
+  try {
+    // Step 1: get association IDs
+    const assocRes = await hsProxy('GET', `/crm/v4/objects/leads/${leadId}/associations/deals`)
+    if (!assocRes.ok) {
+      console.error('[hs] fetchAssociatedDeal assoc failed:', assocRes.status)
+      return null
+    }
+    const assocData = await assocRes.json()
+    const results: Array<{ toObjectId: string }> = assocData.results || []
+    if (!results.length) return null
+
+    // Use the first (most recent) associated deal
+    const dealId = results[0].toObjectId
+
+    // Step 2: fetch deal properties
+    const dealRes = await hsProxy('GET',
+      `/crm/v3/objects/deals/${dealId}?properties=dealname,home_visit_internal_scheduler_url`)
+    if (!dealRes.ok) {
+      console.error('[hs] fetchAssociatedDeal deal fetch failed:', dealRes.status)
+      return null
+    }
+    const dealData = await dealRes.json()
+    return {
+      id: dealId,
+      name: dealData.properties?.dealname || 'Deal',
+      hvSchedulerUrl: dealData.properties?.home_visit_internal_scheduler_url || null,
+    }
+  } catch (e) {
+    console.error('[hs] fetchAssociatedDeal error:', e)
+    return null
+  }
+}
+
 export async function fetchAllLeadProperties(): Promise<Array<{ name: string; label: string; type: string; fieldType: string }>> {
   if (isDemo()) return []
   try {
