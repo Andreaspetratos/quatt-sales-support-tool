@@ -30,7 +30,7 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [options, setOptions] = useState<Array<{ label: string; value: string }>>([])
-  const [selected, setSelected] = useState<string[]>([])
+  const [selected, setSelected] = useState<string>('')
 
   useEffect(() => {
     fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(opts => {
@@ -42,18 +42,12 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
     })
   }, [])
 
-  function toggleOption(value: string) {
-    setSelected(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
-  }
-
   async function confirmLost() {
-    if (!selected.length) { showToast(t('errReason'), 'error'); return }
+    if (!selected) { showToast(t('errReason'), 'error'); return }
     try {
-      // HubSpot multi-checkbox values are semicolon-separated
-      const reasonsValue = selected.join(';')
       await patchLeadApi(dealId, {
         hs_pipeline_stage: CONFIG.STAGES.LOST,
-        [CONFIG.PROPS.lostReasons]: reasonsValue,
+        [CONFIG.PROPS.lostReasons]: selected,
         [CONFIG.PROPS.callResult]: 'Lost',
       }, state.leads, leads => setState({ leads }))
       setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
@@ -73,27 +67,15 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
         <div className="mob">
           <div className="iw">
             <label className="il">{t('lostReason')} <span style={{ color: 'var(--rd)' }}>*</span></label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-              {options.map(o => (
-                <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--tx)' }}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(o.value)}
-                    onChange={() => toggleOption(o.value)}
-                    style={{ width: 16, height: 16, accentColor: 'var(--rd)', cursor: 'pointer', flexShrink: 0 }}
-                  />
-                  {o.label}
-                </label>
-              ))}
-              {options.length === 0 && (
-                <span style={{ fontSize: 12, color: 'var(--cs)' }}>Loading…</span>
-              )}
-            </div>
+            <select className="sel" value={selected} onChange={e => setSelected(e.target.value)}>
+              <option value="">--</option>
+              {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </div>
         </div>
         <div className="mof">
           <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: null })}>{t('cancel')}</button>
-          <button className="btn btn-dn btn-sm" onClick={confirmLost} disabled={!selected.length}>
+          <button className="btn btn-dn btn-sm" onClick={confirmLost} disabled={!selected}>
             {t('confirm')}
           </button>
         </div>
