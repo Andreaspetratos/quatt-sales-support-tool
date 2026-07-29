@@ -151,7 +151,7 @@ function Shell() {
                       rel="noopener noreferrer"
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
-                        fontSize: 13, color: '#fff', background: 'var(--cp)',
+                        fontSize: 13, color: '#fff', background: '#c44800',
                         padding: '7px 14px', borderRadius: 8, textDecoration: 'none', fontWeight: 600,
                       }}
                     >
