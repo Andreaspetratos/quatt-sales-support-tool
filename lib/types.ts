@@ -167,7 +167,7 @@ export interface AppState {
   helpOpen: boolean
   hubspotPortalId: string | null
   dealLoading: boolean
-  dealNotif: { id: string; name: string; hvSchedulerUrl: string | null } | null
+  dealNotif: { id: string; name: string; hvSchedulerUrl: string | null; hvSchedulerLoading?: boolean } | null
   perfPeriod: PerfPeriod
   perfData: PerfData | null
   perfLoading: boolean

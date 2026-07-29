@@ -132,13 +132,19 @@ function Shell() {
                   {state.dealNotif.name}
                 </div>
               )}
-              {/* HV scheduler URL — always show value if present */}
-              {state.dealNotif.hvSchedulerUrl && (
-                <div style={{ marginTop: 4 }}>
-                  <div style={{ fontSize: 11, color: 'var(--cs)', marginBottom: 4 }}>
+              {/* HV scheduler URL — loading spinner or value */}
+              {(state.dealNotif.hvSchedulerLoading || state.dealNotif.hvSchedulerUrl) && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--cs)', marginBottom: 6 }}>
                     {state.lang === 'nl' ? 'Home Visit planner:' : 'Home Visit scheduler:'}
                   </div>
-                  {state.dealNotif.hvSchedulerUrl.startsWith('http') ? (
+                  {state.dealNotif.hvSchedulerLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--cs)' }}>
+                      <span style={{ display: 'inline-block', animation: 'hvSpin 1s linear infinite' }}>⏳</span>
+                      {state.lang === 'nl' ? 'URL wordt geladen…' : 'Loading URL…'}
+                      <style>{`@keyframes hvSpin { 0%,100%{transform:rotate(-10deg)} 50%{transform:rotate(10deg)} }`}</style>
+                    </div>
+                  ) : state.dealNotif.hvSchedulerUrl?.startsWith('http') ? (
                     <a
                       href={state.dealNotif.hvSchedulerUrl}
                       target="_blank"

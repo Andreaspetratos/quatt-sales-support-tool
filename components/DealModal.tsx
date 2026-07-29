@@ -305,10 +305,36 @@ export default function DealModal() {
           attempts++
           const found = await fetchAssociatedDeal(dealId)
           if (found) {
-            setState({
-              dealLoading: false,
-              dealNotif: { ...found, hvSchedulerUrl: value === 'Plan HV' ? found.hvSchedulerUrl : null },
-            })
+            if (value === 'Plan HV') {
+              // Show banner immediately; poll separately for HV URL (~20s to populate)
+              setState({
+                dealLoading: false,
+                dealNotif: { id: found.id, name: found.name, hvSchedulerUrl: found.hvSchedulerUrl, hvSchedulerLoading: !found.hvSchedulerUrl },
+              })
+              if (!found.hvSchedulerUrl) {
+                let hvAttempts = 0
+                const HV_URL_MAX = 12 // 12 × 5s = 60s
+                const pollHvUrl = async (): Promise<void> => {
+                  hvAttempts++
+                  const updated = await fetchAssociatedDeal(dealId)
+                  if (updated?.hvSchedulerUrl) {
+                    setState({ dealNotif: { id: found.id, name: found.name, hvSchedulerUrl: updated.hvSchedulerUrl, hvSchedulerLoading: false } })
+                    return
+                  }
+                  if (hvAttempts < HV_URL_MAX) {
+                    setTimeout(pollHvUrl, 5000)
+                  } else {
+                    setState({ dealNotif: { id: found.id, name: found.name, hvSchedulerUrl: null, hvSchedulerLoading: false } })
+                  }
+                }
+                setTimeout(pollHvUrl, 5000)
+              }
+            } else {
+              setState({
+                dealLoading: false,
+                dealNotif: { id: found.id, name: found.name, hvSchedulerUrl: null },
+              })
+            }
             return
           }
           if (attempts < MAX_ATTEMPTS) {
