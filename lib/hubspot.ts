@@ -465,6 +465,19 @@ export async function fetchAssociatedDeal(leadId: string): Promise<AssociatedDea
   }
 }
 
+// ── Fetch HubSpot portal ID (for constructing deal URLs) ─────────────────────
+export async function fetchPortalId(): Promise<string | null> {
+  try {
+    const res = await hsProxy('GET', '/integrations/v1/me')
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.portalId ? String(data.portalId) : null
+  } catch (e) {
+    console.error('[hs] fetchPortalId error:', e)
+    return null
+  }
+}
+
 export async function fetchAllLeadProperties(): Promise<Array<{ name: string; label: string; type: string; fieldType: string }>> {
   if (isDemo()) return []
   try {

@@ -165,6 +165,7 @@ export interface AppState {
   // performance drawer
   perfOpen: boolean
   helpOpen: boolean
+  hubspotPortalId: string | null
   dealLoading: boolean
   dealNotif: { id: string; name: string; hvSchedulerUrl: string | null } | null
   perfPeriod: PerfPeriod

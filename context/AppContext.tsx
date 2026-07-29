@@ -31,6 +31,7 @@ const initialState: AppState = {
   dmH: null,
   perfOpen: false,
   helpOpen: false,
+  hubspotPortalId: null,
   dealLoading: false,
   dealNotif: null,
   perfPeriod: 'today',

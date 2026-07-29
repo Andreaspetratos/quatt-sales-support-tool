@@ -117,22 +117,46 @@ function Shell() {
               <div style={{ fontSize: 12, color: 'var(--cs)', marginBottom: 5 }}>
                 {state.lang === 'nl' ? '🎉 Deal aangemaakt in Consumer Orders' : '🎉 Deal created in Consumer Orders'}
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--tx)', marginBottom: state.dealNotif.hvSchedulerUrl ? 12 : 0 }}>
-                {state.dealNotif.name}
-              </div>
-              {state.dealNotif.hvSchedulerUrl && (
+              {/* Deal name — hyperlink to HubSpot if portal ID is known */}
+              {state.hubspotPortalId ? (
                 <a
-                  href={state.dealNotif.hvSchedulerUrl}
+                  href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/deals/${state.dealNotif.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontSize: 13, color: '#fff', background: 'var(--cp)',
-                    padding: '7px 14px', borderRadius: 8, textDecoration: 'none', fontWeight: 600,
-                  }}
+                  style={{ fontSize: 15, fontWeight: 700, color: 'var(--cp)', textDecoration: 'underline', display: 'block', marginBottom: state.dealNotif.hvSchedulerUrl ? 12 : 0 }}
                 >
-                  🗓 {state.lang === 'nl' ? 'Open Home Visit planner' : 'Open Home Visit scheduler'}
+                  {state.dealNotif.name}
                 </a>
+              ) : (
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--tx)', marginBottom: state.dealNotif.hvSchedulerUrl ? 12 : 0 }}>
+                  {state.dealNotif.name}
+                </div>
+              )}
+              {/* HV scheduler URL — always show value if present */}
+              {state.dealNotif.hvSchedulerUrl && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--cs)', marginBottom: 4 }}>
+                    {state.lang === 'nl' ? 'Home Visit planner:' : 'Home Visit scheduler:'}
+                  </div>
+                  {state.dealNotif.hvSchedulerUrl.startsWith('http') ? (
+                    <a
+                      href={state.dealNotif.hvSchedulerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        fontSize: 13, color: '#fff', background: 'var(--cp)',
+                        padding: '7px 14px', borderRadius: 8, textDecoration: 'none', fontWeight: 600,
+                      }}
+                    >
+                      🗓 {state.lang === 'nl' ? 'Open planner' : 'Open scheduler'}
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 13, color: 'var(--tx)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {state.dealNotif.hvSchedulerUrl}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
             <button

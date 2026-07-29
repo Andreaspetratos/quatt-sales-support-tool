@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveLang } from '@/lib/storage'
 import { isDemo, CONFIG } from '@/lib/config'
-import { fetchLeads, lookupHubspotUserId, lookupHubspotOwnerId, fetchIsAdmin } from '@/lib/hubspot'
+import { fetchLeads, lookupHubspotUserId, lookupHubspotOwnerId, fetchIsAdmin, fetchPortalId } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
@@ -58,6 +58,7 @@ export default function LoginPage() {
             }))
             // Check admin team membership in parallel
             fetchIsAdmin(userId).then(isAdmin => setState({ isAdmin }))
+            fetchPortalId().then(id => { if (id) setState({ hubspotPortalId: id }) })
           }
           return lookupHubspotOwnerId(email)
         })
