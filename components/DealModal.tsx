@@ -459,36 +459,40 @@ export default function DealModal() {
 
           {/* Scrollable body */}
           <div className="dm-body">
-            {/* Lead info */}
-            <div className="sl2">{t('leadInfo')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
-              <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
-              <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
-            </div>
-
-            <div className="dv" />
-
-            {/* Editable address fields */}
-            <div className="sl2">{t('address')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {([ 
-                { label: t('street'),            prop: 'street_lead' },
-                { label: t('houseNumber'),       prop: 'house_number' },
-                { label: t('houseNumberSuffix'), prop: 'house_number_suffix' },
-                { label: t('postalCode'),        prop: 'postal_code' },
-                { label: t('city'),              prop: 'city' },
-              ] as Array<{ label: string; prop: string }>).map(({ label, prop }) => (
-                <EditableField
-                  key={prop}
-                  label={label}
-                  value={p[prop] || ''}
-                  onSave={async (val) => {
-                    await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
-                    patchLeadLocal(dealId, { [prop]: val })
-                  }}
-                />
-              ))}
+            {/* Lead info + Address side by side */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+              {/* Left: lead info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="sl2">{t('leadInfo')}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
+                  <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
+                  <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
+                </div>
+              </div>
+              {/* Right: editable address */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="sl2">{t('address')}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {([
+                    { label: t('street'),            prop: 'street_lead' },
+                    { label: t('houseNumber'),       prop: 'house_number' },
+                    { label: t('houseNumberSuffix'), prop: 'house_number_suffix' },
+                    { label: t('postalCode'),        prop: 'postal_code' },
+                    { label: t('city'),              prop: 'city' },
+                  ] as Array<{ label: string; prop: string }>).map(({ label, prop }) => (
+                    <EditableField
+                      key={prop}
+                      label={label}
+                      value={p[prop] || ''}
+                      onSave={async (val) => {
+                        await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
+                        patchLeadLocal(dealId, { [prop]: val })
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="dv" />
