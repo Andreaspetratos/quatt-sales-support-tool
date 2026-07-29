@@ -413,32 +413,52 @@ export interface AssociatedDeal {
 export async function fetchAssociatedDeal(leadId: string): Promise<AssociatedDeal | null> {
   if (isDemo() || !leadId) return null
   try {
-    // Step 1: get association IDs
+    // Primary: v4 associations endpoint
     const assocRes = await hsProxy('GET', `/crm/v4/objects/leads/${leadId}/associations/deals`)
-    if (!assocRes.ok) {
-      console.error('[hs] fetchAssociatedDeal assoc failed:', assocRes.status)
-      return null
+    if (assocRes.ok) {
+      const assocData = await assocRes.json()
+      const results: Array<{ toObjectId: number | string }> = assocData.results || []
+      if (results.length) {
+        const dealId = String(results[0].toObjectId)
+        const dealRes = await hsProxy('GET',
+          `/crm/v3/objects/deals/${dealId}?properties=dealname,home_visit_internal_scheduler_url`)
+        if (dealRes.ok) {
+          const d = await dealRes.json()
+          console.log('[hs] fetchAssociatedDeal found via v4:', dealId, d.properties?.dealname)
+          return {
+            id: dealId,
+            name: d.properties?.dealname || 'Deal',
+            hvSchedulerUrl: d.properties?.home_visit_internal_scheduler_url || null,
+          }
+        }
+      }
+    } else {
+      console.warn('[hs] fetchAssociatedDeal v4 assoc failed:', assocRes.status, '— trying search fallback')
     }
-    const assocData = await assocRes.json()
-    const results: Array<{ toObjectId: string }> = assocData.results || []
-    if (!results.length) return null
 
-    // Use the first (most recent) associated deal
-    const dealId = results[0].toObjectId
+    // Fallback: search deals by associated lead ID
+    const searchRes = await hsProxy('POST', '/crm/v3/objects/deals/search', {
+      filterGroups: [{ filters: [{ propertyName: 'associations.lead', operator: 'EQ', value: leadId }] }],
+      properties: ['dealname', 'home_visit_internal_scheduler_url'],
+      sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
+      limit: 1,
+    })
+    if (searchRes.ok) {
+      const sd = await searchRes.json()
+      const deal = sd.results?.[0]
+      if (deal) {
+        console.log('[hs] fetchAssociatedDeal found via search:', deal.id, deal.properties?.dealname)
+        return {
+          id: deal.id,
+          name: deal.properties?.dealname || 'Deal',
+          hvSchedulerUrl: deal.properties?.home_visit_internal_scheduler_url || null,
+        }
+      }
+    } else {
+      console.error('[hs] fetchAssociatedDeal search fallback failed:', searchRes.status)
+    }
 
-    // Step 2: fetch deal properties
-    const dealRes = await hsProxy('GET',
-      `/crm/v3/objects/deals/${dealId}?properties=dealname,home_visit_internal_scheduler_url`)
-    if (!dealRes.ok) {
-      console.error('[hs] fetchAssociatedDeal deal fetch failed:', dealRes.status)
-      return null
-    }
-    const dealData = await dealRes.json()
-    return {
-      id: dealId,
-      name: dealData.properties?.dealname || 'Deal',
-      hvSchedulerUrl: dealData.properties?.home_visit_internal_scheduler_url || null,
-    }
+    return null
   } catch (e) {
     console.error('[hs] fetchAssociatedDeal error:', e)
     return null

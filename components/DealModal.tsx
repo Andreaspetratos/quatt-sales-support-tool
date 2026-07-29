@@ -298,7 +298,7 @@ export default function DealModal() {
       if (needsDeal) {
         // Poll for associated deal — HubSpot creates it ~30s after lead moves to SQL
         const capturedLang = lang
-        const MAX_ATTEMPTS = 12
+        const MAX_ATTEMPTS = 24   // 24 × 5s = 120s total
         const INTERVAL_MS = 5000
         let attempts = 0
         const poll = async (): Promise<void> => {
