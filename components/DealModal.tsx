@@ -26,6 +26,61 @@ function getScheduler(deal: Deal): Scheduler | null {
 }
 
 // ── Modals ────────────────────────────────────────────────────────────────────
+// ── Inline editable field ─────────────────────────────────────────────────────
+function EditableField({ label, value, onSave }: { label: string; value: string; onSave: (v: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setDraft(value) }, [value])
+  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+
+  async function save() {
+    const trimmed = draft.trim()
+    if (trimmed === value) { setEditing(false); return }
+    setSaving(true)
+    try { await onSave(trimmed) } finally { setSaving(false); setEditing(false) }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); save() }
+    if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+  }
+
+  return (
+    <div className="kv" style={{ alignItems: 'center' }}>
+      <span className="kk" style={{ flexShrink: 0 }}>{label}</span>
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={onKeyDown}
+          disabled={saving}
+          style={{
+            flex: 1, fontSize: 12, padding: '2px 6px', borderRadius: 5,
+            border: '1px solid var(--cp)', background: 'var(--bg)', color: 'var(--tx)',
+            outline: 'none', minWidth: 0,
+          }}
+        />
+      ) : (
+        <span
+          className="vv"
+          title="Click to edit"
+          onClick={() => setEditing(true)}
+          style={{ cursor: 'text', flex: 1 }}
+        >
+          {value || <span style={{ color: 'var(--cs)', fontStyle: 'italic' }}>--</span>}
+          {' '}
+          <span style={{ fontSize: 10, color: 'var(--cs)', opacity: 0.7 }}>✎</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
@@ -409,8 +464,31 @@ export default function DealModal() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
               <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
-              <div className="kv"><span className="kk">{t('address')}</span><span className="vv">{[p['street_lead'], p['house_number'], p['house_number_suffix']].filter(Boolean).join(' ') || '--'}</span></div>
               <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
+            </div>
+
+            <div className="dv" />
+
+            {/* Editable address fields */}
+            <div className="sl2">{t('address')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {([ 
+                { label: t('street'),            prop: 'street_lead' },
+                { label: t('houseNumber'),       prop: 'house_number' },
+                { label: t('houseNumberSuffix'), prop: 'house_number_suffix' },
+                { label: t('postalCode'),        prop: 'postal_code' },
+                { label: t('city'),              prop: 'city' },
+              ] as Array<{ label: string; prop: string }>).map(({ label, prop }) => (
+                <EditableField
+                  key={prop}
+                  label={label}
+                  value={p[prop] || ''}
+                  onSave={async (val) => {
+                    await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
+                    patchLeadLocal(dealId, { [prop]: val })
+                  }}
+                />
+              ))}
             </div>
 
             <div className="dv" />
