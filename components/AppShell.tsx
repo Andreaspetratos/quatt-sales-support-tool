@@ -123,7 +123,7 @@ function Shell() {
                   href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/deals/${state.dealNotif.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ fontSize: 15, fontWeight: 700, color: 'var(--cp)', textDecoration: 'underline', display: 'block', marginBottom: state.dealNotif.hvSchedulerUrl ? 12 : 0 }}
+                  style={{ fontSize: 15, fontWeight: 700, color: 'var(--tx)', textDecoration: 'underline', textDecorationColor: 'var(--cp)', display: 'block', marginBottom: state.dealNotif.hvSchedulerUrl ? 12 : 0 }}
                 >
                   {state.dealNotif.name}
                 </a>
