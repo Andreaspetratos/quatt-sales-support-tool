@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { loadScheds, saveScheds, storeSharedPbs, uid } from '@/lib/storage'
+import { storeSharedPbs, storeSharedScheds, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome } from '@/lib/types'
@@ -365,7 +365,7 @@ function PlaybookEditor({
 
   const { state } = useApp()
   const pbJson = JSON.stringify(state.playbooks, null, 2)
-  const schJson = JSON.stringify(loadScheds(), null, 2)
+  const schJson = JSON.stringify(state.schedulers, null, 2)
 
   return (
     <div className="pb-editor">
@@ -700,11 +700,9 @@ export default function AdminPanel() {
   const [selectedPbId, setSelectedPbId] = useState<string | null>(null)
   const [editingSched, setEditingSched] = useState<Scheduler | null>(null)
   const [isNewSched, setIsNewSched] = useState(false)
-  const [, forceUpdate] = useState(0)
-  const refresh = () => forceUpdate(n => n + 1)
 
   const pbs = state.playbooks
-  const scheds = loadScheds()
+  const scheds = state.schedulers
   const selectedPb = pbs.find(p => p.id === selectedPbId) || null
 
   function newPb() {
@@ -713,7 +711,6 @@ export default function AdminPanel() {
     setState({ playbooks: updated })
     storeSharedPbs(updated).catch(e => console.error('[admin] save playbooks failed:', e))
     setSelectedPbId(nb.id)
-    refresh()
   }
 
   function savePb(pb: Playbook) {
@@ -723,7 +720,6 @@ export default function AdminPanel() {
     setState({ playbooks: all })
     storeSharedPbs(all).catch(e => console.error('[admin] save playbooks failed:', e))
     showToast(t('toastSaved'), 'success')
-    refresh()
   }
 
   function deletePb(id: string) {
@@ -731,7 +727,6 @@ export default function AdminPanel() {
     setState({ playbooks: filtered })
     storeSharedPbs(filtered).catch(e => console.error('[admin] save playbooks failed:', e))
     if (selectedPbId === id) setSelectedPbId(null)
-    refresh()
   }
 
   function newSched() {
@@ -740,25 +735,26 @@ export default function AdminPanel() {
   }
 
   function editSched(id: string) {
-    const s = loadScheds().find(x => x.id === id)
+    const s = state.schedulers.find(x => x.id === id)
     if (s) { setEditingSched(clone(s)); setIsNewSched(false) }
   }
 
   function saveSched(s: Scheduler) {
-    const all = loadScheds()
+    const all = [...state.schedulers]
     const idx = all.findIndex(x => x.id === s.id)
     if (idx >= 0) all[idx] = s; else all.push(s)
-    saveScheds(all)
+    setState({ schedulers: all })
+    storeSharedScheds(all).catch(e => console.error('[admin] save schedulers failed:', e))
     setEditingSched(null)
     showToast(t('toastSaved'), 'success')
-    refresh()
   }
 
   function deleteSched(id: string) {
     if (!confirm(t('adDelConfirm') as string)) return
-    saveScheds(loadScheds().filter(s => s.id !== id))
+    const filtered = state.schedulers.filter(s => s.id !== id)
+    setState({ schedulers: filtered })
+    storeSharedScheds(filtered).catch(e => console.error('[admin] delete scheduler failed:', e))
     if (editingSched?.id === id) setEditingSched(null)
-    refresh()
   }
 
   return (

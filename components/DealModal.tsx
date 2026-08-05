@@ -4,7 +4,6 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { loadScheds } from '@/lib/storage'
 import { patchLead as patchLeadApi, aircallDial, fetchLeadPropertyOptions, fetchAssociatedDeal } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
@@ -16,8 +15,7 @@ function initials(name: string) {
   return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 }
 
-function getScheduler(deal: Deal): Scheduler | null {
-  const scheds = loadScheds()
+function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
   if (!scheds.length) return null
   const prod = (deal?.properties?.[CONFIG.PROPS.product] || '').toLowerCase()
   return scheds.find(s => s.productMatch && prod.includes(s.productMatch.toLowerCase()))
@@ -140,9 +138,9 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
 }
 
 function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; onBooked: () => void }) {
-  const { setState } = useApp()
+  const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
-  const sched = getScheduler(deal)
+  const sched = getScheduler(deal, state.schedulers)
   const [confirming, setConfirming] = useState(false)
 
   function handleClose() {
@@ -413,7 +411,7 @@ export default function DealModal() {
     ? { position: 'fixed', left: state.dmX, top: state.dmY!, width: state.dmW!, height: state.dmH!, maxWidth: 'none', maxHeight: 'none' }
     : {}
 
-  const sched = getScheduler(deal)
+  const sched = getScheduler(deal, state.schedulers)
   const schedLabel = sched?.buttonLabel || t('schedVC')
   const openTasks = dealOpenTasks(deal.id)
 

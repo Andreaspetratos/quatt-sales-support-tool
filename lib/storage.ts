@@ -138,3 +138,29 @@ export async function storeSharedPbs(pbs: import('./types').Playbook[]): Promise
     throw e
   }
 }
+
+// ── Shared schedulers (Cloudflare KV via /api/schedulers) ─────────────────────
+export async function fetchSharedScheds(): Promise<import('./types').Scheduler[]> {
+  try {
+    const res = await fetch('/api/schedulers')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return await res.json()
+  } catch (e) {
+    console.error('[storage] fetchSharedScheds error:', e)
+    return []
+  }
+}
+
+export async function storeSharedScheds(scheds: import('./types').Scheduler[]): Promise<void> {
+  try {
+    const res = await fetch('/api/schedulers', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scheds),
+    })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+  } catch (e) {
+    console.error('[storage] storeSharedScheds error:', e)
+    throw e
+  }
+}

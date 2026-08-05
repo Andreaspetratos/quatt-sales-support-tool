@@ -147,6 +147,7 @@ export interface AppState {
   userAvatar: string | null
   isAdmin: boolean
   playbooks: Playbook[]
+  schedulers: Scheduler[]
   leads: Lead[]
   selectedId: string | null
   loading: boolean

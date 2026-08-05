@@ -16,6 +16,7 @@ const initialState: AppState = {
   userAvatar: null,
   isAdmin: false,
   playbooks: [],
+  schedulers: [],
   leads: [],
   selectedId: null,
   loading: false,
