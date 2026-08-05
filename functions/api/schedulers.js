@@ -18,7 +18,7 @@ export async function onRequest(ctx) {
     const val = await kv.get('schedulers')
     console.log(`[schedulers] GET → ${val ? 'found' : 'empty'}`)
     return new Response(val ?? '[]', {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     })
   }
 

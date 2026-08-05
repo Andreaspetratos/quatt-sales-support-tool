@@ -744,16 +744,18 @@ export default function AdminPanel() {
     const idx = all.findIndex(x => x.id === s.id)
     if (idx >= 0) all[idx] = s; else all.push(s)
     setState({ schedulers: all })
-    storeSharedScheds(all).catch(e => console.error('[admin] save schedulers failed:', e))
     setEditingSched(null)
-    showToast(t('toastSaved'), 'success')
+    storeSharedScheds(all)
+      .then(() => showToast(t('toastSaved'), 'success'))
+      .catch(e => { console.error('[admin] save schedulers failed:', e); showToast('Opslaan mislukt — probeer opnieuw', 'error') })
   }
 
   function deleteSched(id: string) {
     if (!confirm(t('adDelConfirm') as string)) return
     const filtered = state.schedulers.filter(s => s.id !== id)
     setState({ schedulers: filtered })
-    storeSharedScheds(filtered).catch(e => console.error('[admin] delete scheduler failed:', e))
+    storeSharedScheds(filtered)
+      .catch(e => { console.error('[admin] delete scheduler failed:', e); showToast('Verwijderen mislukt — probeer opnieuw', 'error') })
     if (editingSched?.id === id) setEditingSched(null)
   }
 
