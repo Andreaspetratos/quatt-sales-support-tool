@@ -4,7 +4,7 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, aircallDial, fetchLeadPropertyOptions, fetchAssociatedDeal } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -443,14 +443,14 @@ export default function DealModal() {
             <div className="dm-meta">
               <span className="dm-phone">{p.phone_number || '--'}</span>
               {p.phone_number && (
-                <button
+                <a
+                  href={`tel:${p.phone_number.replace(/\s/g, '')}`}
                   className="btn btn-pr btn-sm"
                   onMouseDown={e => e.stopPropagation()}
-                  onClick={() => aircallDial(p.phone_number)}
-                  style={{ pointerEvents: 'auto' }}
+                  style={{ pointerEvents: 'auto', textDecoration: 'none' }}
                 >
                   {t('callBtn')}
-                </button>
+                </a>
               )}
             </div>
           </div>
