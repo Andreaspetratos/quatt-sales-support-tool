@@ -212,19 +212,19 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
       if (opts.length > 0) {
         setOptions(opts)
       } else {
-        // fallback for demo mode
         setOptions(translateArr(lang, 'callOutcomes').map(o => ({ label: o, value: o })))
       }
     })
   }, [])
 
-  async function saveOutcome() {
-    if (!pbSt.callOutcome) { showToast(t('errOutcome'), 'error'); return }
+  async function handleChange(value: string) {
+    setCallOutcome(dealId, value)
+    if (!value) return
     try {
-      await patchLeadApi(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome }, state.leads, leads => {
-        patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome })
+      await patchLeadApi(dealId, { [CONFIG.PROPS.callOutcome]: value }, state.leads, leads => {
+        patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: value })
       })
-      patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: pbSt.callOutcome })
+      patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: value })
       showToast(t('toastSaved'), 'success')
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
@@ -232,31 +232,19 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
   }
 
   return (
-    <div className="co-section">
-      <div className="cr2">
-        {options.map(o => (
-          <button
-            key={o.value}
-            className={`chip ${pbSt.callOutcome === o.value ? 'on' : ''}`}
-            onClick={() => setCallOutcome(dealId, o.value)}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-      <textarea
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="sl2">{lang === 'nl' ? 'Call outcome' : 'Call outcome'}</div>
+      <select
         className="inp"
-        rows={2}
-        placeholder={t('callNotesPlaceholder')}
-        defaultValue={pbSt.callOutcomeNote || ''}
-        onBlur={e => setCallOutcomeNote(dealId, e.target.value)}
-      />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button className="btn btn-bk btn-sm" onClick={saveOutcome}>{t('logOutcome')}</button>
-        {savedOutcome && savedOutcome !== '--' && (
-          <span className="co-saved">✓ {savedOutcome}</span>
-        )}
-      </div>
+        value={pbSt.callOutcome || savedOutcome || ''}
+        onChange={e => handleChange(e.target.value)}
+        style={{ width: '100%' }}
+      >
+        <option value="">{lang === 'nl' ? '-- Selecteer uitkomst --' : '-- Select outcome --'}</option>
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -492,6 +480,11 @@ export default function DealModal() {
                 </div>
               </div>
             </div>
+
+            <div className="dv" />
+
+            {/* Call outcome — always visible */}
+            <CallOutcomeSection dealId={deal.id} lang={lang} />
 
             <div className="dv" />
 
