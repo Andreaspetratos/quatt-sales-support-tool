@@ -8,6 +8,40 @@ import { CONFIG } from '@/lib/config'
 import { patchLead, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
+// ── Plain-text → HTML converter ──────────────────────────────────────────────
+// Admin-authored scripts are typed as plain text (newlines, numbered lists, bullets).
+// Built-in playbooks already contain HTML tags. We detect which case we have and
+// convert accordingly so formatting is always preserved.
+function textToHtml(text: string): string {
+  if (!text) return ''
+  // If it already contains HTML tags, render as-is
+  if (/<[a-z][\s\S]*?>/i.test(text)) return text
+  // Convert plain text formatting to HTML
+  const lines = text.split('\n')
+  let html = ''
+  let inOl = false
+  let inUl = false
+  for (const raw of lines) {
+    const line = raw
+    if (/^\d+\.\s/.test(line)) {
+      if (inUl) { html += '</ul>'; inUl = false }
+      if (!inOl) { html += '<ol style="margin:6px 0 6px 18px;padding:0">'; inOl = true }
+      html += `<li>${line.replace(/^\d+\.\s/, '')}</li>`
+    } else if (/^[-•]\s/.test(line)) {
+      if (inOl) { html += '</ol>'; inOl = false }
+      if (!inUl) { html += '<ul style="margin:6px 0 6px 18px;padding:0">'; inUl = true }
+      html += `<li>${line.replace(/^[-•]\s/, '')}</li>`
+    } else {
+      if (inOl) { html += '</ol>'; inOl = false }
+      if (inUl) { html += '</ul>'; inUl = false }
+      html += line.trim() === '' ? '<br>' : line + '<br>'
+    }
+  }
+  if (inOl) html += '</ol>'
+  if (inUl) html += '</ul>'
+  return html
+}
+
 // ── InfoBlock — collapsible wb element ────────────────────────────────────────
 function InfoBlock({ content }: { content: string }) {
   const [open, setOpen] = useState(false)
@@ -19,7 +53,7 @@ function InfoBlock({ content }: { content: string }) {
         <span className="wb-arr">▾</span>
       </div>
       {open && (
-        <div className="wb-body" dangerouslySetInnerHTML={{ __html: content }} />
+        <div className="wb-body" dangerouslySetInnerHTML={{ __html: textToHtml(content) }} />
       )}
     </div>
   )
@@ -27,7 +61,7 @@ function InfoBlock({ content }: { content: string }) {
 
 // ── Script block ──────────────────────────────────────────────────────────────
 function ScriptBlock({ content }: { content: string }) {
-  return <div className="sb" dangerouslySetInnerHTML={{ __html: content }} />
+  return <div className="sb" dangerouslySetInnerHTML={{ __html: textToHtml(content) }} />
 }
 
 // ── Address block ─────────────────────────────────────────────────────────────
