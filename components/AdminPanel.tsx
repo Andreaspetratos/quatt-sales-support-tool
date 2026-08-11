@@ -95,6 +95,277 @@ function HsPropPicker({ value, onChange }: { value: string; onChange: (propName:
   )
 }
 
+// ── QCard — extracted to module level to prevent unmount/remount on state change ─
+interface QCardProps {
+  q: Question
+  pi: number
+  qi: number
+  phases: Phase[]
+  typeLabels: Record<string, string>
+  qTypes: string[]
+  onUpdateField: (pi: number, qi: number, k: keyof Question, v: any) => void
+  onUpdateFields: (pi: number, qi: number, updates: Partial<Question>) => void
+  onRemove: (pi: number, qi: number) => void
+  onMove: (pi: number, qi: number, dir: -1 | 1) => void
+  onMoveToPhase: (pi: number, qi: number, targetPi: number) => void
+  onAddOption: (pi: number, qi: number, val: string) => void
+  onRemoveOption: (pi: number, qi: number, oi: number) => void
+  onAddTcOutcome: (pi: number, qi: number) => void
+  onRemoveTcOutcome: (pi: number, qi: number, oi: number) => void
+  onUpdateTcOutcomeField: (pi: number, qi: number, oi: number, k: keyof TechCheckOutcome, v: string) => void
+  onAddChipOption: (pi: number, qi: number, val: string) => void
+  onRemoveChipOption: (pi: number, qi: number, oi: number) => void
+}
+
+function QCard({
+  q, pi, qi, phases, typeLabels, qTypes,
+  onUpdateField, onUpdateFields, onRemove, onMove, onMoveToPhase,
+  onAddOption, onRemoveOption,
+  onAddTcOutcome, onRemoveTcOutcome, onUpdateTcOutcomeField,
+  onAddChipOption, onRemoveChipOption,
+}: QCardProps) {
+  return (
+    <div className="qcard">
+      <div className="qcard-hd">
+        <span className="qcard-type">{typeLabels[q.type] || q.type}</span>
+        <span className="qcard-lbl">{q.label || q.content || '(empty)'}</span>
+        {q.hsProperty && <span className="hs-badge">→ {q.hsProperty}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+          <button className="btn btn-xs" title="Move up" style={{ padding: '2px 5px', fontSize: 11 }} onClick={() => onMove(pi, qi, -1)}>▲</button>
+          <button className="btn btn-xs" title="Move down" style={{ padding: '2px 5px', fontSize: 11 }} onClick={() => onMove(pi, qi, 1)}>▼</button>
+          {phases.length > 1 && (
+            <select
+              className="sel"
+              style={{ fontSize: 11, padding: '2px 4px', height: 24 }}
+              value={pi}
+              onChange={e => onMoveToPhase(pi, qi, Number(e.target.value))}
+              title="Move to phase"
+            >
+              {phases.map((ph, idx) => (
+                <option key={idx} value={idx}>{ph.label || `Phase ${idx + 1}`}</option>
+              ))}
+            </select>
+          )}
+          <button className="btn btn-dn btn-xs" onClick={() => onRemove(pi, qi)}>✕</button>
+        </div>
+      </div>
+
+      {/* Type selector */}
+      <div className="iw">
+        <label className="il">Question type</label>
+        <select className="sel" value={q.type} onChange={e => onUpdateField(pi, qi, 'type', e.target.value as any)}>
+          {qTypes.map(tp => <option key={tp} value={tp}>{typeLabels[tp]}</option>)}
+        </select>
+      </div>
+
+      {/* script / info */}
+      {(q.type === 'script' || q.type === 'info') && (
+        <div className="iw">
+          <label className="il">Content</label>
+          <textarea className="ta" rows={3} defaultValue={q.content || ''}
+            onBlur={e => onUpdateField(pi, qi, 'content', e.target.value)} />
+        </div>
+      )}
+
+      {/* open_text */}
+      {q.type === 'open_text' && (
+        <>
+          <div className="iw">
+            <label className="il">Vraag / instructie voor agent</label>
+            <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+              onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+            ✎ Agent typt vrije tekst → toegevoegd aan <code>personal_info___notes</code>
+          </div>
+        </>
+      )}
+
+      {/* list_options */}
+      {q.type === 'list_options' && (
+        <>
+          <div className="iw">
+            <label className="il">Vraag / instructie voor agent</label>
+            <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+              onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">Antwoord opties</label>
+            <div className="opt-chips">
+              {(q.options || []).map((o, oi) => (
+                <span key={oi} className="opt-chip">
+                  {o}<span className="opt-rm" onClick={() => onRemoveOption(pi, qi, oi)}>×</span>
+                </span>
+              ))}
+              <input className="inp inp-sm" style={{ width: 160 }} placeholder="Optie toevoegen…"
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { onAddOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+            ☑ Geselecteerde optie → toegevoegd aan <code>personal_info___notes</code> als "Vraag - Optie"
+          </div>
+        </>
+      )}
+
+      {/* update_property */}
+      {q.type === 'update_property' && (
+        <>
+          <div className="iw">
+            <label className="il">Vraag / label voor agent</label>
+            <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+              onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">HubSpot property</label>
+            <HsPropPicker
+              value={q.hsProperty || ''}
+              onChange={(propName, fieldType, opts) => {
+                onUpdateFields(pi, qi, {
+                  hsProperty: propName,
+                  hubspotPropFieldType: fieldType || '',
+                  hubspotPropOptions: opts || [],
+                })
+              }}
+            />
+          </div>
+          {q.hubspotPropFieldType && (
+            <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+              Field type: <strong>{q.hubspotPropFieldType}</strong>
+              {q.hubspotPropOptions && q.hubspotPropOptions.length > 0 && (
+                <span> · {q.hubspotPropOptions.length} opties geladen</span>
+              )}
+            </div>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer' }}>
+            <input type="checkbox" className="chk" defaultChecked={!!q.required}
+              onChange={e => onUpdateField(pi, qi, 'required', e.target.checked)} />
+            Verplicht veld
+          </label>
+        </>
+      )}
+
+      {/* legacy types (choice, textarea, intent, address, outcome, tech_check) kept for existing playbooks */}
+      {q.type === 'address' && (
+        <div className="iw">
+          <label className="il">Prefix</label>
+          <input className="inp inp-sm" defaultValue={q.prefix || 'cp_'}
+            onBlur={e => onUpdateField(pi, qi, 'prefix', e.target.value)} />
+        </div>
+      )}
+      {q.type === 'outcome' && (
+        <>
+          <div className="iw">
+            <label className="il">Prefix</label>
+            <input className="inp inp-sm" defaultValue={q.prefix || 'cp_'}
+              onBlur={e => onUpdateField(pi, qi, 'prefix', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">Extra notitie (optioneel)</label>
+            <input className="inp inp-sm" defaultValue={q.altProdNote || ''}
+              onBlur={e => onUpdateField(pi, qi, 'altProdNote', e.target.value)} />
+          </div>
+        </>
+      )}
+      {q.type === 'tech_check' && (
+        <>
+          <div className="iw">
+            <label className="il">Label / titel</label>
+            <input className="inp inp-sm" defaultValue={q.label || ''}
+              onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">Agent vraag</label>
+            <textarea className="ta" rows={2} defaultValue={q.agentQuestion || ''}
+              onBlur={e => onUpdateField(pi, qi, 'agentQuestion', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">Chip state key</label>
+            <input className="inp inp-sm" defaultValue={q.chipKey || ''}
+              onBlur={e => onUpdateField(pi, qi, 'chipKey', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">Uitkomsten</label>
+            {(q.outcomes || []).map((o, oi) => (
+              <div key={oi} style={{ border: '1px solid var(--cb)', borderRadius: 7, padding: 7, marginBottom: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                  <input className="inp inp-sm" placeholder="Situatie" defaultValue={o.condition || ''}
+                    onBlur={e => onUpdateTcOutcomeField(pi, qi, oi, 'condition', e.target.value)} />
+                  <input className="inp inp-sm" placeholder="Resultaat" defaultValue={o.result || ''}
+                    onBlur={e => onUpdateTcOutcomeField(pi, qi, oi, 'result', e.target.value)} />
+                  <select className="sel" defaultValue={o.color || 'var(--gr)'}
+                    onChange={e => onUpdateTcOutcomeField(pi, qi, oi, 'color', e.target.value)}>
+                    <option value="var(--gr)">✓ Groen</option>
+                    <option value="var(--rd)">✖ Rood</option>
+                    <option value="var(--or)">→ Oranje</option>
+                    <option value="#f59e0b">⏸ Geel</option>
+                  </select>
+                  <button className="btn btn-dn btn-xs" onClick={() => onRemoveTcOutcome(pi, qi, oi)}>✕</button>
+                </div>
+                <textarea className="ta" rows={2} placeholder="Script (optioneel)…" defaultValue={o.script || ''}
+                  onBlur={e => onUpdateTcOutcomeField(pi, qi, oi, 'script', e.target.value)} />
+              </div>
+            ))}
+            <button className="btn btn-sc btn-xs" onClick={() => onAddTcOutcome(pi, qi)}>+ Uitkomst toevoegen</button>
+          </div>
+          <div className="iw">
+            <label className="il">Chip opties (klant selectie)</label>
+            <div className="opt-chips">
+              {(q.chipOptions || []).map((o, oi) => (
+                <span key={oi} className="opt-chip">
+                  {o}<span className="opt-rm" onClick={() => onRemoveChipOption(pi, qi, oi)}>×</span>
+                </span>
+              ))}
+              <input className="inp inp-sm" style={{ width: 160 }} placeholder="Optie toevoegen…"
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { onAddChipOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
+            </div>
+          </div>
+        </>
+      )}
+      {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
+        <div className="iw">
+          <label className="il">Label</label>
+          <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+            onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
+        </div>
+      )}
+      {q.type === 'choice' && !q.hsProperty && (
+        <div className="iw">
+          <label className="il">Opties</label>
+          <div className="opt-chips">
+            {(q.options || []).map((o, oi) => (
+              <span key={oi} className="opt-chip">
+                {o}<span className="opt-rm" onClick={() => onRemoveOption(pi, qi, oi)}>×</span>
+              </span>
+            ))}
+            <input className="inp inp-sm" style={{ width: 110 }} placeholder="Enter…"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { onAddOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
+          </div>
+        </div>
+      )}
+      {q.type === 'intent' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+          <div className="iw"><label className="il">🔥 Hot</label><input className="inp inp-sm" defaultValue={q.hotDesc || ''} onBlur={e => onUpdateField(pi, qi, 'hotDesc', e.target.value)} /></div>
+          <div className="iw"><label className="il">🌤 Warm</label><input className="inp inp-sm" defaultValue={q.warmDesc || ''} onBlur={e => onUpdateField(pi, qi, 'warmDesc', e.target.value)} /></div>
+          <div className="iw"><label className="il">❄️ Cold</label><input className="inp inp-sm" defaultValue={q.coldDesc || ''} onBlur={e => onUpdateField(pi, qi, 'coldDesc', e.target.value)} /></div>
+        </div>
+      )}
+      {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="iw" style={{ flex: 1, minWidth: 140 }}>
+            <label className="il">HubSpot property</label>
+            <HsPropPicker value={q.hsProperty || ''} onChange={(v) => onUpdateField(pi, qi, 'hsProperty', v)} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer', flexShrink: 0 }}>
+            <input type="checkbox" className="chk" defaultChecked={!!q.required}
+              onChange={e => onUpdateField(pi, qi, 'required', e.target.checked)} />
+            Verplicht
+          </label>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Playbook editor ───────────────────────────────────────────────────────────
 function PlaybookEditor({
   pb, onSave, onDelete, lang,
@@ -251,244 +522,6 @@ function PlaybookEditor({
     update({ phases })
   }
 
-  function QCard({ q, pi, qi }: { q: Question; pi: number; qi: number }) {
-    return (
-      <div className="qcard">
-        <div className="qcard-hd">
-          <span className="qcard-type">{typeLabels[q.type] || q.type}</span>
-          <span className="qcard-lbl">{q.label || q.content || t('adEmpty')}</span>
-          {q.hsProperty && <span className="hs-badge">→ {q.hsProperty}</span>}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-            {/* Up / Down within phase */}
-            <button className="btn btn-xs" title="Move up" style={{ padding: '2px 5px', fontSize: 11 }} onClick={() => moveQuestion(pi, qi, -1)}>▲</button>
-            <button className="btn btn-xs" title="Move down" style={{ padding: '2px 5px', fontSize: 11 }} onClick={() => moveQuestion(pi, qi, 1)}>▼</button>
-            {/* Move to another phase */}
-            {ep.phases.length > 1 && (
-              <select
-                className="sel"
-                style={{ fontSize: 11, padding: '2px 4px', height: 24 }}
-                value={pi}
-                onChange={e => moveQuestionToPhase(pi, qi, Number(e.target.value))}
-                title="Move to phase"
-              >
-                {ep.phases.map((ph, idx) => (
-                  <option key={idx} value={idx}>{ph.label || `Phase ${idx + 1}`}</option>
-                ))}
-              </select>
-            )}
-            <button className="btn btn-dn btn-xs" onClick={() => removeQuestion(pi, qi)}>✕</button>
-          </div>
-        </div>
-
-        {/* Type selector */}
-        <div className="iw">
-          <label className="il">{t('adQType')}</label>
-          <select className="sel" value={q.type} onChange={e => updateQField(pi, qi, 'type', e.target.value as any)}>
-            {qTypes.map(tp => <option key={tp} value={tp}>{typeLabels[tp]}</option>)}
-          </select>
-        </div>
-
-        {/* Type-specific fields */}
-        {(q.type === 'script' || q.type === 'info') && (
-          <div className="iw">
-            <label className="il">{t('adQContent')}</label>
-            <textarea className="ta" rows={3} defaultValue={q.content || ''}
-              onBlur={e => updateQField(pi, qi, 'content', e.target.value)} />
-          </div>
-        )}
-        {q.type === 'address' && (
-          <div className="iw">
-            <label className="il">Prefix (staat voor de veldnamen)</label>
-            <input className="inp inp-sm" defaultValue={q.prefix || 'cp_'}
-              onBlur={e => updateQField(pi, qi, 'prefix', e.target.value)} />
-          </div>
-        )}
-        {q.type === 'outcome' && (
-          <>
-            <div className="iw">
-              <label className="il">Prefix</label>
-              <input className="inp inp-sm" defaultValue={q.prefix || 'cp_'}
-                onBlur={e => updateQField(pi, qi, 'prefix', e.target.value)} />
-            </div>
-            <div className="iw">
-              <label className="il">Extra notitie (optioneel)</label>
-              <input className="inp inp-sm" defaultValue={q.altProdNote || ''}
-                onBlur={e => updateQField(pi, qi, 'altProdNote', e.target.value)} />
-            </div>
-          </>
-        )}
-        {q.type === 'tech_check' && (
-          <>
-            <div className="iw">
-              <label className="il">Label / titel</label>
-              <input className="inp inp-sm" defaultValue={q.label || ''}
-                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
-            </div>
-            <div className="iw">
-              <label className="il">Agent vraag</label>
-              <textarea className="ta" rows={2} defaultValue={q.agentQuestion || ''}
-                onBlur={e => updateQField(pi, qi, 'agentQuestion', e.target.value)} />
-            </div>
-            <div className="iw">
-              <label className="il">Chip state key</label>
-              <input className="inp inp-sm" defaultValue={q.chipKey || ''}
-                onBlur={e => updateQField(pi, qi, 'chipKey', e.target.value)} />
-            </div>
-            <div className="iw">
-              <label className="il">Uitkomsten</label>
-              {(q.outcomes || []).map((o, oi) => (
-                <div key={oi} style={{ border: '1px solid var(--cb)', borderRadius: 7, padding: 7, marginBottom: 6 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
-                    <input className="inp inp-sm" placeholder="Situatie" defaultValue={o.condition || ''}
-                      onBlur={e => updateTcOutcomeField(pi, qi, oi, 'condition', e.target.value)} />
-                    <input className="inp inp-sm" placeholder="Resultaat" defaultValue={o.result || ''}
-                      onBlur={e => updateTcOutcomeField(pi, qi, oi, 'result', e.target.value)} />
-                    <select className="sel" defaultValue={o.color || 'var(--gr)'}
-                      onChange={e => updateTcOutcomeField(pi, qi, oi, 'color', e.target.value)}>
-                      <option value="var(--gr)">✓ Groen</option>
-                      <option value="var(--rd)">✖ Rood</option>
-                      <option value="var(--or)">→ Oranje</option>
-                      <option value="#f59e0b">⏸ Geel</option>
-                    </select>
-                    <button className="btn btn-dn btn-xs" onClick={() => removeTcOutcome(pi, qi, oi)}>✕</button>
-                  </div>
-                  <textarea className="ta" rows={2} placeholder="Script (optioneel)…" defaultValue={o.script || ''}
-                    onBlur={e => updateTcOutcomeField(pi, qi, oi, 'script', e.target.value)} />
-                </div>
-              ))}
-              <button className="btn btn-sc btn-xs" onClick={() => addTcOutcome(pi, qi)}>+ Uitkomst toevoegen</button>
-            </div>
-            <div className="iw">
-              <label className="il">Chip opties (klant selectie)</label>
-              <div className="opt-chips">
-                {(q.chipOptions || []).map((o, oi) => (
-                  <span key={oi} className="opt-chip">
-                    {o}<span className="opt-rm" onClick={() => removeChipOption(pi, qi, oi)}>×</span>
-                  </span>
-                ))}
-                <input className="inp inp-sm" style={{ width: 160 }} placeholder="Optie toevoegen…"
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addChipOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
-              </div>
-            </div>
-          </>
-        )}
-        {/* ── New question types ──────────────────────────────── */}
-        {q.type === 'open_text' && (
-          <>
-            <div className="iw">
-              <label className="il">Vraag / instructie voor agent</label>
-              <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
-                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
-              ✎ Agent typt vrije tekst → toegevoegd aan <code>personal_info___notes</code>
-            </div>
-          </>
-        )}
-        {q.type === 'list_options' && (
-          <>
-            <div className="iw">
-              <label className="il">Vraag / instructie voor agent</label>
-              <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
-                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
-            </div>
-            <div className="iw">
-              <label className="il">Antwoord opties</label>
-              <div className="opt-chips">
-                {(q.options || []).map((o, oi) => (
-                  <span key={oi} className="opt-chip">
-                    {o}<span className="opt-rm" onClick={() => removeQOption(pi, qi, oi)}>×</span>
-                  </span>
-                ))}
-                <input className="inp inp-sm" style={{ width: 160 }} placeholder="Optie toevoegen…"
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addQOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
-              </div>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
-              ☑ Geselecteerde optie → toegevoegd aan <code>personal_info___notes</code> als "Vraag - Optie"
-            </div>
-          </>
-        )}
-        {q.type === 'update_property' && (
-          <>
-            <div className="iw">
-              <label className="il">Vraag / label voor agent</label>
-              <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
-                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
-            </div>
-            <div className="iw">
-              <label className="il">HubSpot property</label>
-              <HsPropPicker
-                value={q.hsProperty || ''}
-                onChange={(propName, fieldType, opts) => {
-                  updateQFields(pi, qi, {
-                    hsProperty: propName,
-                    hubspotPropFieldType: fieldType || '',
-                    hubspotPropOptions: opts || [],
-                  })
-                }}
-              />
-            </div>
-            {q.hubspotPropFieldType && (
-              <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
-                Field type: <strong>{q.hubspotPropFieldType}</strong>
-                {q.hubspotPropOptions && q.hubspotPropOptions.length > 0 && (
-                  <span> · {q.hubspotPropOptions.length} opties geladen</span>
-                )}
-              </div>
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer' }}>
-              <input type="checkbox" className="chk" defaultChecked={!!q.required}
-                onChange={e => updateQField(pi, qi, 'required', e.target.checked)} />
-              Verplicht veld
-            </label>
-          </>
-        )}
-        {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
-          <div className="iw">
-            <label className="il">{t('adQLabel')}</label>
-            <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
-              onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
-          </div>
-        )}
-        {q.type === 'choice' && !q.hsProperty && (
-          <div className="iw">
-            <label className="il">{t('adQOptions')}</label>
-            <div className="opt-chips">
-              {(q.options || []).map((o, oi) => (
-                <span key={oi} className="opt-chip">
-                  {o}<span className="opt-rm" onClick={() => removeQOption(pi, qi, oi)}>×</span>
-                </span>
-              ))}
-              <input className="inp inp-sm" style={{ width: 110 }} placeholder="Enter…"
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addQOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
-            </div>
-          </div>
-        )}
-        {q.type === 'intent' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-            <div className="iw"><label className="il">🔥 Hot</label><input className="inp inp-sm" defaultValue={q.hotDesc || ''} onBlur={e => updateQField(pi, qi, 'hotDesc', e.target.value)} /></div>
-            <div className="iw"><label className="il">🌤 Warm</label><input className="inp inp-sm" defaultValue={q.warmDesc || ''} onBlur={e => updateQField(pi, qi, 'warmDesc', e.target.value)} /></div>
-            <div className="iw"><label className="il">❄️ Cold</label><input className="inp inp-sm" defaultValue={q.coldDesc || ''} onBlur={e => updateQField(pi, qi, 'coldDesc', e.target.value)} /></div>
-          </div>
-        )}
-        {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="iw" style={{ flex: 1, minWidth: 140 }}>
-              <label className="il">{t('adQHsProp')}</label>
-              <HsPropPicker value={q.hsProperty || ''} onChange={(v) => { updateQField(pi, qi, 'hsProperty', v) }} />
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer', flexShrink: 0 }}>
-              <input type="checkbox" className="chk" defaultChecked={!!q.required}
-                onChange={e => updateQField(pi, qi, 'required', e.target.checked)} />
-              {t('adQReq')}
-            </label>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   const { state } = useApp()
   const pbJson = JSON.stringify(state.playbooks, null, 2)
   const schJson = JSON.stringify(state.schedulers, null, 2)
@@ -589,7 +622,25 @@ function PlaybookEditor({
                       onBlur={e => updatePhaseLabel(pi, e.target.value)} />
                   </div>
                   {(phase.questions || []).map((q, qi) => (
-                    <QCard key={q.id} q={q} pi={pi} qi={qi} />
+                    <QCard
+                      key={q.id}
+                      q={q} pi={pi} qi={qi}
+                      phases={ep.phases}
+                      typeLabels={typeLabels}
+                      qTypes={qTypes}
+                      onUpdateField={updateQField}
+                      onUpdateFields={updateQFields}
+                      onRemove={removeQuestion}
+                      onMove={moveQuestion}
+                      onMoveToPhase={moveQuestionToPhase}
+                      onAddOption={addQOption}
+                      onRemoveOption={removeQOption}
+                      onAddTcOutcome={addTcOutcome}
+                      onRemoveTcOutcome={removeTcOutcome}
+                      onUpdateTcOutcomeField={updateTcOutcomeField}
+                      onAddChipOption={addChipOption}
+                      onRemoveChipOption={removeChipOption}
+                    />
                   ))}
                   <button className="btn btn-sc btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
                     onClick={() => addQuestion(pi)}>
