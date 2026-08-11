@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { storeSharedPbs, storeSharedScheds, triageFeedback, uid } from '@/lib/storage'
+import { storeSharedPbs, storeSharedScheds, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback } from '@/lib/types'
@@ -964,25 +964,11 @@ function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v
 }
 
 // ── FeedbackTab — admin view of submitted feedback + AI triage ────────────────
-function FeedbackTab({ feedbacks, lang, onUpdate }: {
+function FeedbackTab({ feedbacks, lang }: {
   feedbacks: import('@/lib/types').Feedback[]
   lang: 'nl' | 'en'
-  onUpdate: (id: string, triage: string) => void
+  onUpdate?: (id: string, triage: string) => void
 }) {
-  const [triaging, setTriaging] = useState<string | null>(null)
-
-  async function handleTriage(f: import('@/lib/types').Feedback) {
-    setTriaging(f.id)
-    try {
-      const triage = await triageFeedback(f.id, f.message)
-      onUpdate(f.id, triage)
-    } catch {
-      alert('Triage failed — make sure ANTHROPIC_API_KEY is set in Cloudflare env vars.')
-    } finally {
-      setTriaging(null)
-    }
-  }
-
   if (feedbacks.length === 0) {
     return (
       <div style={{ padding: 24, color: 'var(--gm)', fontSize: 13 }}>
@@ -995,27 +981,12 @@ function FeedbackTab({ feedbacks, lang, onUpdate }: {
     <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {feedbacks.map(f => (
         <div key={f.id} style={{ background: 'var(--wh)', border: '1px solid var(--gl)', borderRadius: 12, padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+          <div style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--gm)' }}>
               {f.submittedBy} · {new Date(f.submittedAt).toLocaleString(lang === 'nl' ? 'nl-NL' : 'en-GB')}
             </span>
-            {!f.triage && (
-              <button
-                className="btn btn-sc btn-xs"
-                disabled={triaging === f.id}
-                onClick={() => handleTriage(f)}
-              >
-                {triaging === f.id ? '⏳ Triaging…' : '🤖 Triage with AI'}
-              </button>
-            )}
           </div>
-          <p style={{ fontSize: 13, color: 'var(--tx)', margin: '0 0 10px', whiteSpace: 'pre-wrap' }}>{f.message}</p>
-          {f.triage && (
-            <div style={{ background: 'var(--cb)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: 'var(--tx)', whiteSpace: 'pre-wrap', borderLeft: '3px solid var(--pr)' }}>
-              <span style={{ fontWeight: 700, fontSize: 11, color: 'var(--pr)', display: 'block', marginBottom: 4 }}>🤖 AI Triage</span>
-              {f.triage}
-            </div>
-          )}
+          <p style={{ fontSize: 13, color: 'var(--tx)', margin: 0, whiteSpace: 'pre-wrap' }}>{f.message}</p>
         </div>
       ))}
     </div>
