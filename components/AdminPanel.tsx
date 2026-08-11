@@ -1098,10 +1098,12 @@ function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v
   )
 }
 
-// ── FeedbackTab — admin view of submitted feedback + AI triage ────────────────
+// ── FeedbackTab — admin view of submitted feedback with multi-select copy ─────
 function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
   const [feedbacks, setFeedbacks] = useState<import('@/lib/types').Feedback[]>([])
   const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -1109,6 +1111,42 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
       .then(data => setFeedbacks(data))
       .finally(() => setLoading(false))
   }, [])
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function selectAll() {
+    setSelected(new Set(feedbacks.map(f => f.id)))
+  }
+
+  function clearAll() {
+    setSelected(new Set())
+  }
+
+  function copySelected() {
+    const items = feedbacks.filter(f => selected.has(f.id))
+    const locale = lang === 'nl' ? 'nl-NL' : 'en-GB'
+    const text = [
+      `Feedback for review (${items.length} item${items.length !== 1 ? 's' : ''}):`,
+      '',
+      ...items.map(f => [
+        `From: ${f.submittedBy}`,
+        `Date: ${new Date(f.submittedAt).toLocaleString(locale)}`,
+        `Message: ${f.message}`,
+      ].join('\n')),
+    ].join('\n\n---\n\n')
+
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      showToast('✓ Copied to clipboard', 'success')
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   if (loading) {
     return <div style={{ padding: 24, color: 'var(--gm)', fontSize: 13 }}>⏳ Loading…</div>
@@ -1124,16 +1162,67 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
 
   return (
     <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {feedbacks.map(f => (
-        <div key={f.id} style={{ background: 'var(--wh)', border: '1px solid var(--gl)', borderRadius: 12, padding: 16 }}>
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--gm)' }}>
-              {f.submittedBy} · {new Date(f.submittedAt).toLocaleString(lang === 'nl' ? 'nl-NL' : 'en-GB')}
-            </span>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-xs btn-gh" onClick={selectAll} style={{ fontSize: 12 }}>Select all</button>
+        {selected.size > 0 && (
+          <button className="btn btn-xs btn-gh" onClick={clearAll} style={{ fontSize: 12 }}>Clear</button>
+        )}
+        {selected.size > 0 && (
+          <button
+            className="btn btn-xs btn-pr"
+            onClick={copySelected}
+            style={{ fontSize: 12, marginLeft: 'auto' }}
+          >
+            {copied ? '✓ Copied!' : `Copy ${selected.size} selected`}
+          </button>
+        )}
+        <span style={{ fontSize: 11, color: 'var(--gm)', marginLeft: selected.size > 0 ? 0 : 'auto' }}>
+          {feedbacks.length} {feedbacks.length === 1 ? 'entry' : 'entries'}
+        </span>
+      </div>
+
+      {/* Feedback cards */}
+      {feedbacks.map(f => {
+        const isSelected = selected.has(f.id)
+        return (
+          <div
+            key={f.id}
+            onClick={() => toggleSelect(f.id)}
+            style={{
+              background: isSelected ? 'rgba(26,122,107,.07)' : 'var(--c1)',
+              border: `2px solid ${isSelected ? 'var(--gr)' : 'var(--gl)'}`,
+              borderRadius: 12,
+              padding: 16,
+              cursor: 'pointer',
+              transition: 'border-color .13s, background .13s',
+              display: 'flex',
+              gap: 12,
+              alignItems: 'flex-start',
+            }}
+          >
+            {/* Checkbox */}
+            <div style={{
+              width: 18, height: 18, borderRadius: 5, border: `2px solid ${isSelected ? 'var(--gr)' : 'var(--gg)'}`,
+              background: isSelected ? 'var(--gr)' : 'transparent',
+              flexShrink: 0, marginTop: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 11, fontWeight: 700,
+            }}>
+              {isSelected ? '✓' : ''}
+            </div>
+            {/* Content */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--gm)' }}>
+                  {f.submittedBy} · {new Date(f.submittedAt).toLocaleString(lang === 'nl' ? 'nl-NL' : 'en-GB')}
+                </span>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--ct)', margin: 0, whiteSpace: 'pre-wrap' }}>{f.message}</p>
+            </div>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--tx)', margin: 0, whiteSpace: 'pre-wrap' }}>{f.message}</p>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
