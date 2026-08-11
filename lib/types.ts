@@ -76,8 +76,18 @@ export interface Scheduler {
   name: string
   buttonLabel?: string
   url: string
-  productMatch?: string
+  productMatches?: string[]   // multi-select, same pattern as Playbook
+  productMatch?: string        // legacy — kept for backward compat, ignored in new code
   isDefault?: boolean
+}
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+export interface Feedback {
+  id: string
+  message: string
+  submittedBy: string          // email of submitter
+  submittedAt: string          // ISO timestamp
+  triage?: string              // AI-generated triage comment
 }
 
 // ─── Playbook runtime state ───────────────────────────────────────────────────
@@ -148,6 +158,7 @@ export interface AppState {
   isAdmin: boolean
   playbooks: Playbook[]
   schedulers: Scheduler[]
+  feedbacks: Feedback[]
   leads: Lead[]
   selectedId: string | null
   loading: boolean

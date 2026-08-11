@@ -3,12 +3,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { storeSharedPbs, storeSharedScheds, uid } from '@/lib/storage'
+import { storeSharedPbs, storeSharedScheds, triageFeedback, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
-import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome } from '@/lib/types'
+import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback } from '@/lib/types'
 
-type AdminTab = 'playbooks' | 'schedulers' | 'diagnostics'
+type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'diagnostics'
 
 // ── Deep clone helper ─────────────────────────────────────────────────────────
 function clone<T>(x: T): T { return JSON.parse(JSON.stringify(x)) }
@@ -154,6 +154,29 @@ function PlaybookEditor({
     update({ phases })
   }
 
+  function moveQuestion(pi: number, qi: number, dir: -1 | 1) {
+    const phases = ep.phases.map((ph, i) => {
+      if (i !== pi) return ph
+      const qs = [...ph.questions]
+      const target = qi + dir
+      if (target < 0 || target >= qs.length) return ph
+      ;[qs[qi], qs[target]] = [qs[target], qs[qi]]
+      return { ...ph, questions: qs }
+    })
+    update({ phases })
+  }
+
+  function moveQuestionToPhase(pi: number, qi: number, targetPi: number) {
+    if (targetPi === pi) return
+    const q = ep.phases[pi].questions[qi]
+    const phases = ep.phases.map((ph, i) => {
+      if (i === pi) return { ...ph, questions: ph.questions.filter((_, j) => j !== qi) }
+      if (i === targetPi) return { ...ph, questions: [...ph.questions, q] }
+      return ph
+    })
+    update({ phases })
+  }
+
   function updateQField(pi: number, qi: number, k: keyof Question, v: any) {
     const phases = ep.phases.map((ph, i) => i === pi
       ? { ...ph, questions: ph.questions.map((q, j) => j === qi ? { ...q, [k]: v } : q) }
@@ -223,7 +246,26 @@ function PlaybookEditor({
           <span className="qcard-type">{typeLabels[q.type] || q.type}</span>
           <span className="qcard-lbl">{q.label || q.content || t('adEmpty')}</span>
           {q.hsProperty && <span className="hs-badge">→ {q.hsProperty}</span>}
-          <button className="btn btn-dn btn-xs" onClick={() => removeQuestion(pi, qi)}>✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+            {/* Up / Down within phase */}
+            <button className="btn btn-xs" title="Move up" style={{ padding: '2px 5px', fontSize: 11 }} onClick={() => moveQuestion(pi, qi, -1)}>▲</button>
+            <button className="btn btn-xs" title="Move down" style={{ padding: '2px 5px', fontSize: 11 }} onClick={() => moveQuestion(pi, qi, 1)}>▼</button>
+            {/* Move to another phase */}
+            {ep.phases.length > 1 && (
+              <select
+                className="sel"
+                style={{ fontSize: 11, padding: '2px 4px', height: 24 }}
+                value={pi}
+                onChange={e => moveQuestionToPhase(pi, qi, Number(e.target.value))}
+                title="Move to phase"
+              >
+                {ep.phases.map((ph, idx) => (
+                  <option key={idx} value={idx}>{ph.label || `Phase ${idx + 1}`}</option>
+                ))}
+              </select>
+            )}
+            <button className="btn btn-dn btn-xs" onClick={() => removeQuestion(pi, qi)}>✕</button>
+          </div>
         </div>
 
         {/* Type selector */}
@@ -543,17 +585,17 @@ function SchedEditor({
           <input className="inp" type="url" defaultValue={es.url || ''} placeholder="https://meetings.hubspot.com/…"
             onBlur={e => upd({ url: e.target.value })} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
-          <div className="iw">
-            <label className="il">{t('adSchProd')}</label>
-            <input className="inp" type="text" defaultValue={es.productMatch || ''} placeholder={t('adSchProdHint') as string}
-              onBlur={e => upd({ productMatch: e.target.value })} />
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', paddingBottom: 10, whiteSpace: 'nowrap' }}>
-            <input type="checkbox" className="chk" defaultChecked={!!es.isDefault} onChange={e => upd({ isDefault: e.target.checked })} />
-            {t('adSchDefault')}
-          </label>
+        <div className="iw">
+          <label className="il">{t('adSchProd')}</label>
+          <SchedProductPicker
+            value={es.productMatches || []}
+            onChange={vals => upd({ productMatches: vals })}
+          />
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          <input type="checkbox" className="chk" defaultChecked={!!es.isDefault} onChange={e => upd({ isDefault: e.target.checked })} />
+          {t('adSchDefault')}
+        </label>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-pr btn-sm" onClick={() => onSave(es)}>{t('adSaveSch')}</button>
           <button className="btn btn-gh btn-sm" onClick={onCancel}>{t('cancel')}</button>
@@ -771,6 +813,7 @@ export default function AdminPanel() {
       <div className="adm-nav">
         <button className={`adm-tab ${tab === 'playbooks' ? 'on' : ''}`} onClick={() => setTab('playbooks')}>{t('adPb')}</button>
         <button className={`adm-tab ${tab === 'schedulers' ? 'on' : ''}`} onClick={() => setTab('schedulers')}>{t('adSch')}</button>
+        <button className={`adm-tab ${tab === 'feedback' ? 'on' : ''}`} onClick={() => setTab('feedback')}>💬 Feedback</button>
         <button className={`adm-tab ${tab === 'diagnostics' ? 'on' : ''}`} onClick={() => setTab('diagnostics')}>🔧 Diagnostics</button>
       </div>
 
@@ -827,7 +870,7 @@ export default function AdminPanel() {
                     {s.isDefault && <span className="badge bo" style={{ marginTop: 4 }}>{t('adDefault')}</span>}
                     <div className="sc-card-url" style={{ marginTop: 6 }}>{s.url || t('adNoUrl')}</div>
                     <div style={{ fontSize: 12, color: 'var(--gm)', marginTop: 3 }}>{t('adBtnLabelPrefix')} <strong>{s.buttonLabel || t('schedVC')}</strong></div>
-                    {s.productMatch && <div style={{ fontSize: 11, color: 'var(--gm)', marginTop: 2 }}>{t('adMatchPrefix')} {s.productMatch}</div>}
+                    {(s.productMatches?.length ?? 0) > 0 && <div style={{ fontSize: 11, color: 'var(--gm)', marginTop: 2 }}>{t('adMatchPrefix')} {(s.productMatches || []).join(', ')}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 7, marginTop: 'auto' }}>
                     <button className="btn btn-sc btn-sm" onClick={() => editSched(s.id)}>{t('edit')}</button>
@@ -851,12 +894,130 @@ export default function AdminPanel() {
             )}
           </div>
         )}
+        {tab === 'feedback' && (
+          <div className="adm-scroll">
+            <FeedbackTab feedbacks={state.feedbacks} lang={lang} onUpdate={(id, triage) => setState({ feedbacks: state.feedbacks.map(f => f.id === id ? { ...f, triage } : f) })} />
+          </div>
+        )}
         {tab === 'diagnostics' && (
           <div className="adm-scroll">
             <HsDiagnostics ownerId={state.currentRep?.hubspotOwnerId || ''} />
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── SchedProductPicker — same pill UI as playbook product match ───────────────
+function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [opts, setOpts] = useState<Array<{ label: string; value: string }>>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetchLeadPropertyOptions('most_recent_selected_product_lead').then(o => setOpts(o))
+  }, [])
+
+  function toggle(v: string) {
+    const lower = v.toLowerCase()
+    const exists = value.some(x => x.toLowerCase() === lower)
+    onChange(exists ? value.filter(x => x.toLowerCase() !== lower) : [...value, v])
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {opts.length > 0 ? (
+        <div className="cr2" style={{ flexWrap: 'wrap' }}>
+          {opts.map(opt => {
+            const sel = value.some(x => x.toLowerCase() === opt.value.toLowerCase() || x.toLowerCase() === opt.label.toLowerCase())
+            return (
+              <button key={opt.value} className={`chip ${sel ? 'on' : ''}`} style={{ fontSize: 12 }} onClick={() => toggle(opt.value)}>
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {value.map((m, i) => (
+            <span key={i} className="opt-chip">{m}<span className="opt-rm" onClick={() => onChange(value.filter((_, j) => j !== i))}>×</span></span>
+          ))}
+          <input
+            ref={inputRef}
+            className="inp inp-sm"
+            style={{ width: 140 }}
+            placeholder="Product match…"
+            onKeyDown={e => {
+              const v = (e.target as HTMLInputElement).value.trim()
+              if ((e.key === 'Enter' || e.key === ',') && v) {
+                toggle(v);
+                (e.target as HTMLInputElement).value = ''
+                e.preventDefault()
+              }
+            }}
+          />
+        </div>
+      )}
+      <span style={{ fontSize: 11, color: 'var(--gm)' }}>Empty = default for all deals</span>
+    </div>
+  )
+}
+
+// ── FeedbackTab — admin view of submitted feedback + AI triage ────────────────
+function FeedbackTab({ feedbacks, lang, onUpdate }: {
+  feedbacks: import('@/lib/types').Feedback[]
+  lang: 'nl' | 'en'
+  onUpdate: (id: string, triage: string) => void
+}) {
+  const [triaging, setTriaging] = useState<string | null>(null)
+
+  async function handleTriage(f: import('@/lib/types').Feedback) {
+    setTriaging(f.id)
+    try {
+      const triage = await triageFeedback(f.id, f.message)
+      onUpdate(f.id, triage)
+    } catch {
+      alert('Triage failed — make sure ANTHROPIC_API_KEY is set in Cloudflare env vars.')
+    } finally {
+      setTriaging(null)
+    }
+  }
+
+  if (feedbacks.length === 0) {
+    return (
+      <div style={{ padding: 24, color: 'var(--gm)', fontSize: 13 }}>
+        {lang === 'nl' ? 'Nog geen feedback ontvangen.' : 'No feedback received yet.'}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {feedbacks.map(f => (
+        <div key={f.id} style={{ background: 'var(--wh)', border: '1px solid var(--gl)', borderRadius: 12, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--gm)' }}>
+              {f.submittedBy} · {new Date(f.submittedAt).toLocaleString(lang === 'nl' ? 'nl-NL' : 'en-GB')}
+            </span>
+            {!f.triage && (
+              <button
+                className="btn btn-sc btn-xs"
+                disabled={triaging === f.id}
+                onClick={() => handleTriage(f)}
+              >
+                {triaging === f.id ? '⏳ Triaging…' : '🤖 Triage with AI'}
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--tx)', margin: '0 0 10px', whiteSpace: 'pre-wrap' }}>{f.message}</p>
+          {f.triage && (
+            <div style={{ background: 'var(--cb)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: 'var(--tx)', whiteSpace: 'pre-wrap', borderLeft: '3px solid var(--pr)' }}>
+              <span style={{ fontWeight: 700, fontSize: 11, color: 'var(--pr)', display: 'block', marginBottom: 4 }}>🤖 AI Triage</span>
+              {f.triage}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
