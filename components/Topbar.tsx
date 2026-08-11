@@ -72,7 +72,7 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
           <button
             className="btn btn-xs"
             title="Toggle theme"
-            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: '14px', padding: '4px 8px' }}
+            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: '14px', width: 30, height: 30, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             onClick={toggleTheme}
           >
             {currentTheme === 'light' ? '🌙' : '☀️'}
@@ -82,9 +82,9 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
           <button
             className="btn btn-xs"
             title="Help"
-            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: 15, fontWeight: 700, width: 28, height: 28, borderRadius: '50%', padding: 0, lineHeight: 1 }}
+            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: 15, width: 30, height: 30, borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             onClick={() => setState({ helpOpen: true })}
-          >?</button>
+          >💬</button>
 
           {/* Performance button */}
           {state.screen === 'dashboard' && (
