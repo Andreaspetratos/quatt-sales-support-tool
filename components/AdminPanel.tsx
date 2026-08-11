@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { storeSharedPbs, storeSharedScheds, uid } from '@/lib/storage'
+import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback } from '@/lib/types'
@@ -816,7 +816,7 @@ export default function AdminPanel() {
       </div>
 
       <div className="adm-body">
-        {tab === 'playbooks' ? (
+        {tab === 'playbooks' && (
           <>
             {/* Playbook list */}
             <div className="pb-list">
@@ -857,8 +857,8 @@ export default function AdminPanel() {
               }
             </div>
           </>
-        ) : (
-          /* Schedulers tab */
+        )}
+        {tab === 'schedulers' && (
           <div className="adm-scroll">
             <div className="sc-grid">
               {scheds.map(s => (
@@ -894,7 +894,7 @@ export default function AdminPanel() {
         )}
         {tab === 'feedback' && (
           <div className="adm-scroll">
-            <FeedbackTab feedbacks={state.feedbacks} lang={lang} onUpdate={(id, triage) => setState({ feedbacks: state.feedbacks.map(f => f.id === id ? { ...f, triage } : f) })} />
+            <FeedbackTab lang={lang} />
           </div>
         )}
         {tab === 'diagnostics' && (
@@ -962,11 +962,21 @@ function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v
 }
 
 // ── FeedbackTab — admin view of submitted feedback + AI triage ────────────────
-function FeedbackTab({ feedbacks, lang }: {
-  feedbacks: import('@/lib/types').Feedback[]
-  lang: 'nl' | 'en'
-  onUpdate?: (id: string, triage: string) => void
-}) {
+function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
+  const [feedbacks, setFeedbacks] = useState<import('@/lib/types').Feedback[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetchFeedbacks()
+      .then(data => setFeedbacks(data))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <div style={{ padding: 24, color: 'var(--gm)', fontSize: 13 }}>⏳ Loading…</div>
+  }
+
   if (feedbacks.length === 0) {
     return (
       <div style={{ padding: 24, color: 'var(--gm)', fontSize: 13 }}>
