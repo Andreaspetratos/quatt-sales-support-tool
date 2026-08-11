@@ -31,6 +31,10 @@ export type QuestionType =
   | 'address'
   | 'outcome'
   | 'tech_check'
+  // Agent-facing question types (used in custom playbooks):
+  | 'open_text'        // free-text note → appended to personal_info___notes
+  | 'list_options'     // pick from list  → appended to personal_info___notes
+  | 'update_property'  // update a HubSpot deal property directly
 
 export interface Question {
   id: string
@@ -55,6 +59,9 @@ export interface Question {
   hotDesc?: string
   warmDesc?: string
   coldDesc?: string
+  // update_property — stored at admin save time so agents need no extra API calls
+  hubspotPropFieldType?: string   // 'text' | 'textarea' | 'number' | 'date' | 'select' | 'radio' | 'checkbox' | 'booleancheckbox'
+  hubspotPropOptions?: Array<{ label: string; value: string }>
 }
 
 export interface Phase {

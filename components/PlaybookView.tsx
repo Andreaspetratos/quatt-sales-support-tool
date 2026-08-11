@@ -383,6 +383,331 @@ function IntentQuestion({
   )
 }
 
+
+// ── Append text to the personal_info___notes property ────────────────────────
+async function appendToNotes(
+  dealId: string,
+  leads: import('@/lib/types').Lead[],
+  patchLeadLocal: (id: string, props: Record<string, string>) => void,
+  entry: string,
+) {
+  const deal = leads.find(l => l.id === dealId)
+  const current = deal?.properties?.['personal_info___notes'] || ''
+  const updated = current ? `${current}\n${entry}` : entry
+  await patchLead(dealId, { personal_info___notes: updated }, leads, () =>
+    patchLeadLocal(dealId, { personal_info___notes: updated })
+  )
+}
+
+// ── Open text → appended as "Label: value" to personal_info___notes ──────────
+function OpenTextQuestion({
+  q, dealId, pbState, setPbNote,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState; setPbNote: (k: string, v: string) => void
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function handleBlur(value: string) {
+    if (!value.trim()) return
+    setPbNote(q.id, value)
+    setSaving(true)
+    try {
+      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label}: ${value}`)
+      setSaved(true)
+      showToast('✓ Notitie opgeslagen in HubSpot', 'success')
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: any) {
+      showToast(e.message || 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="iw">
+      <label className="il">
+        {q.label}
+        {q.required && <span style={{ color: 'var(--rd)' }}> *</span>}
+      </label>
+      <textarea
+        className="inp"
+        rows={3}
+        placeholder="Typ hier je notitie…"
+        defaultValue={pbState.notes[q.id] || ''}
+        onBlur={e => handleBlur(e.target.value)}
+      />
+      <div className="hs-badge">
+        → personal_info___notes
+        {saving && <span style={{ marginLeft: 4 }}>…</span>}
+        {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── List of options → appended as "Label - Option" to personal_info___notes ──
+function ListOptionsQuestion({
+  q, dealId, pbState, setPbAnswer,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState; setPbAnswer: (k: string, v: string) => void
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const [saved, setSaved] = useState(false)
+  const currentVal = pbState.answers[q.id] || ''
+
+  async function handleSelect(opt: string) {
+    setPbAnswer(q.id, opt)
+    try {
+      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label} - ${opt}`)
+      setSaved(true)
+      showToast('✓ Notitie opgeslagen in HubSpot', 'success')
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: any) {
+      showToast(e.message || 'Save failed', 'error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="ql">
+        {q.label}
+        {q.required && <span className="qr"> *</span>}
+      </div>
+      <div className="cr2">
+        {(q.options || []).map(opt => (
+          <button
+            key={opt}
+            className={`chip ${currentVal === opt ? 'on' : ''}`}
+            onClick={() => handleSelect(opt)}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+      <div className="hs-badge" style={{ marginTop: 4 }}>
+        → personal_info___notes
+        {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Update property — renders input based on fieldType, saves immediately ─────
+function UpdatePropertyQuestion({
+  q, dealId, pbState, setPbAnswer,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState; setPbAnswer: (k: string, v: string) => void
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const propName = q.hsProperty || ''
+  const fieldType = q.hubspotPropFieldType || 'text'
+  const propOptions = q.hubspotPropOptions || []
+
+  // Pre-populate from current deal value
+  const deal = state.leads.find(l => l.id === dealId)
+  const rawValue = deal?.properties?.[propName] || ''
+
+  async function saveValue(value: string) {
+    if (!propName) return
+    setPbAnswer(q.id, value)
+    setSaving(true)
+    try {
+      await patchLead(dealId, { [propName]: value }, state.leads, () =>
+        patchLeadLocal(dealId, { [propName]: value })
+      )
+      setSaved(true)
+      showToast('✓ Opgeslagen in HubSpot', 'success')
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: any) {
+      showToast(e.message || 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // For multi-select checkbox: HubSpot stores as semicolon-separated string
+  const [checkboxVals, setCheckboxVals] = useState<string[]>(() =>
+    rawValue ? rawValue.split(';').filter(Boolean) : []
+  )
+
+  async function toggleCheckbox(val: string) {
+    const next = checkboxVals.includes(val)
+      ? checkboxVals.filter(v => v !== val)
+      : [...checkboxVals, val]
+    setCheckboxVals(next)
+    await saveValue(next.join(';'))
+  }
+
+  const currentAnswer = pbState.answers[q.id] ?? rawValue
+
+  // Date: HubSpot stores as ms timestamp, input needs YYYY-MM-DD
+  function msToDateStr(ms: string) {
+    if (!ms || isNaN(Number(ms))) return ms || ''
+    return new Date(Number(ms)).toISOString().slice(0, 10)
+  }
+  function dateStrToMs(d: string) {
+    if (!d) return ''
+    return String(new Date(d + 'T00:00:00.000Z').getTime())
+  }
+
+  const label = (
+    <label className="il">
+      {q.label}
+      {q.required && <span style={{ color: 'var(--rd)' }}> *</span>}
+    </label>
+  )
+  const badge = (
+    <div className="hs-badge">
+      → {propName}
+      {saving && <span style={{ marginLeft: 4 }}>…</span>}
+      {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+    </div>
+  )
+
+  if (fieldType === 'select') {
+    return (
+      <div className="iw">
+        {label}
+        <select
+          className="inp"
+          defaultValue={currentAnswer}
+          onChange={e => saveValue(e.target.value)}
+        >
+          <option value="">-- Selecteer --</option>
+          {propOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {badge}
+      </div>
+    )
+  }
+
+  if (fieldType === 'radio') {
+    return (
+      <div>
+        <div className="ql">{q.label}{q.required && <span className="qr"> *</span>}</div>
+        <div className="cr2">
+          {propOptions.map(o => (
+            <button
+              key={o.value}
+              className={`chip ${currentAnswer === o.value ? 'on' : ''}`}
+              onClick={() => saveValue(o.value)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {badge}
+      </div>
+    )
+  }
+
+  if (fieldType === 'checkbox') {
+    return (
+      <div>
+        <div className="ql">{q.label}{q.required && <span className="qr"> *</span>}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+          {propOptions.map(o => (
+            <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                className="chk"
+                checked={checkboxVals.includes(o.value)}
+                onChange={() => toggleCheckbox(o.value)}
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+        {badge}
+      </div>
+    )
+  }
+
+  if (fieldType === 'booleancheckbox') {
+    return (
+      <div>
+        <div className="ql">{q.label}{q.required && <span className="qr"> *</span>}</div>
+        <div className="cr2">
+          {[{ label: 'Ja', value: 'true' }, { label: 'Nee', value: 'false' }].map(o => (
+            <button
+              key={o.value}
+              className={`chip ${currentAnswer === o.value ? 'on' : ''}`}
+              onClick={() => saveValue(o.value)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {badge}
+      </div>
+    )
+  }
+
+  if (fieldType === 'number') {
+    return (
+      <div className="iw">
+        {label}
+        <input
+          className="inp"
+          type="number"
+          defaultValue={currentAnswer}
+          onBlur={e => saveValue(e.target.value)}
+        />
+        {badge}
+      </div>
+    )
+  }
+
+  if (fieldType === 'date') {
+    return (
+      <div className="iw">
+        {label}
+        <input
+          className="inp"
+          type="date"
+          defaultValue={msToDateStr(currentAnswer)}
+          onBlur={e => saveValue(dateStrToMs(e.target.value))}
+        />
+        {badge}
+      </div>
+    )
+  }
+
+  if (fieldType === 'textarea') {
+    return (
+      <div className="iw">
+        {label}
+        <textarea
+          className="inp"
+          rows={3}
+          defaultValue={currentAnswer}
+          onBlur={e => saveValue(e.target.value)}
+        />
+        {badge}
+      </div>
+    )
+  }
+
+  // Default: text input
+  return (
+    <div className="iw">
+      {label}
+      <input
+        className="inp"
+        type="text"
+        defaultValue={currentAnswer}
+        onBlur={e => saveValue(e.target.value)}
+      />
+      {badge}
+    </div>
+  )
+}
+
 // ── Single question renderer ──────────────────────────────────────────────────
 function QuestionItem({
   q, dealId, pbState, setPbAnswer, setPbNote, lang,
@@ -461,6 +786,36 @@ function QuestionItem({
           pbState={pbState}
           setPbAnswer={setPbAnswer}
           lang={lang}
+        />
+      )
+
+    case 'open_text':
+      return (
+        <OpenTextQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbNote={setPbNote}
+        />
+      )
+
+    case 'list_options':
+      return (
+        <ListOptionsQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbAnswer={setPbAnswer}
+        />
+      )
+
+    case 'update_property':
+      return (
+        <UpdatePropertyQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbAnswer={setPbAnswer}
         />
       )
 

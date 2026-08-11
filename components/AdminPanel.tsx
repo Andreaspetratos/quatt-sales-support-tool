@@ -14,7 +14,7 @@ type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'diagnostics'
 function clone<T>(x: T): T { return JSON.parse(JSON.stringify(x)) }
 
 // ── HubSpot property picker (searchable dropdown) ────────────────────────────
-function HsPropPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function HsPropPicker({ value, onChange }: { value: string; onChange: (propName: string, fieldType?: string, propOptions?: Array<{ label: string; value: string }>) => void }) {
   const [query, setQuery] = useState('')
   const [allProps, setAllProps] = useState<Array<{ name: string; label: string; type: string; fieldType: string }>>([])
   const [loaded, setLoaded] = useState(false)
@@ -74,8 +74,13 @@ function HsPropPicker({ value, onChange }: { value: string; onChange: (v: string
                 borderBottom: '1px solid var(--gl)',
                 background: p.name === value ? 'rgba(26,122,107,.08)' : undefined,
               }}
-              onMouseDown={() => {
-                onChange(p.name)
+              onMouseDown={async () => {
+                const enumFieldTypes = ['select', 'radio', 'checkbox', 'booleancheckbox']
+                let opts: Array<{ label: string; value: string }> = []
+                if (enumFieldTypes.includes(p.fieldType)) {
+                  try { opts = await fetchLeadPropertyOptions(p.name) } catch {}
+                }
+                onChange(p.name, p.fieldType, opts)
                 setOpen(false)
                 setQuery('')
               }}
@@ -180,6 +185,13 @@ function PlaybookEditor({
   function updateQField(pi: number, qi: number, k: keyof Question, v: any) {
     const phases = ep.phases.map((ph, i) => i === pi
       ? { ...ph, questions: ph.questions.map((q, j) => j === qi ? { ...q, [k]: v } : q) }
+      : ph)
+    update({ phases })
+  }
+
+  function updateQFields(pi: number, qi: number, updates: Partial<import('@/lib/types').Question>) {
+    const phases = ep.phases.map((ph, i) => i === pi
+      ? { ...ph, questions: ph.questions.map((q, j) => j === qi ? { ...q, ...updates } : q) }
       : ph)
     update({ phases })
   }
@@ -360,7 +372,79 @@ function PlaybookEditor({
             </div>
           </>
         )}
-        {!['script','info','address','outcome','tech_check'].includes(q.type) && (
+        {/* ── New question types ──────────────────────────────── */}
+        {q.type === 'open_text' && (
+          <>
+            <div className="iw">
+              <label className="il">Vraag / instructie voor agent</label>
+              <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+              ✎ Agent typt vrije tekst → toegevoegd aan <code>personal_info___notes</code>
+            </div>
+          </>
+        )}
+        {q.type === 'list_options' && (
+          <>
+            <div className="iw">
+              <label className="il">Vraag / instructie voor agent</label>
+              <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
+            </div>
+            <div className="iw">
+              <label className="il">Antwoord opties</label>
+              <div className="opt-chips">
+                {(q.options || []).map((o, oi) => (
+                  <span key={oi} className="opt-chip">
+                    {o}<span className="opt-rm" onClick={() => removeQOption(pi, qi, oi)}>×</span>
+                  </span>
+                ))}
+                <input className="inp inp-sm" style={{ width: 160 }} placeholder="Optie toevoegen…"
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addQOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+              ☑ Geselecteerde optie → toegevoegd aan <code>personal_info___notes</code> als "Vraag - Optie"
+            </div>
+          </>
+        )}
+        {q.type === 'update_property' && (
+          <>
+            <div className="iw">
+              <label className="il">Vraag / label voor agent</label>
+              <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+                onBlur={e => updateQField(pi, qi, 'label', e.target.value)} />
+            </div>
+            <div className="iw">
+              <label className="il">HubSpot property</label>
+              <HsPropPicker
+                value={q.hsProperty || ''}
+                onChange={(propName, fieldType, opts) => {
+                  updateQFields(pi, qi, {
+                    hsProperty: propName,
+                    hubspotPropFieldType: fieldType || '',
+                    hubspotPropOptions: opts || [],
+                  })
+                }}
+              />
+            </div>
+            {q.hubspotPropFieldType && (
+              <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+                Field type: <strong>{q.hubspotPropFieldType}</strong>
+                {q.hubspotPropOptions && q.hubspotPropOptions.length > 0 && (
+                  <span> · {q.hubspotPropOptions.length} opties geladen</span>
+                )}
+              </div>
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer' }}>
+              <input type="checkbox" className="chk" defaultChecked={!!q.required}
+                onChange={e => updateQField(pi, qi, 'required', e.target.checked)} />
+              Verplicht veld
+            </label>
+          </>
+        )}
+        {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
           <div className="iw">
             <label className="il">{t('adQLabel')}</label>
             <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
@@ -388,11 +472,11 @@ function PlaybookEditor({
             <div className="iw"><label className="il">❄️ Cold</label><input className="inp inp-sm" defaultValue={q.coldDesc || ''} onBlur={e => updateQField(pi, qi, 'coldDesc', e.target.value)} /></div>
           </div>
         )}
-        {!['script','info','address','outcome','tech_check'].includes(q.type) && (
+        {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="iw" style={{ flex: 1, minWidth: 140 }}>
               <label className="il">{t('adQHsProp')}</label>
-              <HsPropPicker value={q.hsProperty || ''} onChange={v => updateQField(pi, qi, 'hsProperty', v)} />
+              <HsPropPicker value={q.hsProperty || ''} onChange={(v) => { updateQField(pi, qi, 'hsProperty', v) }} />
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--gd)', cursor: 'pointer', flexShrink: 0 }}>
               <input type="checkbox" className="chk" defaultChecked={!!q.required}
