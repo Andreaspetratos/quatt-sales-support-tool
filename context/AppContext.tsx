@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useState } from 'react'
-import type { AppState, Lead, Lang, Modal, PerfData, PlaybookState, Task, TaskTab } from '@/lib/types'
+import type { AppState, Lead, Lang, Modal, PerfData, PlaybookState, Task, TaskTab, Feedback } from '@/lib/types'
 
 // ── Default playbook state factory ────────────────────────────────────────────
 export function defaultPbState(): PlaybookState {
@@ -17,6 +17,7 @@ const initialState: AppState = {
   isAdmin: false,
   playbooks: [],
   schedulers: [],
+  feedbacks: [],
   leads: [],
   selectedId: null,
   loading: false,

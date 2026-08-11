@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { seedBuiltinPlaybooks } from '@/lib/playbooks'
 import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
-import { fetchSharedPbs, fetchSharedScheds } from '@/lib/storage'
+import { fetchSharedPbs, fetchSharedScheds, fetchFeedbacks } from '@/lib/storage'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
@@ -59,6 +59,8 @@ function Shell() {
     fetchSharedScheds().then(scheds => {
       if (scheds.length > 0) setState({ schedulers: scheds })
     })
+    // Load feedbacks (admin only — non-admins just get empty array)
+    fetchFeedbacks().then(feedbacks => setState({ feedbacks }))
   }, [currentRep?.email])
 
   return (

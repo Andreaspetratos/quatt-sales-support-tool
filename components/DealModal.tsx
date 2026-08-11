@@ -18,9 +18,14 @@ function initials(name: string) {
 function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
   if (!scheds.length) return null
   const prod = (deal?.properties?.[CONFIG.PROPS.product] || '').toLowerCase()
-  return scheds.find(s => s.productMatch && prod.includes(s.productMatch.toLowerCase()))
-    || scheds.find(s => s.isDefault)
-    || scheds[0]
+  // Match against productMatches array (new) or legacy productMatch string
+  const byProduct = scheds.find(s => {
+    const matches = s.productMatches && s.productMatches.length > 0
+      ? s.productMatches
+      : s.productMatch ? [s.productMatch] : []
+    return matches.some(m => prod.includes(m.toLowerCase()))
+  })
+  return byProduct || scheds.find(s => s.isDefault) || scheds[0]
 }
 
 // ── Modals ────────────────────────────────────────────────────────────────────

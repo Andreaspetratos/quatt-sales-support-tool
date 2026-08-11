@@ -164,3 +164,35 @@ export async function storeSharedScheds(scheds: import('./types').Scheduler[]): 
     throw e
   }
 }
+
+// ── Feedback (Cloudflare KV via /api/feedback) ─────────────────────────────────
+export async function fetchFeedbacks(): Promise<import('./types').Feedback[]> {
+  try {
+    const res = await fetch('/api/feedback')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return await res.json()
+  } catch (e) {
+    console.error('[storage] fetchFeedbacks error:', e)
+    return []
+  }
+}
+
+export async function submitFeedback(message: string, submittedBy: string): Promise<void> {
+  const res = await fetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, submittedBy }),
+  })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+}
+
+export async function triageFeedback(id: string, message: string): Promise<string> {
+  const res = await fetch('/api/triage-feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, message }),
+  })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  const data = await res.json()
+  return data.triage
+}
