@@ -30,7 +30,7 @@ function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 // ── Inline editable field ─────────────────────────────────────────────────────
-function EditableField({ label, value, onSave }: { label: string; value: string; onSave: (v: string) => Promise<void> }) {
+function EditableField({ label, value, onSave, highlight = false }: { label: string; value: string; onSave: (v: string) => Promise<void>; highlight?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
@@ -52,7 +52,21 @@ function EditableField({ label, value, onSave }: { label: string; value: string;
   }
 
   return (
-    <div className="kv" style={{ alignItems: 'center' }}>
+    <div
+      className="kv"
+      style={{
+        alignItems: 'center',
+        // Highlighted when this field is blocking a home visit — draws the eye
+        // straight to what needs filling in, rather than relying on the toast.
+        ...(highlight ? {
+          background: 'rgba(247,102,34,0.10)',
+          border: '1px solid var(--or)',
+          borderRadius: 6,
+          padding: '2px 6px',
+          margin: '-2px -6px',
+        } : {}),
+      }}
+    >
       <span className="kk" style={{ flexShrink: 0 }}>{label}</span>
       {editing ? (
         <input
@@ -302,6 +316,12 @@ export default function DealModal() {
     document.addEventListener('mouseup', onUp)
   }, [setState])
 
+  // Address fields currently blocking a home visit — highlighted inline so the
+  // rep can see exactly what to fill without hunting for it.
+  // Declared here with the other hooks: must be above the early return below,
+  // or React's hook order breaks when no deal is selected.
+  const [hvMissing, setHvMissing] = useState<string[]>([])
+
   // ── Deal-specific setup (after hooks) ──────────────────────────────────────
   const deal = state.leads.find(l => l.id === state.selectedId)
   if (!deal) return null
@@ -344,13 +364,18 @@ export default function DealModal() {
     // address the rep then waits ~3 minutes on a polling overlay and ends up with
     // a converted lead and no home visit booked.
     if (value === 'Plan HV') {
-      const missing: string[] = []
-      if (!String(p['postal_code'] || '').trim())  missing.push(t('postalCode'))
-      if (!String(p['house_number'] || '').trim()) missing.push(t('houseNumber'))
-      if (missing.length > 0) {
-        showToast(t('hvAddressRequired', missing.join(', ')), 'error')
+      const missingProps: string[] = []
+      const missingLabels: string[] = []
+      if (!String(p['postal_code'] || '').trim())  { missingProps.push('postal_code');  missingLabels.push(t('postalCode')) }
+      if (!String(p['house_number'] || '').trim()) { missingProps.push('house_number'); missingLabels.push(t('houseNumber')) }
+      if (missingProps.length > 0) {
+        // Always flag the suffix too — it's optional to fill, but address quality
+        // decides whether job creation passes verification in the backend later.
+        setHvMissing([...missingProps, 'house_number_suffix'])
+        showToast(t('hvAddressRequired', missingLabels.join(', ')), 'error', 9000)
         return
       }
+      setHvMissing([])
     }
 
     const needsDeal = value === 'Plan HV' || value === 'Plan Call'
@@ -496,6 +521,7 @@ export default function DealModal() {
                       key={prop}
                       label={label}
                       value={p[prop] || ''}
+                      highlight={hvMissing.includes(prop)}
                       onSave={async (val) => {
                         await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
                         patchLeadLocal(dealId, { [prop]: val })

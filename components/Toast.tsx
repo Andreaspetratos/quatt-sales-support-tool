@@ -11,11 +11,11 @@ interface ToastItem {
 }
 
 // Singleton event bus so any component can fire toasts
-type ToastListener = (msg: string, type: ToastType) => void
+type ToastListener = (msg: string, type: ToastType, durationMs?: number) => void
 const listeners: ToastListener[] = []
 
-export function showToast(msg: string, type: ToastType = 'info') {
-  listeners.forEach(fn => fn(msg, type))
+export function showToast(msg: string, type: ToastType = 'info', durationMs = 3000) {
+  listeners.forEach(fn => fn(msg, type, durationMs))
 }
 
 export default function Toast() {
@@ -23,12 +23,12 @@ export default function Toast() {
   const counterRef = useRef(0)
 
   useEffect(() => {
-    const fn: ToastListener = (msg, type) => {
+    const fn: ToastListener = (msg, type, durationMs = 3000) => {
       const id = ++counterRef.current
       setToasts(prev => [...prev, { id, msg, type }])
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id))
-      }, 3000)
+      }, durationMs)
     }
     listeners.push(fn)
     return () => {
