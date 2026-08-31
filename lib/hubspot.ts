@@ -384,6 +384,71 @@ export async function fetchPerformance(ownerId: string): Promise<PerfData> {
 }
 
 // ── Property metadata ─────────────────────────────────────────────────────────
+/**
+ * Fetch the contact associated with a lead — first/last name, email, phone.
+ * Used to prefill the HubSpot meetings scheduler so the rep doesn't have to
+ * type the customer's details while on the phone with them.
+ *
+ * Deliberately on-demand (called when the scheduler opens) rather than part of
+ * LEAD_PROPS: it needs an association lookup plus a contact read, which isn't
+ * worth doing for every lead on the board when only one is ever scheduled.
+ */
+export async function fetchLeadContact(leadId: string): Promise<{
+  firstName: string; lastName: string; email: string; phone: string
+} | null> {
+  if (isDemo() || !leadId) return null
+  try {
+    const assocRes = await hsProxy('GET', `/crm/v4/objects/leads/${leadId}/associations/contacts?limit=1`)
+    if (!assocRes.ok) return null // logged by hsProxy
+    const assoc = await assocRes.json()
+    const contactId = assoc?.results?.[0]?.toObjectId
+    if (!contactId) {
+      console.warn('[hs] fetchLeadContact: no associated contact for lead', leadId)
+      return null
+    }
+    const res = await hsProxy('GET', `/crm/v3/objects/contacts/${contactId}?properties=firstname,lastname,email,phone`)
+    if (!res.ok) return null // logged by hsProxy
+    const data = await res.json()
+    const pr = data?.properties || {}
+    return {
+      firstName: pr.firstname || '',
+      lastName:  pr.lastname  || '',
+      email:     pr.email     || '',
+      phone:     pr.phone     || '',
+    }
+  } catch (e) {
+    console.error('[hs] fetchLeadContact error:', leadId, e)
+    return null
+  }
+}
+
+/**
+ * Append the customer's details to a scheduler URL as query params.
+ * Verified against HubSpot's public meetings link: firstName / lastName /
+ * email / phone all prefill the "Your information" step. The duration step
+ * cannot be prefilled (it's buttons, not inputs) — that's fine, the rep picks
+ * the slot with the customer anyway.
+ * Leaves the URL untouched if there's nothing to add.
+ */
+export function buildSchedulerUrl(
+  baseUrl: string,
+  c: { firstName: string; lastName: string; email: string; phone: string } | null,
+): string {
+  if (!baseUrl || !c) return baseUrl
+  try {
+    const u = new URL(baseUrl)
+    u.searchParams.set('embed', 'true')
+    if (c.firstName) u.searchParams.set('firstName', c.firstName)
+    if (c.lastName)  u.searchParams.set('lastName',  c.lastName)
+    if (c.email)     u.searchParams.set('email',     c.email)
+    if (c.phone)     u.searchParams.set('phone',     c.phone)
+    return u.toString()
+  } catch {
+    // Malformed scheduler URL configured in Admin — fall back to it unchanged
+    return baseUrl
+  }
+}
+
 export async function fetchLeadPropertyOptions(
   propName: string,
 ): Promise<Array<{ label: string; value: string }>> {

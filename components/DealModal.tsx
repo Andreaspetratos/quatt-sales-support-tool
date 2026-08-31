@@ -4,7 +4,7 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -162,6 +162,22 @@ function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; o
   const sched = getScheduler(deal, state.schedulers)
   const [confirming, setConfirming] = useState(false)
 
+  // Prefill the scheduler with the customer's details so the rep doesn't have
+  // to type them while on the phone. Fetched on open rather than upfront — only
+  // one lead is ever being scheduled at a time.
+  const [contact, setContact] = useState<Awaited<ReturnType<typeof fetchLeadContact>>>(null)
+  const [loadingContact, setLoadingContact] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchLeadContact(deal.id)
+      .then(c => { if (!cancelled) setContact(c) })
+      .finally(() => { if (!cancelled) setLoadingContact(false) })
+    return () => { cancelled = true }
+  }, [deal.id])
+
+  const schedUrl = sched ? buildSchedulerUrl(sched.url, contact) : ''
+
   function handleClose() {
     setConfirming(true)
   }
@@ -184,10 +200,16 @@ function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; o
             ? <div className="wb">⚙️ {t('noSchedCfg')}</div>
             : (
               <>
-                <a href={sched.url} target="_blank" rel="noreferrer" className="btn btn-pr btn-md btn-full" style={{ textDecoration: 'none' }}>
+                <a href={schedUrl} target="_blank" rel="noreferrer" className="btn btn-pr btn-md btn-full" style={{ textDecoration: 'none' }}>
                   {t('openSched')}
                 </a>
-                <iframe src={sched.url} style={{ width: '100%', height: 360, border: 'none', borderRadius: 10, outline: '1px solid var(--gl)' }} />
+                {/* Wait for the contact fetch before rendering the iframe — the
+                    scheduler reads its prefill params on load, so mounting it
+                    early would show empty fields and never refill them. */}
+                {loadingContact
+                  ? <div className="wb" style={{ height: 360, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>…</div>
+                  : <iframe src={schedUrl} style={{ width: '100%', height: 360, border: 'none', borderRadius: 10, outline: '1px solid var(--gl)' }} />
+                }
               </>
             )
           }
