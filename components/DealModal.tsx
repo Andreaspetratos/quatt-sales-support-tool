@@ -178,6 +178,31 @@ function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; o
 
   const schedUrl = sched ? buildSchedulerUrl(sched.url, contact) : ''
 
+  // HubSpot's meetings iframe posts a message to the parent window when a
+  // booking succeeds. Listening for it sets the call result at the moment the
+  // appointment is actually made, instead of relying on the rep answering the
+  // "Afspraak gemaakt?" prompt afterwards.
+  //
+  // The manual prompt is kept as a fallback: a rep who books via "Open planner"
+  // (new tab) is outside this window, so no message reaches us there.
+  useEffect(() => {
+    if (!sched) return
+    let expectedOrigin = ''
+    try { expectedOrigin = new URL(sched.url).origin } catch { /* malformed URL configured in Admin */ }
+
+    function onMessage(e: MessageEvent) {
+      // Only trust messages from the scheduler's own origin.
+      if (expectedOrigin && e.origin !== expectedOrigin) return
+      if (!e.data || typeof e.data !== 'object') return
+      if ((e.data as { meetingBookSucceeded?: boolean }).meetingBookSucceeded !== true) return
+      onBooked()
+      setState({ modal: null })
+    }
+
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [sched?.url, onBooked, setState])
+
   function handleClose() {
     setConfirming(true)
   }
