@@ -493,8 +493,10 @@ export default function DealModal() {
 
             <div className="dv" />
 
-            {/* Playbook — only when product is selected */}
-            {p[P.product] && pbDefs.length > 0 && (
+            {/* Playbook — pbDefs is empty only when there are genuinely no
+                playbooks to show. Leads without a product get all playbooks
+                (see getPlaybookDefs) so the rep can pick. */}
+            {pbDefs.length > 0 && (
               <>
                 <div className="dv" />
                 <div className="sl2">{t('pbLabel')}</div>
