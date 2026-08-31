@@ -168,8 +168,19 @@ export function seedBuiltinPlaybooks(): void {
 
 // ── Get matching playbooks for a deal ─────────────────────────────────────────
 export function getPlaybookDefs(deal: Deal, customs?: Playbook[]): PlaybookInfo[] {
-  const prod = (deal?.properties?.[CONFIG.PROPS.product] || '').toLowerCase()
+  const prod = (deal?.properties?.[CONFIG.PROPS.product] || '').toLowerCase().trim()
   if (!customs) customs = loadPbs()
+
+  // No product on the lead — matching on product would exclude everything, so
+  // offer every playbook and let the rep pick. Leads legitimately arrive without
+  // a product (e.g. contact details submitted before a product is chosen).
+  if (!prod) {
+    if (customs.length > 0) {
+      return customs.map(p => ({ type: 'custom' as const, key: p.id, def: p }))
+    }
+    return getBuiltinPlaybookDefs().map(d => ({ type: 'custom' as const, key: d.id, def: d }))
+  }
+
   const results: PlaybookInfo[] = []
 
   customs.forEach(p => {
