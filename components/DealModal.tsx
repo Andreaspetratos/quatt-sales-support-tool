@@ -333,6 +333,26 @@ export default function DealModal() {
   }
 
   async function handleCallResult(value: string) {
+    // Plan HV needs a resolvable address: the home-visit scheduler can't produce
+    // a URL without one. Postcode + house number are the required pair — PostNL
+    // Adrescheck backfills street and city from those two. House number suffix
+    // stays optional (many addresses don't have one, though it's often needed in
+    // NL to pin down the exact address — reps can add it inline above).
+    //
+    // Guarding here matters because Plan HV is not a reversible click: it writes
+    // the call result, which moves the lead to SQL and creates a deal. Without an
+    // address the rep then waits ~3 minutes on a polling overlay and ends up with
+    // a converted lead and no home visit booked.
+    if (value === 'Plan HV') {
+      const missing: string[] = []
+      if (!String(p['postal_code'] || '').trim())  missing.push(t('postalCode'))
+      if (!String(p['house_number'] || '').trim()) missing.push(t('houseNumber'))
+      if (missing.length > 0) {
+        showToast(t('hvAddressRequired', missing.join(', ')), 'error')
+        return
+      }
+    }
+
     const needsDeal = value === 'Plan HV' || value === 'Plan Call'
     if (needsDeal) {
       // Show loading overlay immediately — global state so it survives DealModal unmounting
