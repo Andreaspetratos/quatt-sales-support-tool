@@ -555,7 +555,23 @@ export default function DealModal() {
               </div>
               {/* Right: editable address */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="sl2">{t('address')}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div className="sl2">{t('address')}</div>
+                  {/* Straight to the contact in HubSpot — reps need the activity
+                      history, which lives on the contact, not the lead. Uses the
+                      lead's own hs_primary_contact_id so no extra lookup is needed. */}
+                  {p['hs_primary_contact_id'] && state.hubspotPortalId && (
+                    <a
+                      className="btn btn-sc btn-xs"
+                      href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-1/${p['hs_primary_contact_id']}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      {t('openContact')}
+                    </a>
+                  )}
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {([
                     { label: t('street'),            prop: 'street_lead' },

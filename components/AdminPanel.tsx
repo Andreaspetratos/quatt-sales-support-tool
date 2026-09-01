@@ -207,6 +207,32 @@ function QCard({
         </>
       )}
 
+      {/* multi_select — same editor as list_options, but several answers allowed */}
+      {q.type === 'multi_select' && (
+        <>
+          <div className="iw">
+            <label className="il">Vraag / instructie voor agent</label>
+            <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
+              onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">Antwoord opties</label>
+            <div className="opt-chips">
+              {(q.options || []).map((o, oi) => (
+                <span key={oi} className="opt-chip">
+                  {o}<span className="opt-rm" onClick={() => onRemoveOption(pi, qi, oi)}>×</span>
+                </span>
+              ))}
+              <input className="inp inp-sm" style={{ width: 160 }} placeholder="Optie toevoegen…"
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { onAddOption(pi, qi, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; e.preventDefault() } }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+            ☑ Meerdere opties mogelijk. Agent klikt &quot;Opslaan&quot; → toegevoegd aan <code>personal_info___notes</code> als &quot;Vraag - Optie A, Optie B&quot;
+          </div>
+        </>
+      )}
+
       {/* update_property */}
       {q.type === 'update_property' && (
         <>
@@ -321,7 +347,7 @@ function QCard({
           </div>
         </>
       )}
-      {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
+      {!['script','info','address','outcome','tech_check','open_text','list_options','multi_select','update_property'].includes(q.type) && (
         <div className="iw">
           <label className="il">Label</label>
           <input className="inp inp-sm" type="text" defaultValue={q.label || ''}
@@ -349,7 +375,7 @@ function QCard({
           <div className="iw"><label className="il">❄️ Cold</label><input className="inp inp-sm" defaultValue={q.coldDesc || ''} onBlur={e => onUpdateField(pi, qi, 'coldDesc', e.target.value)} /></div>
         </div>
       )}
-      {!['script','info','address','outcome','tech_check','open_text','list_options','update_property'].includes(q.type) && (
+      {!['script','info','address','outcome','tech_check','open_text','list_options','multi_select','update_property'].includes(q.type) && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="iw" style={{ flex: 1, minWidth: 140 }}>
             <label className="il">HubSpot property</label>

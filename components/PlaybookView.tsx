@@ -448,6 +448,72 @@ function OpenTextQuestion({
 }
 
 // ── List of options → appended as "Label - Option" to personal_info___notes ──
+// ── Multi-select: pick several options, save once ────────────────────────────
+// Unlike list_options (single answer, saves on click), this lets the rep toggle
+// freely and commit once — otherwise every toggle would append another line to
+// the contact's notes.
+function MultiSelectQuestion({
+  q, dealId, pbState, setPbAnswer,
+}: {
+  q: Question; dealId: string; pbState: PlaybookState; setPbAnswer: (k: string, v: string) => void
+}) {
+  const { state, patchLeadLocal } = useApp()
+  const lang = state.lang
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [saved, setSaved] = useState(false)
+
+  // Stored as a semicolon-joined string so it round-trips through the existing
+  // answers map, which is Record<string, string>.
+  const selected = (pbState.answers[q.id] || '').split(';').map(x => x.trim()).filter(Boolean)
+
+  function toggle(opt: string) {
+    const next = selected.includes(opt)
+      ? selected.filter(o => o !== opt)
+      : [...selected, opt]
+    setPbAnswer(q.id, next.join(';'))
+    setSaved(false)
+  }
+
+  async function handleSave() {
+    if (selected.length === 0) {
+      showToast(t('msNone'), 'error')
+      return
+    }
+    try {
+      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label} - ${selected.join(', ')}`)
+      setSaved(true)
+      showToast('✓ Notitie opgeslagen in HubSpot', 'success')
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: any) {
+      showToast(e.message || 'Save failed', 'error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="ql">
+        {q.label}
+        {q.required && <span className="qr"> *</span>}
+      </div>
+      <div className="cr2">
+        {(q.options || []).map(opt => (
+          <button
+            key={opt}
+            className={`chip ${selected.includes(opt) ? 'on' : ''}`}
+            onClick={() => toggle(opt)}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+        <button className="btn btn-sc btn-xs" onClick={handleSave}>{t('msSave')}</button>
+        {saved && <span style={{ fontSize: 12, color: 'var(--gr)' }}>✓</span>}
+      </div>
+    </div>
+  )
+}
+
 function ListOptionsQuestion({
   q, dealId, pbState, setPbAnswer,
 }: {
@@ -802,6 +868,16 @@ function QuestionItem({
     case 'list_options':
       return (
         <ListOptionsQuestion
+          q={q}
+          dealId={dealId}
+          pbState={pbState}
+          setPbAnswer={setPbAnswer}
+        />
+      )
+
+    case 'multi_select':
+      return (
+        <MultiSelectQuestion
           q={q}
           dealId={dealId}
           pbState={pbState}

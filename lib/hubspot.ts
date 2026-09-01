@@ -20,6 +20,7 @@ const LEAD_PROPS = [
   'screening_call_requested_at',
   'lead_router_qualification_score_lead',
   'contact_email',
+  'hs_primary_contact_id',   // used to link straight to the contact from the lead modal
   'qualification_call_result_lead',
 ]
 
