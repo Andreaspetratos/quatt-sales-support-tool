@@ -176,29 +176,41 @@ export async function fetchAllOwners(): Promise<Array<{ id: string; email: strin
 }
 
 
-/** Fetch owners belonging to specific HubSpot team IDs (primary team check). */
+/**
+ * Fetch owners belonging to any of the given HubSpot teams.
+ *
+ * Checks primary AND secondary team membership: filtering on hubspot_team_id
+ * alone misses anyone whose primary team is something else but who is also a
+ * member of the team we care about — which is common, since most reps sit in
+ * several teams.
+ */
 export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id: string; email: string; name: string }>> {
   if (isDemo() || !teamIds.length) return []
+  const wanted = new Set(teamIds.map(String))
   try {
-    // Search CRM users where primary team is one of the given IDs (OR logic via multiple filterGroups)
     const searchRes = await hsProxy('POST', '/crm/v3/objects/users/search', {
-      filterGroups: teamIds.map(id => ({
-        filters: [{ propertyName: 'hubspot_team_id', operator: 'EQ', value: id }],
-      })),
-      properties: ['hs_email'],
-      limit: 100,
+      // No team filter here: secondary teams live in a semicolon-joined string,
+      // which HubSpot search cannot match against a list. Pull the users and
+      // filter client-side instead.
+      properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams'],
+      limit: 200,
     })
     if (!searchRes.ok) {
       console.error('[hs] fetchOwnersByTeams search failed:', searchRes.status)
       return []
     }
     const users = (await searchRes.json()).results || []
-    const emails = new Set<string>(
-      (users as any[]).map(u => u.properties?.hs_email).filter(Boolean)
-    )
+    const emails = new Set<string>()
+    for (const u of (users as any[])) {
+      const primary   = String(u.properties?.hubspot_team_id         || '').trim()
+      const secondary = String(u.properties?.hs_user_secondary_teams || '').trim()
+      const teams = [primary, ...secondary.split(';')].map(t => t.trim()).filter(Boolean)
+      if (teams.some(t => wanted.has(t)) && u.properties?.hs_email) {
+        emails.add(u.properties.hs_email)
+      }
+    }
     if (!emails.size) return []
 
-    // Cross-reference with owners to get owner IDs
     const ownersRes = await hsProxy('GET', '/crm/v3/owners?limit=100&archived=false')
     if (!ownersRes.ok) return []
     const owners = (await ownersRes.json()).results || []
@@ -209,6 +221,7 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
         email: o.email,
         name: [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email,
       }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   } catch (e) {
     console.error('[hs] fetchOwnersByTeams error:', e)
     return []

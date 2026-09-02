@@ -137,8 +137,16 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
 
   // Load all HubSpot owners once when modal opens
   useEffect(() => {
-    fetchOwnersByTeams(['140339728', '146169755', '146180338', '187118858', '187124885']).then(list => {
-      setOwners(list)
+    // Sales Support Team (Dennis) — the team that actually works these leads.
+    // Previously queried five teams, which pulled in people who never touch
+    // them and made the list hard to scan.
+    fetchOwnersByTeams([CONFIG.TASK_ASSIGNEE_TEAM_ID]).then(list => {
+      // Current rep first — they assign to themselves most of the time — then
+      // the rest alphabetically as returned.
+      const meId = state.currentRep?.hubspotOwnerId
+      const me = list.filter(o => o.id === meId)
+      const others = list.filter(o => o.id !== meId)
+      setOwners([...me, ...others])
       // Pre-select current rep if not already set
       if (!draft.assigneeOwnerId && state.currentRep?.hubspotOwnerId) {
         setState({ taskDraft: { ...state.taskDraft, assigneeOwnerId: state.currentRep.hubspotOwnerId } })

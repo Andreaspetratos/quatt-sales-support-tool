@@ -30,6 +30,7 @@ interface AppConfig {
   REQUEST_COOLDOWN: number
   REPS: Rep[]
   ADMINS: string[]
+  TASK_ASSIGNEE_TEAM_ID: string
   DEMO_MODE: boolean
   CUSTOM_PLAYBOOKS: Playbook[]
   CUSTOM_SCHEDULERS: Scheduler[]
@@ -81,6 +82,8 @@ export const CONFIG: AppConfig = {
   ],
 
   ADMINS: ['andreas@quatt.io'],
+  // Sales Support Team (Dennis) — who can be assigned a task from the tool.
+  TASK_ASSIGNEE_TEAM_ID: '140339728',
   DEMO_MODE: false,
   CUSTOM_PLAYBOOKS: [],
   CUSTOM_SCHEDULERS: [],
