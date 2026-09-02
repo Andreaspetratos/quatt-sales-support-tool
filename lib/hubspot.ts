@@ -210,6 +210,19 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
         emails.add(u.properties.hs_email)
       }
     }
+    // Diagnostic: what team ids do we actually see, and how many users carry any?
+    const seenTeams = new Set<string>()
+    let withAnyTeam = 0
+    for (const u of (users as any[])) {
+      const p1 = String(u.properties?.hubspot_team_id || '').trim()
+      const p2 = String(u.properties?.hs_user_secondary_teams || '').trim()
+      const ts = [p1, ...p2.split(';')].map(t => t.trim()).filter(Boolean)
+      if (ts.length) withAnyTeam++
+      ts.forEach(t => seenTeams.add(t))
+    }
+    console.log('[hs] fetchOwnersByTeams: users with any team:', withAnyTeam, 'of', users.length)
+    console.log('[hs] fetchOwnersByTeams: distinct team ids seen:', Array.from(seenTeams).sort())
+    console.log('[hs] fetchOwnersByTeams: sample user props:', (users as any[])[0]?.properties)
     console.log('[hs] fetchOwnersByTeams: emails matching teams', teamIds, ':', emails.size)
     if (!emails.size) return []
 
