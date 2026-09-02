@@ -618,9 +618,10 @@ function _dateToHsMs(date: string): string | undefined {
  */
 function _hsMsToIso(ms: string | undefined): string | undefined {
   if (!ms) return undefined
-  const n = Number(ms)
-  if (!Number.isFinite(n)) return undefined
-  const d = new Date(n)
+  // HubSpot returns datetime properties as ISO strings on read (e.g.
+  // "2026-09-07T06:00:00Z") but expects epoch ms on write, so handle both.
+  const raw = String(ms).trim()
+  const d = /^-?\d+$/.test(raw) ? new Date(Number(raw)) : new Date(raw)
   if (isNaN(d.getTime())) return undefined
   return d.toISOString()
 }
