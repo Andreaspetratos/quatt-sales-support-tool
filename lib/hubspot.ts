@@ -188,19 +188,43 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
   if (isDemo() || !teamIds.length) return []
   const wanted = new Set(teamIds.map(String))
   try {
-    const searchRes = await hsProxy('POST', '/crm/v3/objects/users/search', {
-      // No team filter here: secondary teams live in a semicolon-joined string,
-      // which HubSpot search cannot match against a list. Pull the users and
-      // filter client-side instead.
-      properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams'],
-      limit: 200,
-    })
-    if (!searchRes.ok) {
-      console.error('[hs] fetchOwnersByTeams search failed:', searchRes.status)
-      return []
+    // Filter server-side on the team. Pulling every user and filtering here
+    // does not work: the search pages at 100 and this portal has thousands, so
+    // an unfiltered query returned whoever landed on the first page or two.
+    //
+    // Two sets of OR'd groups because membership lives in two properties: the
+    // primary team is a plain id, secondary teams are a semicolon-joined string
+    // (hence CONTAINS_TOKEN rather than EQ).
+    const users: any[] = []
+    let userAfter: string | undefined = undefined
+    for (let page = 0; page < 10; page++) {
+      const body: Record<string, unknown> = {
+        filterGroups: [
+          ...teamIds.map(id => ({
+            filters: [{ propertyName: 'hubspot_team_id', operator: 'EQ', value: String(id) }],
+          })),
+          ...teamIds.map(id => ({
+            filters: [{ propertyName: 'hs_user_secondary_teams', operator: 'CONTAINS_TOKEN', value: String(id) }],
+          })),
+        ],
+        properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams'],
+        limit: 100,
+      }
+      if (userAfter) body.after = userAfter
+      const searchRes = await hsProxy('POST', '/crm/v3/objects/users/search', body)
+      if (!searchRes.ok) {
+        console.error('[hs] fetchOwnersByTeams search failed:', searchRes.status)
+        break
+      }
+      const data = await searchRes.json()
+      users.push(...(data.results || []))
+      userAfter = data.paging?.next?.after
+      if (!userAfter) break
     }
-    const users = (await searchRes.json()).results || []
+    if (users.length === 0) return []
     console.log('[hs] fetchOwnersByTeams: users returned:', users.length)
+    // Re-check client-side: CONTAINS_TOKEN can match loosely, so verify the id
+    // really is one of the wanted teams before trusting the row.
     const emails = new Set<string>()
     for (const u of (users as any[])) {
       const primary   = String(u.properties?.hubspot_team_id         || '').trim()
