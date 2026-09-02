@@ -253,11 +253,11 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     if (ids.length === 0) { setTasks([]); setLoading(false); return }
     setLoading(true)
     try {
-      setTasks(await fetchTasksForLeads(ids))
+      setTasks(await fetchTasksForLeads(state.currentRep?.hubspotOwnerId || '', ids))
     } finally {
       setLoading(false)
     }
-  }, [leadIdsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [leadIdsKey, state.currentRep?.hubspotOwnerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
 
