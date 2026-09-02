@@ -571,6 +571,40 @@ function _decodeLeadFromBody(body: string): { leadId: string | null; notes: stri
   if (m) return { leadId: m[1], notes: body.slice(m[0].length) }
   return { leadId: null, notes: body || '' }
 }
+/**
+ * HubSpot stores task bodies as HTML. Tasks created in the tool are plain text,
+ * but anything a rep writes in HubSpot comes back wrapped in divs and paragraphs
+ * which would otherwise render as visible markup in the task list.
+ * Strips tags, decodes the entities HubSpot actually emits, and collapses the
+ * whitespace the tags leave behind.
+ */
+export function stripHtml(html: string): string {
+  if (!html) return ''
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Named and numeric entities beyond the common five — Dutch copy hits
+    // accented characters often enough to be worth handling generically.
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&[a-z]+\d*;/gi, m => {
+      const el = typeof document !== 'undefined' ? document.createElement('textarea') : null
+      if (!el) return m
+      el.innerHTML = m
+      return el.value
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n').map(l => l.trim()).join('\n')
+    .trim()
+}
+
 function _dateToHsMs(date: string): string | undefined {
   if (!date) return undefined
   const ms = new Date(date + 'T00:00:00Z').getTime()
@@ -696,7 +730,7 @@ export async function fetchTasksForLeads(leadIds: string[]): Promise<HsTask[]> {
         return {
           hsId: String(t.id),
           title: t.properties?.hs_task_subject || '',
-          notes,
+          notes: stripHtml(notes),
           dueDate: _hsMsToDate(ms),
           // Kept separately because dueDate is date-only; the task list shows time.
           dueAt: ms ? new Date(Number(ms)).toISOString() : undefined,
