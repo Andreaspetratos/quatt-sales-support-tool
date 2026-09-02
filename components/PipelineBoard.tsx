@@ -141,6 +141,7 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
     // Previously queried five teams, which pulled in people who never touch
     // them and made the list hard to scan.
     fetchOwnersByTeams([CONFIG.TASK_ASSIGNEE_TEAM_ID]).then(list => {
+      console.log('[task] assignable owners:', list.length, list.map(o => o.name))
       // Current rep first — they assign to themselves most of the time — then
       // the rest alphabetically as returned.
       const meId = state.currentRep?.hubspotOwnerId

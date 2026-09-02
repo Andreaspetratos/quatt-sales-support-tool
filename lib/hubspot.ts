@@ -200,6 +200,7 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
       return []
     }
     const users = (await searchRes.json()).results || []
+    console.log('[hs] fetchOwnersByTeams: users returned:', users.length)
     const emails = new Set<string>()
     for (const u of (users as any[])) {
       const primary   = String(u.properties?.hubspot_team_id         || '').trim()
@@ -209,11 +210,24 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
         emails.add(u.properties.hs_email)
       }
     }
+    console.log('[hs] fetchOwnersByTeams: emails matching teams', teamIds, ':', emails.size)
     if (!emails.size) return []
 
-    const ownersRes = await hsProxy('GET', '/crm/v3/owners?limit=100&archived=false')
-    if (!ownersRes.ok) return []
-    const owners = (await ownersRes.json()).results || []
+    // Paginate: /crm/v3/owners caps at 100 per page and this portal has several
+    // hundred, so a single page silently missed most of the team.
+    const owners: any[] = []
+    let ownerAfter: string | undefined = undefined
+    for (let page = 0; page < 10; page++) {
+      const url = '/crm/v3/owners?limit=100&archived=false' + (ownerAfter ? `&after=${ownerAfter}` : '')
+      const ownersRes = await hsProxy('GET', url)
+      if (!ownersRes.ok) break // logged by hsProxy
+      const body = await ownersRes.json()
+      owners.push(...(body.results || []))
+      ownerAfter = body.paging?.next?.after
+      if (!ownerAfter) break
+    }
+    console.log('[hs] fetchOwnersByTeams: owners fetched:', owners.length)
+
     return (owners as any[])
       .filter(o => emails.has(o.email))
       .map(o => ({
