@@ -263,6 +263,8 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
   )
 }
 
+type SortKey = 'title' | 'status' | 'due' | 'lead'
+
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
 // Reads tasks from HubSpot rather than localStorage. The old local list only
 // showed tasks created in this tool on this device, so a rep on another laptop
@@ -275,6 +277,8 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const [tasks, setTasks] = useState<HsTask[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('due')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Keyed on the lead ids so it reloads whenever the board's leads change.
   const leadIdsKey = state.leads.map(l => l.id).join(',')
@@ -332,50 +336,106 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     )
   }
 
+  // Sorting is client-side over the already-fetched list — no extra API calls.
+  const sorted = [...tasks].sort((a, b) => {
+    let r = 0
+    switch (sortKey) {
+      case 'title':  r = (a.title || '').localeCompare(b.title || ''); break
+      case 'status': r = (a.status || '').localeCompare(b.status || ''); break
+      case 'lead': {
+        const an = state.leads.find(l => l.id === a.leadId)?.properties?.hs_lead_name || ''
+        const bn = state.leads.find(l => l.id === b.leadId)?.properties?.hs_lead_name || ''
+        r = an.localeCompare(bn); break
+      }
+      default: {
+        // Undated tasks always sort last, whichever direction is active —
+        // otherwise flipping the arrow buries the urgent ones.
+        if (!a.dueAt && !b.dueAt) return 0
+        if (!a.dueAt) return 1
+        if (!b.dueAt) return -1
+        r = new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime()
+      }
+    }
+    return sortDir === 'asc' ? r : -r
+  })
+
+  // translate() echoes the key back when it is missing, which would surface as
+  // "taskStatus_WHATEVER" if HubSpot adds a status we don't have a label for.
+  function statusLabel(status: string | undefined): string {
+    if (!status) return '--'
+    const label = t('taskStatus_' + status)
+    return label === 'taskStatus_' + status ? status : label
+  }
+
+  function SortTh({ k, label }: { k: SortKey; label: string }) {
+    const active = sortKey === k
+    return (
+      <th
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => {
+          if (active) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+          else { setSortKey(k); setSortDir('asc') }
+        }}
+      >
+        {label}{active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+      </th>
+    )
+  }
+
   return (
     <>
-      <div className="task-list fade-up">
-        {tasks.map(task => {
-          const dm = dueMeta(task.dueAt)
-          const lead = state.leads.find(l => l.id === task.leadId)
-          return (
-            <div key={task.hsId} className={`task-card ${dm.cls === 'task-due-over' ? 'overdue' : ''}`}>
-              <div className="task-card-title">{task.title || '(no title)'}</div>
-              {task.notes && <div className="task-card-note">{task.notes}</div>}
-              <div className="task-card-meta">
-                {dm.label && <span className={`task-card-due ${dm.cls}`}>{dm.label}</span>}
-                {lead && (
-                  <span
-                    className="task-card-deal"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => selectLead(lead.id)}
-                  >📋 {lead.properties?.hs_lead_name || '--'}</span>
-                )}
-              </div>
-              <div className="task-card-actions">
-                <button className="btn btn-gn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
-                  setBusyId(task.hsId)
-                  await completeHsTask(task.hsId)
-                  await load()
-                  setBusyId(null)
-                }}>{t('taskDone')}</button>
-                <button className="btn btn-dn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
-                  setBusyId(task.hsId)
-                  await deleteHsTask(task.hsId)
-                  await load()
-                  setBusyId(null)
-                }}>{t('taskDelete')}</button>
-                {state.hubspotPortalId && (
-                  <a className="btn btn-sc btn-xs"
-                     href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-27/${task.hsId}`}
-                     target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                    {t('taskOpenHs')}
-                  </a>
-                )}
-              </div>
-            </div>
-          )
-        })}
+      <div className="fade-up" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <table>
+          <thead>
+            <tr>
+              <SortTh k="title"  label={t('thTaskTitle')} />
+              <SortTh k="status" label={t('thTaskStatus')} />
+              <SortTh k="due"    label={t('thTaskDue')} />
+              <th>{t('thTaskNotes')}</th>
+              <SortTh k="lead"   label={t('thTaskLead')} />
+              <th>{t('thTaskHs')}</th>
+              <th>{t('thTaskActions')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(task => {
+              const dm = dueMeta(task.dueAt)
+              const lead = state.leads.find(l => l.id === task.leadId)
+              return (
+                <tr key={task.hsId} style={{ cursor: 'default' }}>
+                  <td className="tn" title={task.title}>{task.title || '--'}</td>
+                  <td className="tm">{statusLabel(task.status)}</td>
+                  <td><span className={`task-card-due ${dm.cls}`}>{dm.label}</span></td>
+                  <td className="tm" style={{ maxWidth: 260, whiteSpace: 'normal' }}>{task.notes || '--'}</td>
+                  <td>
+                    {lead ? (
+                      <span
+                        style={{ cursor: 'pointer', color: 'var(--gr)', fontWeight: 600 }}
+                        onClick={() => selectLead(lead.id)}
+                      >{lead.properties?.hs_lead_name || '--'}</span>
+                    ) : <span className="tm">--</span>}
+                  </td>
+                  <td>
+                    {state.hubspotPortalId ? (
+                      <a href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-27/${task.hsId}`}
+                         target="_blank" rel="noreferrer">{t('taskOpenHs')}</a>
+                    ) : <span className="tm">--</span>}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-gn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
+                        setBusyId(task.hsId); await completeHsTask(task.hsId); await load(); setBusyId(null)
+                      }}>{t('taskDone')}</button>
+                      <button className="btn btn-dn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
+                        setBusyId(task.hsId); await deleteHsTask(task.hsId); await load(); setBusyId(null)
+                      }}>{t('taskDelete')}</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
       {footer}
     </>
