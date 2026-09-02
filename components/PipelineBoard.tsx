@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchAllOwners, fetchOwnersByTeams } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchAllOwners, fetchOwnersByTeams, fetchTasksForLeads } from '@/lib/hubspot'
+import type { HsTask } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
@@ -232,26 +233,61 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
 }
 
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
+// Reads tasks from HubSpot rather than localStorage. The old local list only
+// showed tasks created in this tool on this device, so a rep on another laptop
+// saw nothing and tasks made directly in HubSpot never appeared. Scoped to the
+// rep's MQL leads, which is what keeps it to two API calls.
 function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
-  const { state } = useApp()
+  const { state, selectLead } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
-  const [, forceUpdate] = useState(0)
-  const tasks = myOpenTasks(state.currentRep?.email).sort((a, b) => {
-    if (!a.dueDate && !b.dueDate) return 0
-    if (!a.dueDate) return 1
-    if (!b.dueDate) return -1
-    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-  })
 
-  function dueMeta(dueDate: string): { label: string; cls: string } {
-    if (!dueDate) return { label: '', cls: '' }
-    const d = new Date(dueDate), now = new Date()
+  const [tasks, setTasks] = useState<HsTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  // Keyed on the lead ids so it reloads whenever the board's leads change.
+  const leadIdsKey = state.leads.map(l => l.id).join(',')
+
+  const load = useCallback(async () => {
+    const ids = state.leads.map(l => l.id)
+    if (ids.length === 0) { setTasks([]); setLoading(false); return }
+    setLoading(true)
+    try {
+      setTasks(await fetchTasksForLeads(ids))
+    } finally {
+      setLoading(false)
+    }
+  }, [leadIdsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load() }, [load])
+
+  function dueMeta(dueAt: string | undefined): { label: string; cls: string } {
+    if (!dueAt) return { label: t('taskNoDate'), cls: '' }
+    const d = new Date(dueAt), now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const due = new Date(d.getFullYear(), d.getMonth(), d.getDate())
     const diff = Math.round((due.getTime() - today.getTime()) / 86400000)
-    if (diff < 0) return { label: t('taskOverdue'), cls: 'task-due-over' }
-    if (diff === 0) return { label: t('taskToday'), cls: 'task-due-today' }
-    return { label: d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' }), cls: 'task-due-ok' }
+    // Time matters for call-backs — a rep who agreed 10:00 needs to see 10:00,
+    // so it is always shown alongside the day.
+    const time = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    if (diff < 0)  return { label: `${t('taskOverdue')} · ${d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' })} ${time}`, cls: 'task-due-over' }
+    if (diff === 0) return { label: `${t('taskToday')} · ${time}`, cls: 'task-due-today' }
+    if (diff === 1) return { label: `${t('taskTomorrow')} · ${time}`, cls: 'task-due-ok' }
+    return { label: `${d.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: 'short' })} ${time}`, cls: 'task-due-ok' }
+  }
+
+  const footer = (
+    <div className="es2" style={{ marginTop: 12, textAlign: 'center' }}>
+      {t('taskMqlOnly')}{' '}
+      {state.hubspotPortalId && (
+        <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all`}
+           target="_blank" rel="noreferrer">{t('taskAllInHs')}</a>
+      )}
+    </div>
+  )
+
+  if (loading) {
+    return <div className="es"><div className="et">{t('taskLoading')}</div></div>
   }
 
   if (!tasks.length) {
@@ -260,39 +296,58 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
         <div className="ei">✅</div>
         <div className="et">{t('taskNone')}</div>
         <div className="es2">{t('taskNoneSub')}</div>
+        {footer}
       </div>
     )
   }
 
   return (
-    <div className="task-list fade-up">
-      {tasks.map(task => {
-        const dm = dueMeta(task.dueDate)
-        const lead = state.leads.find(l => l.id === task.dealId)
-        return (
-          <div key={task.id} className={`task-card ${dm.cls === 'task-due-over' ? 'overdue' : ''}`}>
-            <div className="task-card-title">{task.title || '(no title)'}</div>
-            {task.note && <div className="task-card-note">{task.note}</div>}
-            <div className="task-card-meta">
-              {dm.label && <span className={`task-card-due ${dm.cls}`}>{dm.label}</span>}
-              {lead && <span className="task-card-deal">📋 {lead.properties?.hs_lead_name || '--'}</span>}
+    <>
+      <div className="task-list fade-up">
+        {tasks.map(task => {
+          const dm = dueMeta(task.dueAt)
+          const lead = state.leads.find(l => l.id === task.leadId)
+          return (
+            <div key={task.hsId} className={`task-card ${dm.cls === 'task-due-over' ? 'overdue' : ''}`}>
+              <div className="task-card-title">{task.title || '(no title)'}</div>
+              {task.notes && <div className="task-card-note">{task.notes}</div>}
+              <div className="task-card-meta">
+                {dm.label && <span className={`task-card-due ${dm.cls}`}>{dm.label}</span>}
+                {lead && (
+                  <span
+                    className="task-card-deal"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => selectLead(lead.id)}
+                  >📋 {lead.properties?.hs_lead_name || '--'}</span>
+                )}
+              </div>
+              <div className="task-card-actions">
+                <button className="btn btn-gn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
+                  setBusyId(task.hsId)
+                  await completeHsTask(task.hsId)
+                  await load()
+                  setBusyId(null)
+                }}>{t('taskDone')}</button>
+                <button className="btn btn-dn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
+                  setBusyId(task.hsId)
+                  await deleteHsTask(task.hsId)
+                  await load()
+                  setBusyId(null)
+                }}>{t('taskDelete')}</button>
+                {state.hubspotPortalId && (
+                  <a className="btn btn-sc btn-xs"
+                     href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-27/${task.hsId}`}
+                     target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                    {t('taskOpenHs')}
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="task-card-actions">
-              <button className="btn btn-gn btn-xs" onClick={async () => {
-                completeTask(task.id)
-                forceUpdate(n => n + 1)
-                if (task.hsTaskId) await completeHsTask(task.hsTaskId)
-              }}>{t('taskDone')}</button>
-              <button className="btn btn-dn btn-xs" onClick={async () => {
-                deleteTask(task.id)
-                forceUpdate(n => n + 1)
-                if (task.hsTaskId) await deleteHsTask(task.hsTaskId)
-              }}>{t('taskDelete')}</button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
+          )
+        })}
+      </div>
+      {footer}
+    </>
   )
 }
 

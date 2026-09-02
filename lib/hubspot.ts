@@ -638,6 +638,83 @@ export async function createHsTask(
 
 export interface HsTask {
   hsId: string; title: string; notes: string; dueDate: string; leadId: string | null; ownerId: string
+  /** Full ISO timestamp of the due date — dueDate loses the time. */
+  dueAt?: string
+  status?: string
+}
+
+/**
+ * Fetch open tasks associated with the given leads.
+ *
+ * Goes via associations rather than searching the rep's tasks and reading the
+ * [lead:xxx] marker out of the body: that marker is only present on tasks the
+ * tool created, so a task a rep made directly on the lead in HubSpot would be
+ * invisible. Associations are authoritative regardless of where the task came
+ * from, which matters because the aim is for reps not to need HubSpot.
+ *
+ * Two calls total regardless of lead count — one batched association read, one
+ * batched task read. Scoping to the leads already in state is what keeps it
+ * cheap; fetching a rep's tasks and then resolving each one's lead would be a
+ * call per task.
+ */
+export async function fetchTasksForLeads(leadIds: string[]): Promise<HsTask[]> {
+  if (isDemo() || leadIds.length === 0) return []
+  try {
+    // 1 — which tasks hang off these leads
+    const assocRes = await retryProxy('POST', '/crm/v4/associations/leads/tasks/batch/read', {
+      inputs: leadIds.map(id => ({ id: String(id) })),
+    })
+    if (!assocRes.ok) return [] // logged by hsProxy
+    const assoc = await assocRes.json()
+
+    const taskToLead = new Map<string, string>()
+    for (const row of (assoc.results || [])) {
+      const leadId = String(row.from?.id || '')
+      for (const to of (row.to || [])) {
+        const taskId = String(to.toObjectId)
+        // A task can be linked to several leads; first wins. Rare enough not to
+        // warrant showing the same task more than once.
+        if (leadId && !taskToLead.has(taskId)) taskToLead.set(taskId, leadId)
+      }
+    }
+    if (taskToLead.size === 0) return []
+
+    // 2 — read those tasks
+    const taskIds = Array.from(taskToLead.keys())
+    const tasksRes = await retryProxy('POST', '/crm/v3/objects/tasks/batch/read', {
+      properties: ['hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_task_status', 'hubspot_owner_id'],
+      inputs: taskIds.map(id => ({ id })),
+    })
+    if (!tasksRes.ok) return [] // logged by hsProxy
+    const data = await tasksRes.json()
+
+    return ((data.results || []) as any[])
+      .filter(t => (t.properties?.hs_task_status || '') !== 'COMPLETED')
+      .map(t => {
+        const { notes } = _decodeLeadFromBody(t.properties?.hs_task_body || '')
+        const ms = t.properties?.hs_timestamp
+        return {
+          hsId: String(t.id),
+          title: t.properties?.hs_task_subject || '',
+          notes,
+          dueDate: _hsMsToDate(ms),
+          // Kept separately because dueDate is date-only; the task list shows time.
+          dueAt: ms ? new Date(Number(ms)).toISOString() : undefined,
+          status: t.properties?.hs_task_status || '',
+          leadId: taskToLead.get(String(t.id)) || null,
+          ownerId: t.properties?.hubspot_owner_id || '',
+        } as HsTask
+      })
+      .sort((a, b) => {
+        if (!a.dueAt && !b.dueAt) return 0
+        if (!a.dueAt) return 1
+        if (!b.dueAt) return -1
+        return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime()
+      })
+  } catch (e) {
+    console.error('[hs] fetchTasksForLeads error:', e)
+    return []
+  }
 }
 
 export async function fetchHsTasks(ownerId: string): Promise<HsTask[]> {
