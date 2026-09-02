@@ -611,9 +611,23 @@ function _dateToHsMs(date: string): string | undefined {
   if (isNaN(ms)) { console.warn('[hs] _dateToHsMs: invalid date', date); return undefined }
   return String(ms)
 }
+/**
+ * hs_timestamp -> ISO string, or undefined when it is missing or unparseable.
+ * Must never throw: toISOString() on an invalid Date raises RangeError, and a
+ * single bad timestamp would otherwise take out the whole task list.
+ */
+function _hsMsToIso(ms: string | undefined): string | undefined {
+  if (!ms) return undefined
+  const n = Number(ms)
+  if (!Number.isFinite(n)) return undefined
+  const d = new Date(n)
+  if (isNaN(d.getTime())) return undefined
+  return d.toISOString()
+}
+
 function _hsMsToDate(ms: string | undefined): string {
   if (!ms) return ''
-  try { return new Date(Number(ms)).toISOString().slice(0, 10) } catch { return '' }
+  return _hsMsToIso(ms)?.slice(0, 10) ?? ''
 }
 
 // Associate a task with a lead via the v4 associations API (best-effort).
@@ -765,7 +779,7 @@ export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Pr
           title: t.properties?.hs_task_subject || '',
           notes: stripHtml(notes),
           dueDate: _hsMsToDate(ms),
-          dueAt: ms ? new Date(Number(ms)).toISOString() : undefined,
+          dueAt: _hsMsToIso(ms),
           status: t.properties?.hs_task_status || '',
           leadId: leadId || null,
           ownerId: t.properties?.hubspot_owner_id || '',
