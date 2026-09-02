@@ -149,6 +149,9 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
 
   async function submit() {
     if (!draft.title?.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
+    // Without a lead the task cannot appear in the Tasks tab at all, so block
+    // it here rather than let the rep create something they will never see.
+    if (!draft.dealId) { showToast(t('taskLeadRequired'), 'error', 6000); return }
     const ownerId = draft.assigneeOwnerId || state.currentRep?.hubspotOwnerId || ''
     const leadId = draft.dealId || null
     // Save locally first (optimistic)
@@ -211,12 +214,31 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
               {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
-          {linkedLead && (
-            <div className="iw">
-              <label className="il">{t('taskDeal')}</label>
+          {/* Lead link is required: the Tasks tab only shows tasks associated
+              with the rep's MQL leads, so an unlinked task would be invisible
+              in the tool. Locked when the task was started from a lead, since
+              there is nothing to choose. */}
+          <div className="iw">
+            <label className="il">{t('taskDeal')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            {linkedLead ? (
               <div style={{ fontSize: 13, color: 'var(--ct)', padding: '4px 0' }}>📋 {linkedLead.properties?.hs_lead_name || '--'}</div>
-            </div>
-          )}
+            ) : state.leads.length === 0 ? (
+              // No leads to pick from — say so plainly rather than showing an
+              // empty dropdown the rep cannot satisfy.
+              <div style={{ fontSize: 12, color: 'var(--cs)', padding: '4px 0' }}>{t('taskNoLeads')}</div>
+            ) : (
+              <select
+                className="sel"
+                value={draft.dealId || ''}
+                onChange={e => setState({ taskDraft: { ...state.taskDraft, dealId: e.target.value } })}
+              >
+                <option value="">{t('taskPickLead')}</option>
+                {state.leads.map(l => (
+                  <option key={l.id} value={l.id}>{l.properties?.hs_lead_name || l.id}</option>
+                ))}
+              </select>
+            )}
+          </div>
           <div className="iw">
             <label className="il">{t('taskNote')}</label>
             <textarea className="ta" rows={3} defaultValue={draft.note || ''}
