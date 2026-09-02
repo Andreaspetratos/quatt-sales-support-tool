@@ -567,7 +567,7 @@ function _encodeLeadInBody(leadId: string | null, notes: string): string {
   return leadId ? `[lead:${leadId}]\n${notes}` : notes
 }
 function _decodeLeadFromBody(body: string): { leadId: string | null; notes: string } {
-  const m = (body || '').match(/^\[lead:([^\]]+)\]\n?/)
+  const m = (body || '').match(/^\s*\[lead:([^\]]+)\]\s*/)
   if (m) return { leadId: m[1], notes: body.slice(m[0].length) }
   return { leadId: null, notes: body || '' }
 }
@@ -710,8 +710,8 @@ export async function fetchHsTasks(ownerId: string): Promise<HsTask[]> {
     if (!res.ok) return [] // logged by hsProxy
     const data = await res.json()
     return ((data.results || []) as any[]).map(t => {
-      const { leadId, notes } = _decodeLeadFromBody(t.properties?.hs_task_body || '')
-      return { hsId: String(t.id), title: t.properties?.hs_task_subject || '', notes: stripHtml(notes), dueDate: _hsMsToDate(t.properties?.hs_timestamp), leadId, ownerId: t.properties?.hubspot_owner_id || '' } as HsTask
+      const { leadId, notes } = _decodeLeadFromBody(stripHtml(t.properties?.hs_task_body || ''))
+      return { hsId: String(t.id), title: t.properties?.hs_task_subject || '', notes, dueDate: _hsMsToDate(t.properties?.hs_timestamp), leadId, ownerId: t.properties?.hubspot_owner_id || '' } as HsTask
     })
   } catch (e) {
     console.error('[hs] fetchHsTasks error:', e)
@@ -769,7 +769,9 @@ export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Pr
 
     return raw
       .map(t => {
-        const { leadId: bodyLeadId, notes } = _decodeLeadFromBody(t.properties?.hs_task_body || '')
+        // Strip first, then decode: HubSpot wraps task bodies in HTML, so the
+        // [lead:xxx] marker is no longer at the start of the raw string.
+        const { leadId: bodyLeadId, notes } = _decodeLeadFromBody(stripHtml(t.properties?.hs_task_body || ''))
         // Association is authoritative; the body marker is a fallback for when
         // the association read fails (and only exists on tool-created tasks).
         const leadId = taskToLead.get(String(t.id)) || bodyLeadId
@@ -777,7 +779,7 @@ export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Pr
         return {
           hsId: String(t.id),
           title: t.properties?.hs_task_subject || '',
-          notes: stripHtml(notes),
+          notes,
           dueDate: _hsMsToDate(ms),
           dueAt: _hsMsToIso(ms),
           status: t.properties?.hs_task_status || '',
