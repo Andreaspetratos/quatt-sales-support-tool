@@ -30,6 +30,47 @@ function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 // ── Inline editable field ─────────────────────────────────────────────────────
+/**
+ * PostNL Adrescheck outcome, shown next to the address heading.
+ *
+ * Red means the address itself is wrong and the rep should fix it. Error is
+ * grey on purpose: the check failed, which is not something the rep can act on,
+ * and colouring it red would send them hunting for a problem in the address.
+ *
+ * Keyed lowercase so a difference in casing between HubSpot and this map cannot
+ * silently blank the badge.
+ */
+const ADDRESS_CHECK_STATES: Record<string, { color: string; key: string }> = {
+  'matched':      { color: 'var(--gr)', key: 'addrCheckMatched' },
+  'needs review': { color: 'var(--or)', key: 'addrCheckReview' },
+  'no match':     { color: 'var(--rd)', key: 'addrCheckNoMatch' },
+  'error':        { color: 'var(--gm)', key: 'addrCheckError' },
+}
+
+function AddressCheckBadge({ status, lang }: { status: string; lang: 'nl' | 'en' }) {
+  const value = (status || '').trim()
+  // Before the check has run there is nothing worth saying.
+  if (!value) return null
+  const state = ADDRESS_CHECK_STATES[value.toLowerCase()]
+  // An unmapped value renders raw rather than disappearing, so a new HubSpot
+  // option shows up as something odd instead of as nothing at all.
+  return (
+    <span
+      title={`PostNL Adrescheck: ${value}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontSize: 11, color: 'var(--cs)', whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+        background: state?.color ?? 'var(--gm)',
+      }} />
+      {state ? translate(lang, state.key) : value}
+    </span>
+  )
+}
+
 function EditableField({ label, value, onSave, highlight = false }: { label: string; value: string; onSave: (v: string) => Promise<void>; highlight?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -556,7 +597,10 @@ export default function DealModal() {
               {/* Right: editable address */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div className="sl2">{t('address')}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div className="sl2">{t('address')}</div>
+                    <AddressCheckBadge status={p['postnl_adrescheck_status'] || ''} lang={lang} />
+                  </div>
                   {/* Straight to the contact in HubSpot — reps need the activity
                       history, which lives on the contact, not the lead. Uses the
                       lead's own hs_primary_contact_id so no extra lookup is needed. */}

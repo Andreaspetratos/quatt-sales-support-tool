@@ -22,6 +22,7 @@ const LEAD_PROPS = [
   'contact_email',
   'hs_primary_contact_id',   // used to link straight to the contact from the lead modal
   'qualification_call_result_lead',
+  'postnl_adrescheck_status',  // drives the address-check dot in the lead modal
 ]
 
 // ── Demo data ─────────────────────────────────────────────────────────────────
