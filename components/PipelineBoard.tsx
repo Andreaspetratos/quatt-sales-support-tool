@@ -326,12 +326,17 @@ function EditTaskModal({
     setSaving(true)
     try {
       const ms = due ? new Date(due).getTime() : NaN
-      await updateHsTask(task.hsId, task.leadId, {
+      // The task is attached to the lead's primary contact as well as the lead,
+      // so both have to move together — see updateHsTask.
+      const contactOf = (id: string | null) =>
+        state.leads.find(l => l.id === id)?.properties?.['hs_primary_contact_id'] || undefined
+      await updateHsTask(task.hsId, { leadId: task.leadId, contactId: contactOf(task.leadId) }, {
         title: title.trim(),
         status,
         dueAtMs: isNaN(ms) ? undefined : String(ms),
         notes,
         leadId,
+        contactId: contactOf(leadId),
       })
       showToast(t('toastSaved'), 'success')
       onSaved()
