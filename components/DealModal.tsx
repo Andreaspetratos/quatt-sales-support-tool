@@ -47,6 +47,9 @@ const ADDRESS_CHECK_STATES: Record<string, { color: string; key: string }> = {
   'error':        { color: 'var(--gm)', key: 'addrCheckError' },
 }
 
+/** PostNL's public address lookup — where reps go to check an address by hand. */
+const POSTNL_LOOKUP_URL = 'https://www.postnl.nl/adres-zoeken/'
+
 function AddressCheckBadge({ status, lang }: { status: string; lang: 'nl' | 'en' }) {
   const value = (status || '').trim()
   // Before the check has run there is nothing worth saying.
@@ -54,20 +57,34 @@ function AddressCheckBadge({ status, lang }: { status: string; lang: 'nl' | 'en'
   const state = ADDRESS_CHECK_STATES[value.toLowerCase()]
   // An unmapped value renders raw rather than disappearing, so a new HubSpot
   // option shows up as something odd instead of as nothing at all.
+  const label = `${translate(lang, 'addrCheckPrefix')} ${state ? translate(lang, state.key) : value}`
+
+  const dot = (
+    <span style={{
+      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+      background: state?.color ?? 'var(--gm)',
+    }} />
+  )
+  const base: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    fontSize: 11, color: 'var(--cs)',
+  }
+
+  // A clean match needs no action. Every other state — including an unmapped
+  // one — links out so the rep can verify the address themselves mid-call.
+  if (state?.key === 'addrCheckMatched') {
+    return <span style={base} title={`PostNL Adrescheck: ${value}`}>{dot}{label}</span>
+  }
   return (
-    <span
-      title={`PostNL Adrescheck: ${value}`}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        fontSize: 11, color: 'var(--cs)', whiteSpace: 'nowrap',
-      }}
+    <a
+      href={POSTNL_LOOKUP_URL}
+      target="_blank"
+      rel="noreferrer"
+      title={`PostNL Adrescheck: ${value} — ${translate(lang, 'addrCheckLookup')}`}
+      style={{ ...base, textDecoration: 'underline' }}
     >
-      <span style={{
-        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-        background: state?.color ?? 'var(--gm)',
-      }} />
-      {state ? translate(lang, state.key) : value}
-    </span>
+      {dot}{label} ↗
+    </a>
   )
 }
 
