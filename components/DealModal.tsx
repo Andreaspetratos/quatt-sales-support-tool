@@ -179,10 +179,11 @@ function ActivityTimeline({ contactId, lang }: { contactId: string; lang: 'nl' |
     return () => { cancelled = true }
   }, [contactId])
 
-  const total = groups
-    ? ACTIVITY_GROUPS.reduce((n, def) => n + groups[def.kind].length, 0)
-    : 0
-  const filled = groups ? ACTIVITY_GROUPS.filter(def => groups[def.kind].length > 0) : []
+  // Substituting an empty set rather than narrowing: TypeScript will not
+  // reliably carry a `groups !== null` check into the callbacks below.
+  const g: ActivityGroups = groups ?? { email: [], call: [], note: [], meeting: [] }
+  const total = ACTIVITY_GROUPS.reduce((n, def) => n + g[def.kind].length, 0)
+  const filled = ACTIVITY_GROUPS.filter(def => g[def.kind].length > 0)
 
   return (
     <div>
@@ -200,7 +201,7 @@ function ActivityTimeline({ contactId, lang }: { contactId: string; lang: 'nl' |
       )}
 
       {open && groups !== null && filled.map(def => (
-        <ActivityGroup key={def.kind} def={def} items={groups[def.kind]} lang={lang} />
+        <ActivityGroup key={def.kind} def={def} items={g[def.kind]} lang={lang} />
       ))}
     </div>
   )
