@@ -546,12 +546,14 @@ function _duration(ms: string): string {
 const ACTIVITY_TYPES: ActivityCfg[] = [
   {
     kind: 'email', obj: 'emails',
-    props: ['hs_timestamp', 'hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_email_status'],
+    props: ['hs_timestamp', 'hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_email_status', 'hubspot_owner_id'],
     map: p => ({
       title:     p.hs_email_subject || '(geen onderwerp)',
       body:      stripHtml(p.hs_email_text || ''),
       direction: _dir(p.hs_email_direction),
       status:    p.hs_email_status || '',
+      // Whoever on our side sent it, or received it on an incoming reply.
+      author:    p.hubspot_owner_id || '',
     }),
   },
   {
@@ -723,7 +725,13 @@ async function _campaignName(id: string): Promise<string> {
  * is unaffected and the group simply does not appear.
  */
 export async function fetchMarketingEmails(recipient: string, limit = ACTIVITY_CAP): Promise<Activity[]> {
-  if (isDemo() || !recipient) return []
+  if (isDemo()) return []
+  if (!recipient) {
+    // Logged loudly: with no address this returns nothing without making a
+    // request, which is indistinguishable from "no marketing sent" unless we say so.
+    console.warn('[hs] fetchMarketingEmails: no recipient address, skipping')
+    return []
+  }
   try {
     const res = await retryProxy('GET', `/email/public/v1/events?recipient=${encodeURIComponent(recipient)}&limit=300`)
     if (!res.ok) return [] // logged by hsProxy; usually a missing scope
@@ -793,12 +801,26 @@ export async function fetchContactActivity(
   if (isDemo() || !contactId) return EMPTY_GROUPS()
   // Marketing runs alongside the engagement reads — it is a different API keyed
   // on the email address, and it is skipped entirely when we have no address.
+  // Marketing is keyed on the email address, not an object id. contact_email on
+  // the lead is not always filled, so fall back to the contact record — one
+  // extra call, and only when the lead has no address on it.
+  let recipient = contactEmail
+  if (!recipient) {
+    try {
+      const res = await retryProxy('GET', `/crm/v3/objects/contacts/${contactId}?properties=email`)
+      if (res.ok) recipient = (await res.json())?.properties?.email || ''
+    } catch (e) {
+      console.error('[hs] fetchContactActivity: contact email lookup failed:', e)
+    }
+    console.log('[hs] fetchContactActivity: recipient resolved from contact:', recipient || '(none)')
+  }
+
   // One row past the cap, so the caller can tell "exactly 7" from "7 and more"
   // and say so. The extra row is never rendered.
   const overfetch = perGroup + 1
   const [lists, marketing] = await Promise.all([
     Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg))),
-    fetchMarketingEmails(contactEmail, overfetch),
+    fetchMarketingEmails(recipient, overfetch),
   ])
 
   const groups = EMPTY_GROUPS()
@@ -812,7 +834,7 @@ export async function fetchContactActivity(
   // Notes, calls and meetings all name someone on our side. Resolve them in one
   // pass, and only pay for the owners list when there is actually a name to look
   // up — a contact with no such activity costs nothing.
-  const attributed: ActivityKind[] = ['note', 'call', 'meeting']
+  const attributed: ActivityKind[] = ['note', 'call', 'meeting', 'email']
   if (attributed.some(k => groups[k].some(a => a.author))) {
     const names = await _ownerNameMap()
     for (const k of attributed) {

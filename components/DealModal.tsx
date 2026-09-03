@@ -92,8 +92,8 @@ const ACTIVITY_CELL: React.CSSProperties = {
 const ACTIVITY_GROUPS: GroupDef[] = [
   {
     kind: 'email', icon: '✉', titleKey: 'actEmails',
-    headerKeys: ['actDateTime', '', 'actDirection', 'actSubject', 'actStatus'],
-    cells: a => [actDateTime(a.at), '', a.direction || '--', a.title || '--', a.status || '--'],
+    headerKeys: ['actDateTime', 'actBy', 'actDirection', 'actSubject', 'actStatus'],
+    cells: a => [actDateTime(a.at), a.author || '--', a.direction || '--', a.title || '--', a.status || '--'],
     mainCol: 3,
   },
   {
