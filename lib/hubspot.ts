@@ -512,6 +512,12 @@ export interface Activity {
 
 export type ActivityGroups = Record<ActivityKind, Activity[]>
 
+/**
+ * Rows kept per group. This is a recent-history panel, not a substitute for the
+ * contact record — anything older is a click away in HubSpot.
+ */
+export const ACTIVITY_CAP = 7
+
 const EMPTY_GROUPS = (): ActivityGroups =>
   ({ email: [], call: [], note: [], meeting: [], marketing: [] })
 
@@ -708,7 +714,7 @@ async function _campaignName(id: string): Promise<string> {
  * hsProxy logs and this turns into an empty list, so the rest of the timeline
  * is unaffected and the group simply does not appear.
  */
-export async function fetchMarketingEmails(recipient: string, limit = 10): Promise<Activity[]> {
+export async function fetchMarketingEmails(recipient: string, limit = ACTIVITY_CAP): Promise<Activity[]> {
   if (isDemo() || !recipient) return []
   try {
     const res = await hsProxy('GET', `/email/public/v1/events?recipient=${encodeURIComponent(recipient)}&limit=300`)
@@ -774,14 +780,14 @@ export async function fetchMarketingEmails(recipient: string, limit = 10): Promi
 export async function fetchContactActivity(
   contactId: string,
   contactEmail = '',
-  perGroup = 20,
+  perGroup = ACTIVITY_CAP,
 ): Promise<ActivityGroups> {
   if (isDemo() || !contactId) return EMPTY_GROUPS()
   // Marketing runs alongside the engagement reads — it is a different API keyed
   // on the email address, and it is skipped entirely when we have no address.
   const [lists, marketing] = await Promise.all([
     Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg))),
-    fetchMarketingEmails(contactEmail),
+    fetchMarketingEmails(contactEmail, perGroup),
   ])
 
   const groups = EMPTY_GROUPS()
