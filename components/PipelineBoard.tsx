@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchOwnersByTeams, fetchTasksForLeads } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchTasksForLeads } from '@/lib/hubspot'
 import type { HsTask, TeamOwner } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -285,6 +285,112 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
 
 type SortKey = 'title' | 'status' | 'due' | 'lead'
 
+// ── Edit Task Modal ───────────────────────────────────────────────────────────
+const TASK_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'WAITING', 'DEFERRED', 'COMPLETED']
+
+/**
+ * ISO timestamp → the `YYYY-MM-DDTHH:mm` local-time string a datetime-local
+ * input expects. Returns '' for a missing or unparseable value.
+ */
+function isoToLocalInput(iso: string | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/**
+ * Edits the same fields the rep chose when creating the task, plus status.
+ * Deliberately no assignee: reassigning is not something reps do from here.
+ *
+ * The deadline is date *and* time — the list shows the time because a call-back
+ * agreed for 10:00 matters, and a date-only input would silently reset it to
+ * midnight on every edit.
+ */
+function EditTaskModal({
+  task, lang, onClose, onSaved,
+}: { task: HsTask; lang: 'nl' | 'en'; onClose: () => void; onSaved: () => void }) {
+  const { state } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [title, setTitle]   = useState(task.title || '')
+  const [status, setStatus] = useState(task.status || 'NOT_STARTED')
+  const [due, setDue]       = useState(isoToLocalInput(task.dueAt))
+  const [notes, setNotes]   = useState(task.notes || '')
+  const [leadId, setLeadId] = useState(task.leadId || '')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!title.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
+    if (!leadId) { showToast(t('taskLeadRequired'), 'error', 6000); return }
+    setSaving(true)
+    try {
+      const ms = due ? new Date(due).getTime() : NaN
+      await updateHsTask(task.hsId, task.leadId, {
+        title: title.trim(),
+        status,
+        dueAtMs: isNaN(ms) ? undefined : String(ms),
+        notes,
+        leadId,
+      })
+      showToast(t('toastSaved'), 'success')
+      onSaved()
+    } catch (e: unknown) {
+      showToast('⚠ HubSpot: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mb" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="mo pop-in">
+        <div className="moh">
+          <div className="mot">{t('taskEditTitle')}</div>
+          <button className="xb" onClick={onClose}>✕</button>
+        </div>
+        <div className="mob">
+          <div className="iw">
+            <label className="il">{t('taskTitle')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            <input className="inp" type="text" value={title} onChange={e => setTitle(e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">{t('thTaskStatus')}</label>
+            <select className="sel" value={status} onChange={e => setStatus(e.target.value)}>
+              {TASK_STATUSES.map(s => <option key={s} value={s}>{t('taskStatus_' + s)}</option>)}
+            </select>
+            {/* Completing from here removes the task from this list, same as the
+                Afgerond button — the list only shows tasks that are not done. */}
+            {status === 'COMPLETED' && (
+              <div style={{ fontSize: 11, color: 'var(--cs)', marginTop: 3 }}>{t('taskCompletedHint')}</div>
+            )}
+          </div>
+          <div className="iw">
+            <label className="il">{t('taskDue')}</label>
+            <input className="inp" type="datetime-local" value={due} onChange={e => setDue(e.target.value)} />
+          </div>
+          <div className="iw">
+            <label className="il">{t('taskDeal')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            <select className="sel" value={leadId} onChange={e => setLeadId(e.target.value)}>
+              <option value="">{t('taskPickLead')}</option>
+              {state.leads.map(l => (
+                <option key={l.id} value={l.id}>{l.properties?.hs_lead_name || l.id}</option>
+              ))}
+            </select>
+          </div>
+          <div className="iw">
+            <label className="il">{t('taskNote')}</label>
+            <textarea className="ta" rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+        </div>
+        <div className="mof">
+          <button className="btn btn-sc btn-sm" onClick={onClose} disabled={saving}>{t('cancel')}</button>
+          <button className="btn btn-pr btn-sm" onClick={save} disabled={saving}>{t('msSave')}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
 // Reads tasks from HubSpot rather than localStorage. The old local list only
 // showed tasks created in this tool on this device, so a rep on another laptop
@@ -297,6 +403,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const [tasks, setTasks] = useState<HsTask[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<HsTask | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('due')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -449,11 +556,19 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-sc btn-xs" disabled={busyId === task.hsId}
+                        onClick={() => setEditing(task)}>{t('taskEdit')}</button>
                       <button className="btn btn-gn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
-                        setBusyId(task.hsId); await completeHsTask(task.hsId); await load(); setBusyId(null)
+                        setBusyId(task.hsId)
+                        try { await completeHsTask(task.hsId); await load() }
+                        catch (e: unknown) { showToast('⚠ HubSpot: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000) }
+                        finally { setBusyId(null) }
                       }}>{t('taskDone')}</button>
                       <button className="btn btn-dn btn-xs" disabled={busyId === task.hsId} onClick={async () => {
-                        setBusyId(task.hsId); await deleteHsTask(task.hsId); await load(); setBusyId(null)
+                        setBusyId(task.hsId)
+                        try { await deleteHsTask(task.hsId); await load() }
+                        catch (e: unknown) { showToast('⚠ HubSpot: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000) }
+                        finally { setBusyId(null) }
                       }}>{t('taskDelete')}</button>
                     </div>
                   </td>
@@ -464,6 +579,14 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
         </table>
       </div>
       {footer}
+      {editing && (
+        <EditTaskModal
+          task={editing}
+          lang={lang}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load() }}
+        />
+      )}
     </>
   )
 }

@@ -695,25 +695,57 @@ function _hsMsToDate(ms: string | undefined): string {
   return _hsMsToIso(ms)?.slice(0, 10) ?? ''
 }
 
+/** The task→lead association type for this portal. */
+async function _taskLeadAssocType(): Promise<{ typeId: number; category: string }> {
+  const labelsRes = await retryProxy('GET', '/crm/v4/associations/tasks/leads/labels')
+  // Known fallback: task→lead association type ID is 647 in this portal
+  const fallback = { typeId: 647, category: 'HUBSPOT_DEFINED' }
+  if (!labelsRes.ok) return fallback // logged by hsProxy
+  const types: Array<{ typeId: number; label?: string; category?: string }> =
+    (await labelsRes.json()).results || []
+  if (!types.length) {
+    console.warn('[hs] _taskLeadAssocType: no types from API, using fallback typeId=647')
+    return fallback
+  }
+  const t = types.find(x => !x.label) ?? types[0]
+  return { typeId: t.typeId, category: t.category ?? 'HUBSPOT_DEFINED' }
+}
+
 // Associate a task with a lead via the v4 associations API (best-effort).
 async function _linkTaskToLead(taskId: string, leadId: string): Promise<void> {
   try {
-    const labelsRes = await retryProxy('GET', '/crm/v4/associations/tasks/leads/labels')
-    if (!labelsRes.ok) return // logged by hsProxy
-    const labelsData = await labelsRes.json()
-    // Known fallback: task→lead association type ID is 647 in this portal
-    const types: Array<{ typeId: number; label?: string; category?: string }> = labelsData.results || []
-    const t = types.find(x => !x.label) ?? types[0] ?? { typeId: 647, category: 'HUBSPOT_DEFINED' }
-    if (!types.length) console.warn('[hs] _linkTaskToLead: no types from API, using fallback typeId=647')
+    const t = await _taskLeadAssocType()
     const assocRes = await retryProxy(
       'PUT',
       `/crm/v4/objects/tasks/${taskId}/associations/leads/${leadId}`,
-      [{ associationCategory: t.category ?? 'HUBSPOT_DEFINED', associationTypeId: t.typeId }],
+      [{ associationCategory: t.category, associationTypeId: t.typeId }],
     )
     if (!assocRes.ok) return // logged by hsProxy
   } catch (e) {
     console.error('[hs] _linkTaskToLead error:', e)
   }
+}
+
+/**
+ * Repoint a task at a different lead. Unlike _linkTaskToLead this throws, so
+ * the caller can tell the rep the re-link failed.
+ *
+ * Unlink first, then link. The other order risks leaving the task attached to
+ * two leads, and fetchTasksForLeads takes the first association it is given —
+ * so the task would show under whichever lead happened to come back first.
+ */
+async function _relinkTaskLead(taskId: string, prevLeadId: string | null, nextLeadId: string): Promise<void> {
+  if (prevLeadId && prevLeadId !== nextLeadId) {
+    const delRes = await retryProxy('DELETE', `/crm/v4/objects/tasks/${taskId}/associations/leads/${prevLeadId}`)
+    if (!delRes.ok) throw new Error('Could not unlink the previous lead (HTTP ' + delRes.status + ')')
+  }
+  const t = await _taskLeadAssocType()
+  const putRes = await retryProxy(
+    'PUT',
+    `/crm/v4/objects/tasks/${taskId}/associations/leads/${nextLeadId}`,
+    [{ associationCategory: t.category, associationTypeId: t.typeId }],
+  )
+  if (!putRes.ok) throw new Error('Could not link the new lead (HTTP ' + putRes.status + ')')
 }
 
 /** Create a HubSpot task. Throws with a parsed error message on failure. */
@@ -865,26 +897,60 @@ export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Pr
   }
 }
 
+// These three throw on failure. The list is refetched straight afterwards, so
+// swallowing an error would leave the rep looking at an unchanged row with no
+// idea why.
 export async function completeHsTask(hsTaskId: string): Promise<void> {
   if (isDemo() || !hsTaskId) return
-  try {
-    const res = await retryProxy('PATCH', '/crm/v3/objects/tasks/' + hsTaskId, {
-      properties: { hs_task_status: 'COMPLETED' },
-    })
-    if (!res.ok) return // logged by hsProxy
-  } catch (e) {
-    console.error('[hs] completeHsTask error:', e)
-  }
+  const res = await retryProxy('PATCH', '/crm/v3/objects/tasks/' + hsTaskId, {
+    properties: { hs_task_status: 'COMPLETED' },
+  })
+  if (!res.ok) throw new Error(_parseHsError(await res.text().catch(() => '')))
 }
 
 export async function deleteHsTask(hsTaskId: string): Promise<void> {
   if (isDemo() || !hsTaskId) return
-  try {
-    const res = await retryProxy('DELETE', '/crm/v3/objects/tasks/' + hsTaskId)
-    if (!res.ok) return // logged by hsProxy
-  } catch (e) {
-    console.error('[hs] deleteHsTask error:', e)
+  const res = await retryProxy('DELETE', '/crm/v3/objects/tasks/' + hsTaskId)
+  if (!res.ok) throw new Error(_parseHsError(await res.text().catch(() => '')))
+}
+
+export interface TaskUpdate {
+  title: string
+  status: string
+  /** Epoch ms. Omitted when the rep left the deadline empty — see below. */
+  dueAtMs?: string
+  notes: string
+  leadId: string
+}
+
+/**
+ * Update the fields a rep can edit from the Tasks tab. Throws on failure.
+ *
+ * hs_timestamp is left untouched when dueAtMs is missing rather than cleared:
+ * it is the task's due date and HubSpot expects one, so clearing it would only
+ * fail. An empty deadline field means "leave as is", not "remove".
+ */
+export async function updateHsTask(
+  hsTaskId: string,
+  prevLeadId: string | null,
+  u: TaskUpdate,
+): Promise<void> {
+  if (isDemo() || !hsTaskId) return
+  const props: Record<string, string> = {
+    hs_task_subject: u.title || '(no title)',
+    hs_task_status:  u.status,
+    // Keep the [lead:xxx] marker in step with the association — it is the
+    // fallback fetchTasksForLeads uses when the association read fails.
+    hs_task_body:    _encodeLeadInBody(u.leadId, u.notes),
   }
+  if (u.dueAtMs) props.hs_timestamp = u.dueAtMs
+
+  const res = await retryProxy('PATCH', '/crm/v3/objects/tasks/' + hsTaskId, { properties: props })
+  if (!res.ok) throw new Error(_parseHsError(await res.text().catch(() => '')))
+
+  // Association last: if it fails, the properties are already saved and the
+  // error tells the rep that the lead link specifically is what did not stick.
+  if (u.leadId !== prevLeadId) await _relinkTaskLead(hsTaskId, prevLeadId, u.leadId)
 }
 
 // ── Aircall CTI ────────────────────────────────────────────────────────────────
