@@ -489,7 +489,7 @@ export async function fetchLeadContact(leadId: string): Promise<{
 
 // ── Contact activity timeline ─────────────────────────────────────────────────
 
-export type ActivityKind = 'email' | 'call' | 'note' | 'meeting'
+export type ActivityKind = 'email' | 'call' | 'note' | 'meeting' | 'marketing'
 
 export interface Activity {
   id: string
@@ -512,7 +512,8 @@ export interface Activity {
 
 export type ActivityGroups = Record<ActivityKind, Activity[]>
 
-const EMPTY_GROUPS = (): ActivityGroups => ({ email: [], call: [], note: [], meeting: [] })
+const EMPTY_GROUPS = (): ActivityGroups =>
+  ({ email: [], call: [], note: [], meeting: [], marketing: [] })
 
 interface ActivityCfg {
   kind: ActivityKind
@@ -667,6 +668,98 @@ async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Act
   }
 }
 
+// ── Marketing emails ──────────────────────────────────────────────────────────
+// Marketing sends are not `emails` objects — those are 1:1 sales emails only.
+// They live in the legacy Email Events API, one row per event, so a single send
+// produces SENT, DELIVERED, OPEN, OPEN, CLICK. Collapsed to one row per campaign
+// showing the furthest the recipient got.
+
+/** Engagement ladder — a higher rung replaces a lower one. */
+const EMAIL_EVENT_RANK: Record<string, number> = { SENT: 1, DELIVERED: 2, OPEN: 3, CLICK: 4 }
+/** Outcomes that matter more than engagement and must not be overwritten. */
+const EMAIL_EVENT_FAILURES = ['BOUNCE', 'DROPPED', 'SPAMREPORT', 'UNSUBSCRIBED']
+
+/** Campaign id -> name, cached for the page: every lead gets the same nurture. */
+const _campaignNames = new Map<string, string>()
+async function _campaignName(id: string): Promise<string> {
+  const hit = _campaignNames.get(id)
+  if (hit !== undefined) return hit
+  let name = ''
+  try {
+    const res = await hsProxy('GET', `/email/public/v1/campaigns/${id}`)
+    if (res.ok) {
+      const d = await res.json()
+      name = d.name || d.subject || ''
+    }
+  } catch (e) {
+    console.error('[hs] _campaignName error:', id, e)
+  }
+  _campaignNames.set(id, name)
+  return name
+}
+
+/**
+ * Marketing emails sent to a recipient, newest first, one row per campaign.
+ *
+ * Keyed on the contact's email address rather than an object id — that is what
+ * the events API takes, and contact_email already comes with every lead.
+ *
+ * Needs a marketing scope on the private app. Without it this 403s, which
+ * hsProxy logs and this turns into an empty list, so the rest of the timeline
+ * is unaffected and the group simply does not appear.
+ */
+export async function fetchMarketingEmails(recipient: string, limit = 10): Promise<Activity[]> {
+  if (isDemo() || !recipient) return []
+  try {
+    const res = await hsProxy('GET', `/email/public/v1/events?recipient=${encodeURIComponent(recipient)}&limit=300`)
+    if (!res.ok) return [] // logged by hsProxy; usually a missing scope
+    const events = ((await res.json()).events || []) as Array<{
+      type?: string; created?: number; emailCampaignId?: string | number; subject?: string
+    }>
+
+    interface Agg { at: number; status: string; rank: number; subject: string }
+    const byCampaign = new Map<string, Agg>()
+    for (const ev of events) {
+      const cid = String(ev.emailCampaignId || '')
+      const type = String(ev.type || '').toUpperCase()
+      const created = Number(ev.created || 0)
+      if (!cid || !created) continue
+      const failed = EMAIL_EVENT_FAILURES.includes(type)
+      const rank = failed ? 99 : (EMAIL_EVENT_RANK[type] ?? 0)
+      const cur = byCampaign.get(cid)
+      if (!cur) {
+        byCampaign.set(cid, { at: created, status: type, rank, subject: ev.subject || '' })
+        continue
+      }
+      // The send is the oldest event; engagement comes after it.
+      if (created < cur.at) cur.at = created
+      if (rank > cur.rank) { cur.rank = rank; cur.status = type }
+      if (!cur.subject && ev.subject) cur.subject = ev.subject
+    }
+
+    const top = Array.from(byCampaign.entries())
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, limit)
+
+    // Only look a campaign up when the events carried no subject — that keeps
+    // this to zero extra calls in the common case.
+    return await Promise.all(top.map(async ([cid, agg]) => ({
+      id:        'mkt_' + cid,
+      kind:      'marketing' as ActivityKind,
+      at:        new Date(agg.at).toISOString(),
+      body:      '',
+      title:     agg.subject || (await _campaignName(cid)) || 'Marketing e-mail',
+      direction: '',
+      duration:  '',
+      status:    agg.status,
+      author:    '',
+    })))
+  } catch (e) {
+    console.error('[hs] fetchMarketingEmails error:', e)
+    return []
+  }
+}
+
 /**
  * Recent communication on a lead's contact, grouped by type and newest first
  * within each group.
@@ -678,12 +771,22 @@ async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Act
  * that type only, so one bad response degrades the timeline instead of
  * emptying it.
  */
-export async function fetchContactActivity(contactId: string, perGroup = 20): Promise<ActivityGroups> {
+export async function fetchContactActivity(
+  contactId: string,
+  contactEmail = '',
+  perGroup = 20,
+): Promise<ActivityGroups> {
   if (isDemo() || !contactId) return EMPTY_GROUPS()
-  const lists = await Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg)))
+  // Marketing runs alongside the engagement reads — it is a different API keyed
+  // on the email address, and it is skipped entirely when we have no address.
+  const [lists, marketing] = await Promise.all([
+    Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg))),
+    fetchMarketingEmails(contactEmail),
+  ])
 
   const groups = EMPTY_GROUPS()
   lists.flat().forEach(a => groups[a.kind].push(a))
+  marketing.forEach(a => groups.marketing.push(a))
   for (const kind of Object.keys(groups) as ActivityKind[]) {
     groups[kind].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     groups[kind] = groups[kind].slice(0, perGroup)

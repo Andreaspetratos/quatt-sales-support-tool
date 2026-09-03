@@ -68,28 +68,36 @@ interface GroupDef {
 const ACTIVITY_GROUPS: GroupDef[] = [
   {
     kind: 'email', icon: '✉', titleKey: 'actEmails',
-    headerKeys: ['actDate', 'actDirection', 'actSubject', 'actStatus'],
-    cells: a => [actDate(a.at), a.direction || '--', a.title || '--', a.status || '--'],
+    headerKeys: ['actDateTime', 'actDirection', 'actSubject', 'actStatus'],
+    cells: a => [actDateTime(a.at), a.direction || '--', a.title || '--', a.status || '--'],
     mainCol: 2,
   },
   {
     kind: 'call', icon: '☎', titleKey: 'actCalls',
     // No call title: it is usually auto-generated and says less than the
     // direction and duration already do.
-    headerKeys: ['actDate', 'actDirection', 'actDuration', 'actResult'],
-    cells: a => [actDate(a.at), a.direction || '--', a.duration || '--', a.status || '--'],
+    headerKeys: ['actDateTime', 'actDirection', 'actDuration', 'actResult'],
+    cells: a => [actDateTime(a.at), a.direction || '--', a.duration || '--', a.status || '--'],
     mainCol: 3,
   },
   {
+    kind: 'meeting', icon: '📅', titleKey: 'actMeetings',
+    headerKeys: ['actDateTime', 'actSubject', 'actOutcome'],
+    cells: a => [actDateTime(a.at), a.title || '--', a.status || '--'],
+    mainCol: 1,
+  },
+  {
     kind: 'note', icon: '✎', titleKey: 'actNotes',
+    // Date only: a note is not a moment in a conversation the way a call is.
     headerKeys: ['actDate', 'actFrom', 'actFirstLine'],
     cells: a => [actDate(a.at), a.author || '--', a.title || '--'],
     mainCol: 2,
   },
   {
-    kind: 'meeting', icon: '📅', titleKey: 'actMeetings',
-    // Time matters here — a home visit at 14:00 is not the same as one at 09:00.
-    headerKeys: ['actDateTime', 'actSubject', 'actOutcome'],
+    kind: 'marketing', icon: '📣', titleKey: 'actMarketing',
+    // Status is the furthest the recipient got: SENT → DELIVERED → OPEN → CLICK,
+    // or a failure such as BOUNCE.
+    headerKeys: ['actDateTime', 'actSubject', 'actStatus'],
     cells: a => [actDateTime(a.at), a.title || '--', a.status || '--'],
     mainCol: 1,
   },
@@ -168,20 +176,20 @@ function ActivityGroup({
  * playbook down the page. Empty groups are dropped — four headings reading
  * "geen" would eat exactly the space the preview cap is saving.
  */
-function ActivityTimeline({ contactId, lang }: { contactId: string; lang: 'nl' | 'en' }) {
+function ActivityTimeline({ contactId, contactEmail, lang }: { contactId: string; contactEmail: string; lang: 'nl' | 'en' }) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [groups, setGroups] = useState<ActivityGroups | null>(null)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    fetchContactActivity(contactId).then(g => { if (!cancelled) setGroups(g) })
+    fetchContactActivity(contactId, contactEmail).then(g => { if (!cancelled) setGroups(g) })
     return () => { cancelled = true }
-  }, [contactId])
+  }, [contactId, contactEmail])
 
   // Substituting an empty set rather than narrowing: TypeScript will not
   // reliably carry a `groups !== null` check into the callbacks below.
-  const g: ActivityGroups = groups ?? { email: [], call: [], note: [], meeting: [] }
+  const g: ActivityGroups = groups ?? { email: [], call: [], note: [], meeting: [], marketing: [] }
   const total = ACTIVITY_GROUPS.reduce((n, def) => n + g[def.kind].length, 0)
   const filled = ACTIVITY_GROUPS.filter(def => g[def.kind].length > 0)
 
@@ -838,7 +846,11 @@ export default function DealModal() {
             {p['hs_primary_contact_id'] && (
               <>
                 <div className="dv" />
-                <ActivityTimeline contactId={p['hs_primary_contact_id']} lang={lang} />
+                <ActivityTimeline
+                  contactId={p['hs_primary_contact_id']}
+                  contactEmail={p['contact_email'] || ''}
+                  lang={lang}
+                />
               </>
             )}
 
