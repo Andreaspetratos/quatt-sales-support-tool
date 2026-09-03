@@ -216,12 +216,17 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
               onBlur={e => setState({ taskDraft: { ...state.taskDraft, title: e.target.value } })}
             />
           </div>
+          {/* Date and time, matching the edit modal: the list shows the due
+              time because a call-back agreed for 10:00 matters. Left empty the
+              task falls due now — a datetime-local yields no value until both
+              halves are filled in, so a half-entered deadline is no deadline. */}
           <div className="iw">
             <label className="il">{t('taskDue')}</label>
             <input
-              className="inp" type="date" defaultValue={draft.dueDate || ''}
+              className="inp" type="datetime-local" defaultValue={draft.dueDate || ''}
               onBlur={e => setState({ taskDraft: { ...state.taskDraft, dueDate: e.target.value } })}
             />
+            <div style={{ fontSize: 11, color: 'var(--cs)', marginTop: 3 }}>{t('taskDueHint')}</div>
           </div>
           <div className="iw">
             <label className="il">{t('taskAssign')}</label>

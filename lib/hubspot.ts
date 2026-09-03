@@ -669,9 +669,17 @@ export function stripHtml(html: string): string {
     .trim()
 }
 
+/**
+ * A due-date input value -> epoch ms.
+ *
+ * Accepts what datetime-local produces ('YYYY-MM-DDTHH:mm') and a bare
+ * 'YYYY-MM-DD'. Both are read as local time: 'YYYY-MM-DD' on its own would be
+ * parsed as UTC midnight, which in NL lands the task at 01:00 or 02:00 on the
+ * day the rep picked.
+ */
 function _dateToHsMs(date: string): string | undefined {
   if (!date) return undefined
-  const ms = new Date(date + 'T00:00:00Z').getTime()
+  const ms = new Date(date.length <= 10 ? date + 'T00:00' : date).getTime()
   if (isNaN(ms)) { console.warn('[hs] _dateToHsMs: invalid date', date); return undefined }
   return String(ms)
 }
