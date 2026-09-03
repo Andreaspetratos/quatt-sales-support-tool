@@ -10,6 +10,7 @@ import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
+import ErrorBoundary from './ErrorBoundary'
 import type { Deal, Scheduler } from '@/lib/types'
 
 function initials(name: string) {
@@ -882,11 +883,15 @@ export default function DealModal() {
             {p['hs_primary_contact_id'] && (
               <>
                 <div className="dv" />
-                <ActivityTimeline
-                  contactId={p['hs_primary_contact_id']}
-                  contactEmail={p['contact_email'] || ''}
-                  lang={lang}
-                />
+                <ErrorBoundary fallback={
+                  <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('activityFailed')}</div>
+                }>
+                  <ActivityTimeline
+                    contactId={p['hs_primary_contact_id']}
+                    contactEmail={p['contact_email'] || ''}
+                    lang={lang}
+                  />
+                </ErrorBoundary>
               </>
             )}
 

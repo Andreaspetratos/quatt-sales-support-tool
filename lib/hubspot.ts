@@ -610,7 +610,7 @@ async function _ownerNameMap(): Promise<Map<string, string>> {
     let after: string | undefined = undefined
     for (let page = 0; page < 10; page++) {
       const url = '/crm/v3/owners?limit=100&archived=false' + (after ? `&after=${after}` : '')
-      const res = await hsProxy('GET', url)
+      const res = await retryProxy('GET', url)
       if (!res.ok) break // logged by hsProxy
       const body = await res.json()
       for (const o of (body.results || [])) {
@@ -632,6 +632,10 @@ async function _ownerNameMap(): Promise<Map<string, string>> {
 /**
  * Read one engagement type off a contact.
  *
+ * Uses retryProxy: these run on every lead opened, several calls at a time on
+ * a token shared by every rep, so 429s are a realistic outcome under load and
+ * an un-retried one would blank the group with no explanation.
+ *
  * Associations + batch read rather than the search endpoint, even though search
  * would be one call instead of two: HubSpot rate-limits search to 4 requests a
  * second per token, and every rep shares the one private-app token. Four
@@ -641,14 +645,14 @@ async function _ownerNameMap(): Promise<Map<string, string>> {
  */
 async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Activity[]> {
   try {
-    const assocRes = await hsProxy('GET', `/crm/v4/objects/contacts/${contactId}/associations/${cfg.obj}?limit=100`)
+    const assocRes = await retryProxy('GET', `/crm/v4/objects/contacts/${contactId}/associations/${cfg.obj}?limit=100`)
     if (!assocRes.ok) return [] // logged by hsProxy
     const ids = ((await assocRes.json()).results || [])
       .map((r: { toObjectId: string | number }) => String(r.toObjectId))
       .filter(Boolean)
     if (!ids.length) return []
 
-    const readRes = await hsProxy('POST', `/crm/v3/objects/${cfg.obj}/batch/read`, {
+    const readRes = await retryProxy('POST', `/crm/v3/objects/${cfg.obj}/batch/read`, {
       properties: cfg.props,
       inputs: ids.slice(0, 100).map((id: string) => ({ id })),
     })
@@ -692,7 +696,7 @@ async function _campaignName(id: string): Promise<string> {
   if (hit !== undefined) return hit
   let name = ''
   try {
-    const res = await hsProxy('GET', `/email/public/v1/campaigns/${id}`)
+    const res = await retryProxy('GET', `/email/public/v1/campaigns/${id}`)
     if (res.ok) {
       const d = await res.json()
       name = d.name || d.subject || ''
@@ -717,7 +721,7 @@ async function _campaignName(id: string): Promise<string> {
 export async function fetchMarketingEmails(recipient: string, limit = ACTIVITY_CAP): Promise<Activity[]> {
   if (isDemo() || !recipient) return []
   try {
-    const res = await hsProxy('GET', `/email/public/v1/events?recipient=${encodeURIComponent(recipient)}&limit=300`)
+    const res = await retryProxy('GET', `/email/public/v1/events?recipient=${encodeURIComponent(recipient)}&limit=300`)
     if (!res.ok) return [] // logged by hsProxy; usually a missing scope
     const events = ((await res.json()).events || []) as Array<{
       type?: string; created?: number; emailCampaignId?: string | number; subject?: string
