@@ -555,7 +555,10 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
                   </td>
                   <td>
                     {state.hubspotPortalId ? (
-                      <a href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-27/${task.hsId}`}
+                      {/* Tasks are engagements, so they have no CRM record page
+                          — /record/0-27/<id> 404s. The tasks index with the id
+                          as a query param opens the task itself. */}
+                      <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all?taskId=${task.hsId}`}
                          target="_blank" rel="noreferrer">{t('taskOpenHs')}</a>
                     ) : <span className="tm">--</span>}
                   </td>
