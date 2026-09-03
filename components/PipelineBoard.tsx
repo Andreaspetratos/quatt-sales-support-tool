@@ -334,9 +334,15 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const footer = (
     <div className="es2" style={{ marginTop: 12, textAlign: 'center' }}>
       {t('taskMqlOnly')}{' '}
+      {/* The second sentence ends in the link ("...by clicking here"), so it is
+          only rendered when there is a link to end it with — without the portal
+          id it would trail off mid-sentence. */}
       {state.hubspotPortalId && (
-        <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all`}
-           target="_blank" rel="noreferrer">{t('taskAllInHs')}</a>
+        <>
+          {t('taskOtherInHs')}{' '}
+          <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all`}
+             target="_blank" rel="noreferrer">{t('taskAllInHs')}</a>
+        </>
       )}
     </div>
   )
