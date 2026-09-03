@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchAllOwners, fetchOwnersByTeams, fetchTasksForLeads } from '@/lib/hubspot'
-import type { HsTask } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, fetchOwnersByTeams, fetchTasksForLeads } from '@/lib/hubspot'
+import type { HsTask, TeamOwner } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
 import DealModal from './DealModal'
@@ -133,21 +133,15 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const draft = state.taskDraft
   const linkedLead = state.leads.find(l => l.id === draft.dealId)
-  const [owners, setOwners] = useState<Array<{ id: string; email: string; name: string }>>([])
+  const [owners, setOwners] = useState<TeamOwner[]>([])
 
-  // Load all HubSpot owners once when modal opens
+  // Load the assignable HubSpot owners once when the modal opens
   useEffect(() => {
-    // Sales Support Team (Dennis) — the team that actually works these leads.
-    // Previously queried five teams, which pulled in people who never touch
-    // them and made the list hard to scan.
-    fetchOwnersByTeams([CONFIG.TASK_ASSIGNEE_TEAM_ID]).then(list => {
-      console.log('[task] assignable owners:', list.length, list.map(o => o.name))
-      // Current rep first — they assign to themselves most of the time — then
-      // the rest alphabetically as returned.
-      const meId = state.currentRep?.hubspotOwnerId
-      const me = list.filter(o => o.id === meId)
-      const others = list.filter(o => o.id !== meId)
-      setOwners([...me, ...others])
+    // Both Sales Support and Technical Sales Calls work in this tool, so both
+    // teams must be assignable. Scoped to those two rather than the whole
+    // portal: an unscoped list pulls in people who never touch these leads.
+    fetchOwnersByTeams(CONFIG.TASK_ASSIGNEE_TEAMS.map(tm => tm.id)).then(list => {
+      setOwners(list)
       // Pre-select current rep if not already set
       if (!draft.assigneeOwnerId && state.currentRep?.hubspotOwnerId) {
         setState({ taskDraft: { ...state.taskDraft, assigneeOwnerId: state.currentRep.hubspotOwnerId } })
@@ -155,6 +149,23 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The combined list is long, so it is grouped by team rather than shown as
+  // one flat run of names. Current rep is pinned above the groups — reps assign
+  // to themselves most of the time — and is not repeated inside them. Anyone in
+  // both teams is listed under the first team they match, so no one appears
+  // twice; anyone whose team came back empty falls into a trailing group rather
+  // than silently disappearing from the picker.
+  const meId = state.currentRep?.hubspotOwnerId
+  const me = owners.find(o => o.id === meId)
+  const claimed = new Set<string>(me ? [me.id] : [])
+  const groups = CONFIG.TASK_ASSIGNEE_TEAMS.map(tm => {
+    const members = owners.filter(o => !claimed.has(o.id) && o.teamIds.includes(tm.id))
+    members.forEach(o => claimed.add(o.id))
+    return { label: tm.label, members }
+  }).filter(g => g.members.length > 0)
+  const ungrouped = owners.filter(o => !claimed.has(o.id))
+  if (ungrouped.length) groups.push({ label: t('taskAssignOther'), members: ungrouped })
 
   async function submit() {
     if (!draft.title?.trim()) { showToast(t('taskTitle') + ' is required', 'error'); return }
@@ -219,8 +230,17 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
               value={draft.assigneeOwnerId || state.currentRep?.hubspotOwnerId || ''}
               onChange={e => setState({ taskDraft: { ...state.taskDraft, assigneeOwnerId: e.target.value } })}
             >
-              {owners.length === 0 && <option value={state.currentRep?.hubspotOwnerId || ''}>{state.currentRep?.name || '…'}</option>}
-              {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              {/* The current rep is always offered, even when they are not in
+                  one of the assignee teams — the draft pre-selects their owner
+                  id, and without a matching option the select renders blank. */}
+              {meId
+                ? <option value={meId}>{me?.name || state.currentRep?.name || '…'} ({t('taskAssignMe')})</option>
+                : owners.length === 0 && <option value="">{state.currentRep?.name || '…'}</option>}
+              {groups.map(g => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.members.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </optgroup>
+              ))}
             </select>
           </div>
           {/* Lead link is required: the Tasks tab only shows tasks associated

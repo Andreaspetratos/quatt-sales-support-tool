@@ -19,6 +19,13 @@ interface PropNames {
   callResult: string
 }
 
+/** A HubSpot team whose members can be assigned a task from the tool. */
+export interface AssigneeTeam {
+  id: string
+  /** Group heading in the assignee dropdown — short, not the full HubSpot name. */
+  label: string
+}
+
 interface AppConfig {
   GOOGLE_CLIENT_ID: string
   MAKE_WEBHOOK_URL: string
@@ -30,7 +37,7 @@ interface AppConfig {
   REQUEST_COOLDOWN: number
   REPS: Rep[]
   ADMINS: string[]
-  TASK_ASSIGNEE_TEAM_ID: string
+  TASK_ASSIGNEE_TEAMS: AssigneeTeam[]
   DEMO_MODE: boolean
   CUSTOM_PLAYBOOKS: Playbook[]
   CUSTOM_SCHEDULERS: Scheduler[]
@@ -82,8 +89,13 @@ export const CONFIG: AppConfig = {
   ],
 
   ADMINS: ['andreas@quatt.io'],
-  // Sales Support Team (Dennis) — who can be assigned a task from the tool.
-  TASK_ASSIGNEE_TEAM_ID: '140339728',
+  // Who can be assigned a task from the tool. Both teams work in the tool, so
+  // both must be pickable. Order here is the order of the groups in the
+  // dropdown; anyone in both teams is listed under the first one they match.
+  TASK_ASSIGNEE_TEAMS: [
+    { id: '140339728', label: 'Sales Support' },          // Sales Support Team (Dennis)
+    { id: '146180338', label: 'Technical Sales Calls' },  // Technical Sales Calls Quatt - 1 (Dennis)
+  ],
   DEMO_MODE: false,
   CUSTOM_PLAYBOOKS: [],
   CUSTOM_SCHEDULERS: [],

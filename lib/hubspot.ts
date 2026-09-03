@@ -176,6 +176,14 @@ export async function fetchAllOwners(): Promise<Array<{ id: string; email: strin
 }
 
 
+export interface TeamOwner {
+  id: string
+  email: string
+  name: string
+  /** Wanted team ids this owner belongs to — may be more than one. */
+  teamIds: string[]
+}
+
 /**
  * Fetch owners belonging to any of the given HubSpot teams.
  *
@@ -183,8 +191,11 @@ export async function fetchAllOwners(): Promise<Array<{ id: string; email: strin
  * alone misses anyone whose primary team is something else but who is also a
  * member of the team we care about — which is common, since most reps sit in
  * several teams.
+ *
+ * Each owner carries back the wanted team ids they matched, so the caller can
+ * group them without a second round of lookups.
  */
-export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id: string; email: string; name: string }>> {
+export async function fetchOwnersByTeams(teamIds: string[]): Promise<TeamOwner[]> {
   if (isDemo() || !teamIds.length) return []
   const wanted = new Set(teamIds.map(String))
   try {
@@ -222,33 +233,21 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
       if (!userAfter) break
     }
     if (users.length === 0) return []
-    console.log('[hs] fetchOwnersByTeams: users returned:', users.length)
     // Re-check client-side: CONTAINS_TOKEN can match loosely, so verify the id
-    // really is one of the wanted teams before trusting the row.
-    const emails = new Set<string>()
+    // really is one of the wanted teams before trusting the row. Email is the
+    // only safe key back to the owners API — the users object id is not the
+    // owner id.
+    const emailTeams = new Map<string, string[]>()
     for (const u of (users as any[])) {
       const primary   = String(u.properties?.hubspot_team_id         || '').trim()
       const secondary = String(u.properties?.hs_user_secondary_teams || '').trim()
       const teams = [primary, ...secondary.split(';')].map(t => t.trim()).filter(Boolean)
-      if (teams.some(t => wanted.has(t)) && u.properties?.hs_email) {
-        emails.add(u.properties.hs_email)
+      const matched = teams.filter(t => wanted.has(t))
+      if (matched.length && u.properties?.hs_email) {
+        emailTeams.set(u.properties.hs_email, Array.from(new Set(matched)))
       }
     }
-    // Diagnostic: what team ids do we actually see, and how many users carry any?
-    const seenTeams = new Set<string>()
-    let withAnyTeam = 0
-    for (const u of (users as any[])) {
-      const p1 = String(u.properties?.hubspot_team_id || '').trim()
-      const p2 = String(u.properties?.hs_user_secondary_teams || '').trim()
-      const ts = [p1, ...p2.split(';')].map(t => t.trim()).filter(Boolean)
-      if (ts.length) withAnyTeam++
-      ts.forEach(t => seenTeams.add(t))
-    }
-    console.log('[hs] fetchOwnersByTeams: users with any team:', withAnyTeam, 'of', users.length)
-    console.log('[hs] fetchOwnersByTeams: distinct team ids seen:', Array.from(seenTeams).sort())
-    console.log('[hs] fetchOwnersByTeams: sample user props:', (users as any[])[0]?.properties)
-    console.log('[hs] fetchOwnersByTeams: emails matching teams', teamIds, ':', emails.size)
-    if (!emails.size) return []
+    if (!emailTeams.size) return []
 
     // Paginate: /crm/v3/owners caps at 100 per page and this portal has several
     // hundred, so a single page silently missed most of the team.
@@ -263,14 +262,14 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<Array<{ id:
       ownerAfter = body.paging?.next?.after
       if (!ownerAfter) break
     }
-    console.log('[hs] fetchOwnersByTeams: owners fetched:', owners.length)
 
     return (owners as any[])
-      .filter(o => emails.has(o.email))
+      .filter(o => emailTeams.has(o.email))
       .map(o => ({
         id: String(o.id),
         email: o.email,
         name: [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email,
+        teamIds: emailTeams.get(o.email) || [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
   } catch (e) {
