@@ -487,6 +487,145 @@ export async function fetchLeadContact(leadId: string): Promise<{
   }
 }
 
+// ── Contact activity timeline ─────────────────────────────────────────────────
+
+export interface Activity {
+  id: string
+  kind: 'email' | 'call' | 'note' | 'meeting'
+  title: string
+  body: string
+  /** ISO timestamp, already normalised. */
+  at: string
+  /** Direction, duration, outcome — whatever is worth a subtitle. */
+  meta: string
+}
+
+interface ActivityCfg {
+  kind: Activity['kind']
+  obj: string
+  props: string[]
+  map: (p: Record<string, string>) => { title: string; body: string; at?: string; meta: string }
+}
+
+function _dir(v: string): string {
+  const s = (v || '').toUpperCase()
+  if (!s) return ''
+  return s.includes('INCOMING') || s.includes('INBOUND') ? 'Inkomend' : 'Uitgaand'
+}
+
+function _duration(ms: string): string {
+  const n = Number(ms)
+  if (!n || isNaN(n)) return ''
+  const total = Math.round(n / 1000)
+  return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, '0')}s`
+}
+
+const ACTIVITY_TYPES: ActivityCfg[] = [
+  {
+    kind: 'email', obj: 'emails',
+    props: ['hs_timestamp', 'hs_email_subject', 'hs_email_text', 'hs_email_direction'],
+    map: p => ({
+      title: p.hs_email_subject || '(geen onderwerp)',
+      body:  stripHtml(p.hs_email_text || ''),
+      meta:  _dir(p.hs_email_direction),
+    }),
+  },
+  {
+    kind: 'call', obj: 'calls',
+    // hs_call_disposition is a GUID, not a readable outcome — deliberately not fetched.
+    props: ['hs_timestamp', 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_duration'],
+    map: p => ({
+      title: p.hs_call_title || 'Gesprek',
+      body:  stripHtml(p.hs_call_body || ''),
+      meta:  [_dir(p.hs_call_direction), _duration(p.hs_call_duration)].filter(Boolean).join(' · '),
+    }),
+  },
+  {
+    kind: 'note', obj: 'notes',
+    props: ['hs_timestamp', 'hs_note_body'],
+    map: p => {
+      const text = stripHtml(p.hs_note_body || '')
+      // Notes have no subject, so the first line doubles as the headline.
+      const firstLine = text.split('\n')[0] || 'Notitie'
+      return {
+        title: firstLine.length > 60 ? firstLine.slice(0, 58) + '…' : firstLine,
+        body:  text,
+        meta:  '',
+      }
+    },
+  },
+  {
+    kind: 'meeting', obj: 'meetings',
+    props: ['hs_timestamp', 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_outcome', 'hs_meeting_start_time'],
+    map: p => ({
+      title: p.hs_meeting_title || 'Afspraak',
+      body:  stripHtml(p.hs_meeting_body || ''),
+      // The start time is what a rep cares about, not when the record was made.
+      at:    p.hs_meeting_start_time || undefined,
+      meta:  p.hs_meeting_outcome || '',
+    }),
+  },
+]
+
+/**
+ * Read one engagement type off a contact.
+ *
+ * Associations + batch read rather than the search endpoint, even though search
+ * would be one call instead of two: HubSpot rate-limits search to 4 requests a
+ * second per token, and every rep shares the one private-app token. Four
+ * searches per lead opened would sit exactly on that ceiling and start
+ * returning 429s as soon as two reps were working at once. Batch reads use the
+ * standard, far more generous limit.
+ */
+async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Activity[]> {
+  try {
+    const assocRes = await hsProxy('GET', `/crm/v4/objects/contacts/${contactId}/associations/${cfg.obj}?limit=100`)
+    if (!assocRes.ok) return [] // logged by hsProxy
+    const ids = ((await assocRes.json()).results || [])
+      .map((r: { toObjectId: string | number }) => String(r.toObjectId))
+      .filter(Boolean)
+    if (!ids.length) return []
+
+    const readRes = await hsProxy('POST', `/crm/v3/objects/${cfg.obj}/batch/read`, {
+      properties: cfg.props,
+      inputs: ids.slice(0, 100).map((id: string) => ({ id })),
+    })
+    if (!readRes.ok) return [] // logged by hsProxy
+
+    return ((await readRes.json()).results || [])
+      .map((r: { id: string; properties?: Record<string, string> }) => {
+        const p = r.properties || {}
+        const m = cfg.map(p)
+        const at = _hsMsToIso(m.at ?? p.hs_timestamp)
+        if (!at) return null // undated engagements cannot be placed on a timeline
+        return { id: String(r.id), kind: cfg.kind, title: m.title, body: m.body, at, meta: m.meta } as Activity
+      })
+      .filter(Boolean) as Activity[]
+  } catch (e) {
+    console.error(`[hs] _activityOfType(${cfg.obj}) error:`, e)
+    return []
+  }
+}
+
+/**
+ * Recent communication on a lead's contact, newest first.
+ *
+ * Activities hang off the contact, not the lead — hs_primary_contact_id comes
+ * with every lead, so no association lookup is needed to find the person.
+ *
+ * Each type is fetched independently and a failure yields an empty list for
+ * that type only, so one bad response degrades the timeline instead of
+ * emptying it.
+ */
+export async function fetchContactActivity(contactId: string, limit = 8): Promise<Activity[]> {
+  if (isDemo() || !contactId) return []
+  const perType = await Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg)))
+  return perType
+    .flat()
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, limit)
+}
+
 /**
  * Append the customer's details to a scheduler URL as query params.
  * Verified against HubSpot's public meetings link: firstName / lastName /

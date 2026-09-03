@@ -4,7 +4,8 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity } from '@/lib/hubspot'
+import type { Activity } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -30,6 +31,93 @@ function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 // ── Inline editable field ─────────────────────────────────────────────────────
+// ── Activity timeline ─────────────────────────────────────────────────────────
+const ACTIVITY_ICON: Record<Activity['kind'], string> = {
+  email: '✉', call: '☎', note: '✎', meeting: '📅',
+}
+
+function activityDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const sameYear = d.getFullYear() === now.getFullYear()
+  return d.toLocaleDateString('nl-NL', {
+    day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }),
+  })
+}
+
+/**
+ * Recent communication on the lead's contact, so a rep can see what has already
+ * been said without leaving for HubSpot.
+ *
+ * Loaded when the modal opens rather than on expand: the point is that the rep
+ * sees there is history at all. Collapsed by default so it never pushes the
+ * playbook down the page.
+ */
+function ActivityTimeline({ contactId, lang }: { contactId: string; lang: 'nl' | 'en' }) {
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [items, setItems] = useState<Activity[] | null>(null)
+  const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchContactActivity(contactId).then(list => { if (!cancelled) setItems(list) })
+    return () => { cancelled = true }
+  }, [contactId])
+
+  const count = items?.length ?? 0
+
+  return (
+    <div>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="sl2">{t('activityTitle')}</div>
+        <span style={{ fontSize: 11, color: 'var(--cs)' }}>
+          {items === null ? '…' : `(${count})`}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--cs)' }}>{open ? '▾' : '▸'}</span>
+      </div>
+
+      {open && items !== null && count === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--cs)', padding: '6px 0' }}>{t('activityNone')}</div>
+      )}
+
+      {open && items !== null && count > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+          {items.map(a => {
+            const isOpen = expanded === a.id
+            return (
+              <div key={a.id} style={{ borderBottom: '1px solid var(--gl)', padding: '4px 0' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 8, cursor: a.body ? 'pointer' : 'default' }}
+                  onClick={() => a.body && setExpanded(isOpen ? null : a.id)}
+                >
+                  <span style={{ flexShrink: 0 }}>{ACTIVITY_ICON[a.kind]}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--ct)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {a.title}
+                    {a.meta && <span style={{ color: 'var(--cs)' }}> · {a.meta}</span>}
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: 11, color: 'var(--cs)' }}>{activityDate(a.at)}</span>
+                  <span style={{ flexShrink: 0, fontSize: 10, color: 'var(--cs)', width: 8 }}>
+                    {a.body ? (isOpen ? '▾' : '▸') : ''}
+                  </span>
+                </div>
+                {isOpen && (
+                  <div style={{ fontSize: 12, color: 'var(--cs)', whiteSpace: 'pre-wrap', padding: '4px 0 4px 20px' }}>
+                    {a.body}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * PostNL Adrescheck outcome, shown next to the address heading.
  *
@@ -655,6 +743,16 @@ export default function DealModal() {
                 </div>
               </div>
             </div>
+
+            {/* Recent communication, when we know which contact the lead is.
+                Activities live on the contact, so without one there is nothing
+                to show. */}
+            {p['hs_primary_contact_id'] && (
+              <>
+                <div className="dv" />
+                <ActivityTimeline contactId={p['hs_primary_contact_id']} lang={lang} />
+              </>
+            )}
 
             <div className="dv" />
 
