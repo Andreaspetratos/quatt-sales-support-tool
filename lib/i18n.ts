@@ -47,7 +47,7 @@ const nl: Dict = {
   houseNumber: 'Huisnummer',
   houseNumberSuffix: 'Toevoeging',
   addressPending: 'Straat en woonplaats worden automatisch aangevuld',
-  addrCheckMatched: 'Adres gecontroleerd',
+  addrCheckMatched: 'Gecontroleerd',
   addrCheckReview: 'Controleer adres',
   addrCheckNoMatch: 'Geen match',
   addrCheckError: 'Controle mislukt',
