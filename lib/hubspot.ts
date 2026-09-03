@@ -613,18 +613,25 @@ async function _ownerNameMap(): Promise<Map<string, string>> {
   if (_ownerNames) return _ownerNames
   const map = new Map<string, string>()
   try {
-    let after: string | undefined = undefined
-    for (let page = 0; page < 10; page++) {
-      const url = '/crm/v3/owners?limit=100&archived=false' + (after ? `&after=${after}` : '')
-      const res = await retryProxy('GET', url)
-      if (!res.ok) break // logged by hsProxy
-      const body = await res.json()
-      for (const o of (body.results || [])) {
-        const name = [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email || ''
-        if (o.id && name) map.set(String(o.id), name)
+    // Archived owners included on purpose. Activity is history: the person who
+    // made a call in July may have left since, and archived=false alone drops
+    // them, so the column read "--" for exactly the colleagues a rep is looking
+    // up. (fetchOwnersByTeams deliberately keeps archived=false — you should
+    // not be able to assign a new task to someone who has left.)
+    for (const archived of ['false', 'true']) {
+      let after: string | undefined = undefined
+      for (let page = 0; page < 10; page++) {
+        const url = `/crm/v3/owners?limit=100&archived=${archived}` + (after ? `&after=${after}` : '')
+        const res = await retryProxy('GET', url)
+        if (!res.ok) break // logged by hsProxy
+        const body = await res.json()
+        for (const o of (body.results || [])) {
+          const name = [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email || ''
+          if (o.id && name) map.set(String(o.id), name)
+        }
+        after = body.paging?.next?.after
+        if (!after) break
       }
-      after = body.paging?.next?.after
-      if (!after) break
     }
   } catch (e) {
     console.error('[hs] _ownerNameMap error:', e)
