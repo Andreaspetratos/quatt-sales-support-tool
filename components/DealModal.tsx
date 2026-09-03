@@ -4,7 +4,7 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
@@ -132,13 +132,18 @@ function ActivityGroup({
   const [showAll, setShowAll] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
-  const visible = showAll ? items : items.slice(0, ACTIVITY_PREVIEW)
-  const hidden = items.length - visible.length
+  // The fetch returns one row past the cap purely as a truncation signal, so
+  // the extra row is dropped here and reported as "7+" instead.
+  const truncated = items.length > ACTIVITY_CAP
+  const rows = items.slice(0, ACTIVITY_CAP)
+  const visible = showAll ? rows : rows.slice(0, ACTIVITY_PREVIEW)
+  const hidden = rows.length - visible.length
 
   return (
     <div style={{ marginTop: 10 }}>
       <div className="sl2" style={{ marginBottom: 4 }}>
-        {def.icon} {t(def.titleKey)} <span style={{ color: 'var(--cs)' }}>({items.length})</span>
+        {def.icon} {t(def.titleKey)}{' '}
+        <span style={{ color: 'var(--cs)' }}>({rows.length}{truncated ? '+' : ''})</span>
       </div>
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         {ACTIVITY_COLS}
@@ -179,13 +184,17 @@ function ActivityGroup({
       </table>
       {hidden > 0 && (
         <button className="btn btn-sc btn-xs" style={{ marginTop: 4 }} onClick={() => setShowAll(true)}>
-          {t('actShowAll', String(items.length))}
+          {t('actShowAll', String(rows.length))}
         </button>
       )}
-      {showAll && items.length > ACTIVITY_PREVIEW && (
+      {showAll && rows.length > ACTIVITY_PREVIEW && (
         <button className="btn btn-sc btn-xs" style={{ marginTop: 4 }} onClick={() => setShowAll(false)}>
           {t('actShowLess')}
         </button>
+      )}
+      {/* Only worth saying when there is genuinely more than the cap shows. */}
+      {truncated && (
+        <div style={{ fontSize: 11, color: 'var(--cs)', marginTop: 4 }}>{t('actMore')}</div>
       )}
     </div>
   )
@@ -214,7 +223,8 @@ function ActivityTimeline({ contactId, contactEmail, lang }: { contactId: string
   // Substituting an empty set rather than narrowing: TypeScript will not
   // reliably carry a `groups !== null` check into the callbacks below.
   const g: ActivityGroups = groups ?? { email: [], call: [], note: [], meeting: [], marketing: [] }
-  const total = ACTIVITY_GROUPS.reduce((n, def) => n + g[def.kind].length, 0)
+  const total = ACTIVITY_GROUPS.reduce((n, def) => n + Math.min(g[def.kind].length, ACTIVITY_CAP), 0)
+  const anyTruncated = ACTIVITY_GROUPS.some(def => g[def.kind].length > ACTIVITY_CAP)
   const filled = ACTIVITY_GROUPS.filter(def => g[def.kind].length > 0)
 
   return (
@@ -224,7 +234,9 @@ function ActivityTimeline({ contactId, contactEmail, lang }: { contactId: string
         onClick={() => setOpen(o => !o)}
       >
         <div className="sl2">{t('activityTitle')}</div>
-        <span style={{ fontSize: 11, color: 'var(--cs)' }}>{groups === null ? '…' : `(${total})`}</span>
+        <span style={{ fontSize: 11, color: 'var(--cs)' }}>
+          {groups === null ? '…' : `(${total}${anyTruncated ? '+' : ''})`}
+        </span>
         <span style={{ fontSize: 11, color: 'var(--cs)' }}>{open ? '▾' : '▸'}</span>
       </div>
 

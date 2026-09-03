@@ -785,9 +785,12 @@ export async function fetchContactActivity(
   if (isDemo() || !contactId) return EMPTY_GROUPS()
   // Marketing runs alongside the engagement reads — it is a different API keyed
   // on the email address, and it is skipped entirely when we have no address.
+  // One row past the cap, so the caller can tell "exactly 7" from "7 and more"
+  // and say so. The extra row is never rendered.
+  const overfetch = perGroup + 1
   const [lists, marketing] = await Promise.all([
     Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg))),
-    fetchMarketingEmails(contactEmail, perGroup),
+    fetchMarketingEmails(contactEmail, overfetch),
   ])
 
   const groups = EMPTY_GROUPS()
@@ -795,7 +798,7 @@ export async function fetchContactActivity(
   marketing.forEach(a => groups.marketing.push(a))
   for (const kind of Object.keys(groups) as ActivityKind[]) {
     groups[kind].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    groups[kind] = groups[kind].slice(0, perGroup)
+    groups[kind] = groups[kind].slice(0, overfetch)
   }
 
   // Only pay for the owners list when there is a note to attribute.
