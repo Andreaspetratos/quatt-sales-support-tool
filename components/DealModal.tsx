@@ -55,14 +55,36 @@ function actDateTime(iso: string): string {
  * (BOUNCED, NO_ANSWER, NO_SHOW) so they match the record exactly; direction is
  * derived, because HubSpot's raw values there are unreadable.
  */
+type Slots = [string, string, string, string]
+
 interface GroupDef {
   kind: ActivityKind
   icon: string
   titleKey: string
-  headerKeys: string[]
-  cells: (a: Activity) => string[]
-  /** Column carrying the content — gets .tn (bold, ellipsised); rest get .tm. */
+  /** Four fixed slots so every group lines up: when · wie/soort · inhoud · status. */
+  headerKeys: Slots
+  cells: (a: Activity) => Slots
+  /** Slot carrying the content — gets .tn (bold, ellipsised); rest get .tm. */
   mainCol: number
+}
+
+/**
+ * One shared column grid for every group, sized off the widest (four columns).
+ * Groups that do not use a slot leave it blank rather than collapsing it, so
+ * dates sit under dates and statuses under statuses right down the section.
+ */
+const ACTIVITY_COLS = (
+  <colgroup>
+    <col style={{ width: 130 }} />
+    <col style={{ width: 150 }} />
+    <col />
+    <col style={{ width: 170 }} />
+  </colgroup>
+)
+
+// .tn caps at 200px, which fights the fixed grid — the col width should win.
+const ACTIVITY_CELL: React.CSSProperties = {
+  maxWidth: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }
 
 const ACTIVITY_GROUPS: GroupDef[] = [
@@ -82,24 +104,24 @@ const ACTIVITY_GROUPS: GroupDef[] = [
   },
   {
     kind: 'meeting', icon: '📅', titleKey: 'actMeetings',
-    headerKeys: ['actDateTime', 'actSubject', 'actOutcome'],
-    cells: a => [actDateTime(a.at), a.title || '--', a.status || '--'],
-    mainCol: 1,
+    headerKeys: ['actDateTime', '', 'actSubject', 'actOutcome'],
+    cells: a => [actDateTime(a.at), '', a.title || '--', a.status || '--'],
+    mainCol: 2,
   },
   {
     kind: 'note', icon: '✎', titleKey: 'actNotes',
     // Date only: a note is not a moment in a conversation the way a call is.
-    headerKeys: ['actDate', 'actFrom', 'actFirstLine'],
-    cells: a => [actDate(a.at), a.author || '--', a.title || '--'],
+    headerKeys: ['actDate', 'actFrom', 'actFirstLine', ''],
+    cells: a => [actDate(a.at), a.author || '--', a.title || '--', ''],
     mainCol: 2,
   },
   {
     kind: 'marketing', icon: '📣', titleKey: 'actMarketing',
     // Status is the furthest the recipient got: SENT → DELIVERED → OPEN → CLICK,
     // or a failure such as BOUNCE.
-    headerKeys: ['actDateTime', 'actSubject', 'actStatus'],
-    cells: a => [actDateTime(a.at), a.title || '--', a.status || '--'],
-    mainCol: 1,
+    headerKeys: ['actDateTime', '', 'actSubject', 'actStatus'],
+    cells: a => [actDateTime(a.at), '', a.title || '--', a.status || '--'],
+    mainCol: 2,
   },
 ]
 
@@ -118,9 +140,11 @@ function ActivityGroup({
       <div className="sl2" style={{ marginBottom: 4 }}>
         {def.icon} {t(def.titleKey)} <span style={{ color: 'var(--cs)' }}>({items.length})</span>
       </div>
-      <table>
+      <table style={{ tableLayout: 'fixed', width: '100%' }}>
+        {ACTIVITY_COLS}
         <thead>
-          <tr>{def.headerKeys.map(k => <th key={k}>{t(k)}</th>)}</tr>
+          {/* An unused slot keeps its cell so the grid holds across groups. */}
+          <tr>{def.headerKeys.map((k, i) => <th key={i}>{k ? t(k) : ''}</th>)}</tr>
         </thead>
         <tbody>
           {visible.map(a => {
@@ -133,7 +157,7 @@ function ActivityGroup({
                   onClick={() => a.body && setOpenId(isOpen ? null : a.id)}
                 >
                   {cells.map((c, i) => (
-                    <td key={i} className={i === def.mainCol ? 'tn' : 'tm'} title={c}>
+                    <td key={i} className={i === def.mainCol ? 'tn' : 'tm'} style={ACTIVITY_CELL} title={c}>
                       {i === def.mainCol && a.body
                         ? <>{c} <span style={{ color: 'var(--cs)' }}>{isOpen ? '▾' : '▸'}</span></>
                         : c}
