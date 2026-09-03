@@ -34,6 +34,25 @@ export function saveLang(l: 'nl' | 'en'): void {
   try { localStorage.setItem('quatt_lang', l) } catch {}
 }
 
+// ── Collapsed activity groups ──────────────────────────────────────────────────
+// Which activity groups a rep has folded away in the lead modal. Persisted
+// because it is a standing preference, not a per-lead one: a rep who only cares
+// about email should not have to collapse the other four on every lead.
+
+export function loadCollapsedActivity(): string[] {
+  try {
+    const raw = localStorage.getItem('quatt_activity_collapsed')
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed.filter(k => typeof k === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function saveCollapsedActivity(kinds: string[]): void {
+  try { localStorage.setItem('quatt_activity_collapsed', JSON.stringify(kinds)) } catch {}
+}
+
 // ── Playbooks ──────────────────────────────────────────────────────────────────
 export function loadPbs(): Playbook[] {
   try {

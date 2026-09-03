@@ -7,7 +7,7 @@ import { CONFIG } from '@/lib/config'
 import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
-import { dealOpenTasks } from '@/lib/storage'
+import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
 import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
@@ -128,8 +128,11 @@ const ACTIVITY_GROUPS: GroupDef[] = [
 ]
 
 function ActivityGroup({
-  def, items, lang,
-}: { def: GroupDef; items: Activity[]; lang: 'nl' | 'en' }) {
+  def, items, lang, collapsed, onToggle,
+}: {
+  def: GroupDef; items: Activity[]; lang: 'nl' | 'en'
+  collapsed: boolean; onToggle: () => void
+}) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [showAll, setShowAll] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -143,10 +146,18 @@ function ActivityGroup({
 
   return (
     <div style={{ marginTop: 10 }}>
-      <div className="sl2" style={{ marginBottom: 4 }}>
+      {/* Heading stays visible when folded, count included — a rep who has
+          collapsed a group can still see whether there is anything in it. */}
+      <div
+        className="sl2"
+        style={{ marginBottom: 4, cursor: 'pointer', userSelect: 'none' }}
+        onClick={onToggle}
+      >
         {def.icon} {t(def.titleKey)}{' '}
-        <span style={{ color: 'var(--cs)' }}>({rows.length}{truncated ? '+' : ''})</span>
+        <span style={{ color: 'var(--cs)' }}>({rows.length}{truncated ? '+' : ''})</span>{' '}
+        <span style={{ color: 'var(--cs)' }}>{collapsed ? '▸' : '▾'}</span>
       </div>
+      {!collapsed && (<>
       <table style={{ tableLayout: 'fixed', width: '100%' }}>
         {ACTIVITY_COLS}
         <thead>
@@ -198,6 +209,7 @@ function ActivityGroup({
       {truncated && (
         <div style={{ fontSize: 11, color: 'var(--cs)', marginTop: 4 }}>{t('actMore')}</div>
       )}
+      </>)}
     </div>
   )
 }
@@ -215,6 +227,16 @@ function ActivityTimeline({ contactId, contactEmail, lang }: { contactId: string
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [groups, setGroups] = useState<ActivityGroups | null>(null)
   const [open, setOpen] = useState(false)
+  // Lifted out of the group so all five can be persisted as one preference.
+  const [collapsed, setCollapsed] = useState<string[]>(() => loadCollapsedActivity())
+
+  function toggleGroup(kind: ActivityKind) {
+    setCollapsed(prev => {
+      const next = prev.includes(kind) ? prev.filter(k => k !== kind) : [...prev, kind]
+      saveCollapsedActivity(next)
+      return next
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -247,7 +269,14 @@ function ActivityTimeline({ contactId, contactEmail, lang }: { contactId: string
       )}
 
       {open && groups !== null && filled.map(def => (
-        <ActivityGroup key={def.kind} def={def} items={g[def.kind]} lang={lang} />
+        <ActivityGroup
+          key={def.kind}
+          def={def}
+          items={g[def.kind]}
+          lang={lang}
+          collapsed={collapsed.includes(def.kind)}
+          onToggle={() => toggleGroup(def.kind)}
+        />
       ))}
     </div>
   )
