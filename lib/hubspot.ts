@@ -558,13 +558,15 @@ const ACTIVITY_TYPES: ActivityCfg[] = [
     kind: 'call', obj: 'calls',
     // hs_call_disposition is deliberately absent — it comes back as a GUID, not
     // a readable outcome. hs_call_status carries what a rep actually needs.
-    props: ['hs_timestamp', 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_duration', 'hs_call_status'],
+    props: ['hs_timestamp', 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_duration', 'hs_call_status', 'hubspot_owner_id'],
     map: p => ({
       title:     p.hs_call_title || '',
       body:      stripHtml(p.hs_call_body || ''),
       direction: _dir(p.hs_call_direction),
       duration:  _duration(p.hs_call_duration),
       status:    p.hs_call_status || '',
+      // Who on our side made the call — resolved to a name in one pass below.
+      author:    p.hubspot_owner_id || '',
     }),
   },
   {
@@ -584,7 +586,7 @@ const ACTIVITY_TYPES: ActivityCfg[] = [
   },
   {
     kind: 'meeting', obj: 'meetings',
-    props: ['hs_timestamp', 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_outcome', 'hs_meeting_start_time'],
+    props: ['hs_timestamp', 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_outcome', 'hs_meeting_start_time', 'hubspot_owner_id'],
     map: p => ({
       title:  p.hs_meeting_title || 'Afspraak',
       body:   stripHtml(p.hs_meeting_body || ''),
@@ -592,6 +594,8 @@ const ACTIVITY_TYPES: ActivityCfg[] = [
       // floats an upcoming home visit to the top of the group.
       at:     p.hs_meeting_start_time || undefined,
       status: p.hs_meeting_outcome || '',
+      // Whoever on our side owns the meeting.
+      author: p.hubspot_owner_id || '',
     }),
   },
 ]
@@ -805,10 +809,15 @@ export async function fetchContactActivity(
     groups[kind] = groups[kind].slice(0, overfetch)
   }
 
-  // Only pay for the owners list when there is a note to attribute.
-  if (groups.note.length) {
+  // Notes, calls and meetings all name someone on our side. Resolve them in one
+  // pass, and only pay for the owners list when there is actually a name to look
+  // up — a contact with no such activity costs nothing.
+  const attributed: ActivityKind[] = ['note', 'call', 'meeting']
+  if (attributed.some(k => groups[k].some(a => a.author))) {
     const names = await _ownerNameMap()
-    groups.note = groups.note.map(n => ({ ...n, author: names.get(n.author) || '' }))
+    for (const k of attributed) {
+      groups[k] = groups[k].map(a => ({ ...a, author: a.author ? names.get(a.author) || '' : '' }))
+    }
   }
   return groups
 }

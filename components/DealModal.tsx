@@ -56,13 +56,13 @@ function actDateTime(iso: string): string {
  * (BOUNCED, NO_ANSWER, NO_SHOW) so they match the record exactly; direction is
  * derived, because HubSpot's raw values there are unreadable.
  */
-type Slots = [string, string, string, string]
+type Slots = [string, string, string, string, string]
 
 interface GroupDef {
   kind: ActivityKind
   icon: string
   titleKey: string
-  /** Four fixed slots so every group lines up: when · wie/soort · inhoud · status. */
+  /** Five fixed slots so every group lines up: when · wie · richting · inhoud · status. */
   headerKeys: Slots
   cells: (a: Activity) => Slots
   /** Slot carrying the content — gets .tn (bold, ellipsised); rest get .tm. */
@@ -78,6 +78,7 @@ const ACTIVITY_COLS = (
   <colgroup>
     <col style={{ width: 130 }} />
     <col style={{ width: 150 }} />
+    <col style={{ width: 110 }} />
     <col />
     <col style={{ width: 170 }} />
   </colgroup>
@@ -91,38 +92,38 @@ const ACTIVITY_CELL: React.CSSProperties = {
 const ACTIVITY_GROUPS: GroupDef[] = [
   {
     kind: 'email', icon: '✉', titleKey: 'actEmails',
-    headerKeys: ['actDateTime', 'actDirection', 'actSubject', 'actStatus'],
-    cells: a => [actDateTime(a.at), a.direction || '--', a.title || '--', a.status || '--'],
-    mainCol: 2,
+    headerKeys: ['actDateTime', '', 'actDirection', 'actSubject', 'actStatus'],
+    cells: a => [actDateTime(a.at), '', a.direction || '--', a.title || '--', a.status || '--'],
+    mainCol: 3,
   },
   {
     kind: 'call', icon: '☎', titleKey: 'actCalls',
     // No call title: it is usually auto-generated and says less than the
     // direction and duration already do.
-    headerKeys: ['actDateTime', 'actDirection', 'actDuration', 'actResult'],
-    cells: a => [actDateTime(a.at), a.direction || '--', a.duration || '--', a.status || '--'],
-    mainCol: 3,
+    headerKeys: ['actDateTime', 'actBy', 'actDirection', 'actDuration', 'actResult'],
+    cells: a => [actDateTime(a.at), a.author || '--', a.direction || '--', a.duration || '--', a.status || '--'],
+    mainCol: 4,
   },
   {
     kind: 'meeting', icon: '📅', titleKey: 'actMeetings',
-    headerKeys: ['actDateTime', '', 'actSubject', 'actOutcome'],
-    cells: a => [actDateTime(a.at), '', a.title || '--', a.status || '--'],
-    mainCol: 2,
+    headerKeys: ['actDateTime', 'actBy', '', 'actSubject', 'actOutcome'],
+    cells: a => [actDateTime(a.at), a.author || '--', '', a.title || '--', a.status || '--'],
+    mainCol: 3,
   },
   {
     kind: 'note', icon: '✎', titleKey: 'actNotes',
     // Date only: a note is not a moment in a conversation the way a call is.
-    headerKeys: ['actDate', 'actFrom', 'actFirstLine', ''],
-    cells: a => [actDate(a.at), a.author || '--', a.title || '--', ''],
-    mainCol: 2,
+    headerKeys: ['actDate', 'actFrom', '', 'actFirstLine', ''],
+    cells: a => [actDate(a.at), a.author || '--', '', a.title || '--', ''],
+    mainCol: 3,
   },
   {
     kind: 'marketing', icon: '📣', titleKey: 'actMarketing',
     // Status is the furthest the recipient got: SENT → DELIVERED → OPEN → CLICK,
     // or a failure such as BOUNCE.
-    headerKeys: ['actDateTime', '', 'actSubject', 'actStatus'],
-    cells: a => [actDateTime(a.at), '', a.title || '--', a.status || '--'],
-    mainCol: 2,
+    headerKeys: ['actDateTime', '', '', 'actSubject', 'actStatus'],
+    cells: a => [actDateTime(a.at), '', '', a.title || '--', a.status || '--'],
+    mainCol: 3,
   },
 ]
 
