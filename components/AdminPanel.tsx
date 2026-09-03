@@ -271,11 +271,14 @@ function QCard({
       )}
 
       {/* legacy types (choice, textarea, intent, address, outcome, tech_check) kept for existing playbooks */}
+      {/* No Prefix input for address: the block writes straight to the lead's
+          postal_code / house_number / house_number_suffix, so a prefix would
+          configure nothing. Any prefix already saved on an existing address
+          question is simply ignored. */}
       {q.type === 'address' && (
-        <div className="iw">
-          <label className="il">Prefix</label>
-          <input className="inp inp-sm" defaultValue={q.prefix || 'cp_'}
-            onBlur={e => onUpdateField(pi, qi, 'prefix', e.target.value)} />
+        <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
+          📮 Agent vult postcode, huisnummer en toevoeging in — deze worden direct
+          op de lead opgeslagen. Straat en woonplaats komen automatisch uit PostNL.
         </div>
       )}
       {q.type === 'outcome' && (

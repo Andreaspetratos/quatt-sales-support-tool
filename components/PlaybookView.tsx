@@ -65,31 +65,88 @@ function ScriptBlock({ content }: { content: string }) {
 }
 
 // ── Address block ─────────────────────────────────────────────────────────────
-function AddressBlock({
-  prefix, dealId, getPbNote, setPbNote,
-}: { prefix: string; dealId: string; getPbNote: (k: string) => string; setPbNote: (k: string, v: string) => void }) {
-  const pfx = prefix || 'cp_'
+
+/**
+ * One address input, bound to a lead property. Saves on blur (and on Enter,
+ * which blurs) and only when the value actually changed, so tabbing through
+ * untouched fields costs nothing.
+ */
+function AddressInput({
+  label, value, onSave,
+}: { label: string; value: string; onSave: (v: string) => Promise<void> }) {
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+
+  // Follow the lead when it changes underneath us — after the PostNL workflow
+  // writes back, or when a sibling field's patch refreshes the lead.
+  useEffect(() => { setDraft(value) }, [value])
+
+  async function save() {
+    const trimmed = draft.trim()
+    if (trimmed === value) return
+    setSaving(true)
+    try { await onSave(trimmed) } finally { setSaving(false) }
+  }
+
   return (
-    <div className="ag">
-      <div className="iw" style={{ gridColumn: '1 / -1' }}>
-        <label className="il">Straat</label>
-        <input className="inp" type="text" defaultValue={getPbNote(pfx + 'str')} onBlur={e => setPbNote(pfx + 'str', e.target.value)} placeholder="Straatnaam" />
+    <div className="iw">
+      <label className="il">{label}</label>
+      <input
+        className="inp"
+        type="text"
+        value={draft}
+        disabled={saving}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() } }}
+      />
+    </div>
+  )
+}
+
+/**
+ * Postcode + house number (+ suffix) are the only address fields a rep ever
+ * types: a PostNL workflow in HubSpot backfills street and city from those two,
+ * and they show up read-only underneath once it syncs.
+ *
+ * Writes straight to the lead on blur rather than into playbook state. The
+ * previous version stored everything under local `cp_*` note keys that nothing
+ * ever read, so an address entered during a call was silently thrown away —
+ * "Fase afronden" only saves questions carrying an `hsProperty`, which this
+ * question type cannot have. These are the same properties the lead header
+ * edits and the Plan HV check validates, so all three stay in step.
+ */
+function AddressBlock({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
+  const { state, setState, patchLeadLocal } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const p: Record<string, string> = state.leads.find(l => l.id === dealId)?.properties || {}
+
+  async function saveProp(prop: string, val: string) {
+    try {
+      // patchLeadLocal has to be called explicitly: patchLead only invokes its
+      // updateLeads callback in demo mode, so relying on it would leave the
+      // lead header stale until the next refetch.
+      await patchLead(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
+      patchLeadLocal(dealId, { [prop]: val })
+    } catch (e: any) {
+      showToast(t('errLoad', e?.message || String(e)), 'error')
+    }
+  }
+
+  const resolved = [String(p['street_lead'] || '').trim(), String(p['city'] || '').trim()]
+    .filter(Boolean).join(', ')
+
+  return (
+    <div>
+      <div className="ag" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        <AddressInput label={t('postalCode')}        value={String(p['postal_code'] || '')}         onSave={v => saveProp('postal_code', v)} />
+        <AddressInput label={t('houseNumber')}       value={String(p['house_number'] || '')}        onSave={v => saveProp('house_number', v)} />
+        <AddressInput label={t('houseNumberSuffix')} value={String(p['house_number_suffix'] || '')} onSave={v => saveProp('house_number_suffix', v)} />
       </div>
-      <div className="iw">
-        <label className="il">Huisnr</label>
-        <input className="inp" type="text" defaultValue={getPbNote(pfx + 'nr')} onBlur={e => setPbNote(pfx + 'nr', e.target.value)} />
-      </div>
-      <div className="iw">
-        <label className="il">Toev.</label>
-        <input className="inp" type="text" defaultValue={getPbNote(pfx + 'tv')} onBlur={e => setPbNote(pfx + 'tv', e.target.value)} placeholder="kan leeg zijn" />
-      </div>
-      <div className="iw">
-        <label className="il">Postcode</label>
-        <input className="inp" type="text" defaultValue={getPbNote(pfx + 'pc')} onBlur={e => setPbNote(pfx + 'pc', e.target.value)} />
-      </div>
-      <div className="iw">
-        <label className="il">Woonplaats</label>
-        <input className="inp" type="text" defaultValue={getPbNote(pfx + 'wp')} onBlur={e => setPbNote(pfx + 'wp', e.target.value)} />
+      {/* Filled by PostNL, never typed here — shown so the rep can read the
+          address back during the call without leaving the playbook. */}
+      <div style={{ fontSize: 12, color: 'var(--cs)', marginTop: 6 }}>
+        {resolved || t('addressPending')}
       </div>
     </div>
   )
@@ -796,14 +853,8 @@ function QuestionItem({
       return <InfoBlock content={q.content || ''} />
 
     case 'address':
-      return (
-        <AddressBlock
-          prefix={q.prefix || 'cp_'}
-          dealId={dealId}
-          getPbNote={getN}
-          setPbNote={setPbNote}
-        />
-      )
+      return <AddressBlock dealId={dealId} lang={lang} />
+
 
     case 'outcome':
       return (
