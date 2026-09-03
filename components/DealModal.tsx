@@ -1,11 +1,11 @@
 'use client'
 
-import { useRef, useCallback, useState, useEffect } from 'react'
+import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
 import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity } from '@/lib/hubspot'
-import type { Activity } from '@/lib/hubspot'
+import type { Activity, ActivityKind, ActivityGroups } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -32,17 +32,131 @@ function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
 // ── Modals ────────────────────────────────────────────────────────────────────
 // ── Inline editable field ─────────────────────────────────────────────────────
 // ── Activity timeline ─────────────────────────────────────────────────────────
-const ACTIVITY_ICON: Record<Activity['kind'], string> = {
-  email: '✉', call: '☎', note: '✎', meeting: '📅',
-}
 
-function activityDate(iso: string): string {
+/** How many rows of a group show before the rep asks for the rest. */
+const ACTIVITY_PREVIEW = 3
+
+function actDate(iso: string): string {
   const d = new Date(iso)
-  const now = new Date()
-  const sameYear = d.getFullYear() === now.getFullYear()
+  const sameYear = d.getFullYear() === new Date().getFullYear()
   return d.toLocaleDateString('nl-NL', {
     day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }),
   })
+}
+
+function actDateTime(iso: string): string {
+  const d = new Date(iso)
+  return `${actDate(iso)} ${d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+/**
+ * Each group gets its own columns: what matters about an email is not what
+ * matters about a call. Status values are shown as HubSpot returns them
+ * (BOUNCED, NO_ANSWER, NO_SHOW) so they match the record exactly; direction is
+ * derived, because HubSpot's raw values there are unreadable.
+ */
+interface GroupDef {
+  kind: ActivityKind
+  icon: string
+  titleKey: string
+  headerKeys: string[]
+  cells: (a: Activity) => string[]
+  /** Column carrying the content — gets .tn (bold, ellipsised); rest get .tm. */
+  mainCol: number
+}
+
+const ACTIVITY_GROUPS: GroupDef[] = [
+  {
+    kind: 'email', icon: '✉', titleKey: 'actEmails',
+    headerKeys: ['actDate', 'actDirection', 'actSubject', 'actStatus'],
+    cells: a => [actDate(a.at), a.direction || '--', a.title || '--', a.status || '--'],
+    mainCol: 2,
+  },
+  {
+    kind: 'call', icon: '☎', titleKey: 'actCalls',
+    // No call title: it is usually auto-generated and says less than the
+    // direction and duration already do.
+    headerKeys: ['actDate', 'actDirection', 'actDuration', 'actResult'],
+    cells: a => [actDate(a.at), a.direction || '--', a.duration || '--', a.status || '--'],
+    mainCol: 3,
+  },
+  {
+    kind: 'note', icon: '✎', titleKey: 'actNotes',
+    headerKeys: ['actDate', 'actFrom', 'actFirstLine'],
+    cells: a => [actDate(a.at), a.author || '--', a.title || '--'],
+    mainCol: 2,
+  },
+  {
+    kind: 'meeting', icon: '📅', titleKey: 'actMeetings',
+    // Time matters here — a home visit at 14:00 is not the same as one at 09:00.
+    headerKeys: ['actDateTime', 'actSubject', 'actOutcome'],
+    cells: a => [actDateTime(a.at), a.title || '--', a.status || '--'],
+    mainCol: 1,
+  },
+]
+
+function ActivityGroup({
+  def, items, lang,
+}: { def: GroupDef; items: Activity[]; lang: 'nl' | 'en' }) {
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [showAll, setShowAll] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
+
+  const visible = showAll ? items : items.slice(0, ACTIVITY_PREVIEW)
+  const hidden = items.length - visible.length
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="sl2" style={{ marginBottom: 4 }}>
+        {def.icon} {t(def.titleKey)} <span style={{ color: 'var(--cs)' }}>({items.length})</span>
+      </div>
+      <table>
+        <thead>
+          <tr>{def.headerKeys.map(k => <th key={k}>{t(k)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {visible.map(a => {
+            const isOpen = openId === a.id
+            const cells = def.cells(a)
+            return (
+              <Fragment key={a.id}>
+                <tr
+                  style={{ cursor: a.body ? 'pointer' : 'default' }}
+                  onClick={() => a.body && setOpenId(isOpen ? null : a.id)}
+                >
+                  {cells.map((c, i) => (
+                    <td key={i} className={i === def.mainCol ? 'tn' : 'tm'} title={c}>
+                      {i === def.mainCol && a.body
+                        ? <>{c} <span style={{ color: 'var(--cs)' }}>{isOpen ? '▾' : '▸'}</span></>
+                        : c}
+                    </td>
+                  ))}
+                </tr>
+                {isOpen && (
+                  <tr>
+                    <td colSpan={cells.length} style={{
+                      fontSize: 12, color: 'var(--cs)', whiteSpace: 'pre-wrap',
+                      padding: '6px 8px', background: 'var(--c2)',
+                    }}>{a.body}</td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+      {hidden > 0 && (
+        <button className="btn btn-sc btn-xs" style={{ marginTop: 4 }} onClick={() => setShowAll(true)}>
+          {t('actShowAll', String(items.length))}
+        </button>
+      )}
+      {showAll && items.length > ACTIVITY_PREVIEW && (
+        <button className="btn btn-sc btn-xs" style={{ marginTop: 4 }} onClick={() => setShowAll(false)}>
+          {t('actShowLess')}
+        </button>
+      )}
+    </div>
+  )
 }
 
 /**
@@ -51,21 +165,24 @@ function activityDate(iso: string): string {
  *
  * Loaded when the modal opens rather than on expand: the point is that the rep
  * sees there is history at all. Collapsed by default so it never pushes the
- * playbook down the page.
+ * playbook down the page. Empty groups are dropped — four headings reading
+ * "geen" would eat exactly the space the preview cap is saving.
  */
 function ActivityTimeline({ contactId, lang }: { contactId: string; lang: 'nl' | 'en' }) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
-  const [items, setItems] = useState<Activity[] | null>(null)
+  const [groups, setGroups] = useState<ActivityGroups | null>(null)
   const [open, setOpen] = useState(false)
-  const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    fetchContactActivity(contactId).then(list => { if (!cancelled) setItems(list) })
+    fetchContactActivity(contactId).then(g => { if (!cancelled) setGroups(g) })
     return () => { cancelled = true }
   }, [contactId])
 
-  const count = items?.length ?? 0
+  const total = groups
+    ? ACTIVITY_GROUPS.reduce((n, def) => n + groups[def.kind].length, 0)
+    : 0
+  const filled = groups ? ACTIVITY_GROUPS.filter(def => groups[def.kind].length > 0) : []
 
   return (
     <div>
@@ -74,50 +191,20 @@ function ActivityTimeline({ contactId, lang }: { contactId: string; lang: 'nl' |
         onClick={() => setOpen(o => !o)}
       >
         <div className="sl2">{t('activityTitle')}</div>
-        <span style={{ fontSize: 11, color: 'var(--cs)' }}>
-          {items === null ? '…' : `(${count})`}
-        </span>
+        <span style={{ fontSize: 11, color: 'var(--cs)' }}>{groups === null ? '…' : `(${total})`}</span>
         <span style={{ fontSize: 11, color: 'var(--cs)' }}>{open ? '▾' : '▸'}</span>
       </div>
 
-      {open && items !== null && count === 0 && (
+      {open && groups !== null && total === 0 && (
         <div style={{ fontSize: 12, color: 'var(--cs)', padding: '6px 0' }}>{t('activityNone')}</div>
       )}
 
-      {open && items !== null && count > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
-          {items.map(a => {
-            const isOpen = expanded === a.id
-            return (
-              <div key={a.id} style={{ borderBottom: '1px solid var(--gl)', padding: '4px 0' }}>
-                <div
-                  style={{ display: 'flex', alignItems: 'baseline', gap: 8, cursor: a.body ? 'pointer' : 'default' }}
-                  onClick={() => a.body && setExpanded(isOpen ? null : a.id)}
-                >
-                  <span style={{ flexShrink: 0 }}>{ACTIVITY_ICON[a.kind]}</span>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--ct)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {a.title}
-                    {a.meta && <span style={{ color: 'var(--cs)' }}> · {a.meta}</span>}
-                  </span>
-                  <span style={{ flexShrink: 0, fontSize: 11, color: 'var(--cs)' }}>{activityDate(a.at)}</span>
-                  <span style={{ flexShrink: 0, fontSize: 10, color: 'var(--cs)', width: 8 }}>
-                    {a.body ? (isOpen ? '▾' : '▸') : ''}
-                  </span>
-                </div>
-                {isOpen && (
-                  <div style={{ fontSize: 12, color: 'var(--cs)', whiteSpace: 'pre-wrap', padding: '4px 0 4px 20px' }}>
-                    {a.body}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
+      {open && groups !== null && filled.map(def => (
+        <ActivityGroup key={def.kind} def={def} items={groups[def.kind]} lang={lang} />
+      ))}
     </div>
   )
 }
-
 /**
  * PostNL Adrescheck outcome, shown next to the address heading.
  *

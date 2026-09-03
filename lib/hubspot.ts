@@ -489,27 +489,43 @@ export async function fetchLeadContact(leadId: string): Promise<{
 
 // ── Contact activity timeline ─────────────────────────────────────────────────
 
+export type ActivityKind = 'email' | 'call' | 'note' | 'meeting'
+
 export interface Activity {
   id: string
-  kind: 'email' | 'call' | 'note' | 'meeting'
-  title: string
-  body: string
+  kind: ActivityKind
   /** ISO timestamp, already normalised. */
   at: string
-  /** Direction, duration, outcome — whatever is worth a subtitle. */
-  meta: string
+  /** Only shown once the rep opens the row. */
+  body: string
+  /** Subject, meeting title, or a note's first line. */
+  title: string
+  /** Inkomend / Uitgaand — derived, since HubSpot's raw values are unreadable. */
+  direction: string
+  /** Calls only, as 3m12s. */
+  duration: string
+  /** Raw HubSpot value: email status, call status, or meeting outcome. */
+  status: string
+  /** Notes only — resolved from the owner id. */
+  author: string
 }
 
+export type ActivityGroups = Record<ActivityKind, Activity[]>
+
+const EMPTY_GROUPS = (): ActivityGroups => ({ email: [], call: [], note: [], meeting: [] })
+
 interface ActivityCfg {
-  kind: Activity['kind']
+  kind: ActivityKind
   obj: string
   props: string[]
-  map: (p: Record<string, string>) => { title: string; body: string; at?: string; meta: string }
+  map: (p: Record<string, string>) => Partial<Activity> & { at?: string }
 }
 
 function _dir(v: string): string {
   const s = (v || '').toUpperCase()
   if (!s) return ''
+  // Outgoing email is plain 'EMAIL' while incoming is 'INCOMING_EMAIL', so test
+  // for incoming and treat everything else as outgoing.
   return s.includes('INCOMING') || s.includes('INBOUND') ? 'Inkomend' : 'Uitgaand'
 }
 
@@ -523,34 +539,39 @@ function _duration(ms: string): string {
 const ACTIVITY_TYPES: ActivityCfg[] = [
   {
     kind: 'email', obj: 'emails',
-    props: ['hs_timestamp', 'hs_email_subject', 'hs_email_text', 'hs_email_direction'],
+    props: ['hs_timestamp', 'hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_email_status'],
     map: p => ({
-      title: p.hs_email_subject || '(geen onderwerp)',
-      body:  stripHtml(p.hs_email_text || ''),
-      meta:  _dir(p.hs_email_direction),
+      title:     p.hs_email_subject || '(geen onderwerp)',
+      body:      stripHtml(p.hs_email_text || ''),
+      direction: _dir(p.hs_email_direction),
+      status:    p.hs_email_status || '',
     }),
   },
   {
     kind: 'call', obj: 'calls',
-    // hs_call_disposition is a GUID, not a readable outcome — deliberately not fetched.
-    props: ['hs_timestamp', 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_duration'],
+    // hs_call_disposition is deliberately absent — it comes back as a GUID, not
+    // a readable outcome. hs_call_status carries what a rep actually needs.
+    props: ['hs_timestamp', 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_duration', 'hs_call_status'],
     map: p => ({
-      title: p.hs_call_title || 'Gesprek',
-      body:  stripHtml(p.hs_call_body || ''),
-      meta:  [_dir(p.hs_call_direction), _duration(p.hs_call_duration)].filter(Boolean).join(' · '),
+      title:     p.hs_call_title || '',
+      body:      stripHtml(p.hs_call_body || ''),
+      direction: _dir(p.hs_call_direction),
+      duration:  _duration(p.hs_call_duration),
+      status:    p.hs_call_status || '',
     }),
   },
   {
     kind: 'note', obj: 'notes',
-    props: ['hs_timestamp', 'hs_note_body'],
+    props: ['hs_timestamp', 'hs_note_body', 'hubspot_owner_id'],
     map: p => {
       const text = stripHtml(p.hs_note_body || '')
-      // Notes have no subject, so the first line doubles as the headline.
-      const firstLine = text.split('\n')[0] || 'Notitie'
+      // Notes carry no subject, so the first line doubles as the headline.
+      const first = text.split('\n')[0] || 'Notitie'
       return {
-        title: firstLine.length > 60 ? firstLine.slice(0, 58) + '…' : firstLine,
-        body:  text,
-        meta:  '',
+        title:  first.length > 70 ? first.slice(0, 68) + '…' : first,
+        body:   text,
+        // Resolved to a name later, in one pass, so each note costs no lookup.
+        author: p.hubspot_owner_id || '',
       }
     },
   },
@@ -558,14 +579,48 @@ const ACTIVITY_TYPES: ActivityCfg[] = [
     kind: 'meeting', obj: 'meetings',
     props: ['hs_timestamp', 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_outcome', 'hs_meeting_start_time'],
     map: p => ({
-      title: p.hs_meeting_title || 'Afspraak',
-      body:  stripHtml(p.hs_meeting_body || ''),
-      // The start time is what a rep cares about, not when the record was made.
-      at:    p.hs_meeting_start_time || undefined,
-      meta:  p.hs_meeting_outcome || '',
+      title:  p.hs_meeting_title || 'Afspraak',
+      body:   stripHtml(p.hs_meeting_body || ''),
+      // When the meeting is, not when the record was made. Sorting on this also
+      // floats an upcoming home visit to the top of the group.
+      at:     p.hs_meeting_start_time || undefined,
+      status: p.hs_meeting_outcome || '',
     }),
   },
 ]
+
+/**
+ * Owner id -> display name, fetched once per page load.
+ *
+ * Paginated: /crm/v3/owners caps at 100 per page and this portal has several
+ * hundred, so a single page silently misses most of them.
+ */
+let _ownerNames: Map<string, string> | null = null
+async function _ownerNameMap(): Promise<Map<string, string>> {
+  if (_ownerNames) return _ownerNames
+  const map = new Map<string, string>()
+  try {
+    let after: string | undefined = undefined
+    for (let page = 0; page < 10; page++) {
+      const url = '/crm/v3/owners?limit=100&archived=false' + (after ? `&after=${after}` : '')
+      const res = await hsProxy('GET', url)
+      if (!res.ok) break // logged by hsProxy
+      const body = await res.json()
+      for (const o of (body.results || [])) {
+        const name = [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email || ''
+        if (o.id && name) map.set(String(o.id), name)
+      }
+      after = body.paging?.next?.after
+      if (!after) break
+    }
+  } catch (e) {
+    console.error('[hs] _ownerNameMap error:', e)
+  }
+  // Cached even when empty: a failed lookup should not be retried on every
+  // lead the rep opens. A reload clears it.
+  _ownerNames = map
+  return map
+}
 
 /**
  * Read one engagement type off a contact.
@@ -598,7 +653,12 @@ async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Act
         const m = cfg.map(p)
         const at = _hsMsToIso(m.at ?? p.hs_timestamp)
         if (!at) return null // undated engagements cannot be placed on a timeline
-        return { id: String(r.id), kind: cfg.kind, title: m.title, body: m.body, at, meta: m.meta } as Activity
+        return {
+          id: String(r.id), kind: cfg.kind, at,
+          body: m.body || '', title: m.title || '',
+          direction: m.direction || '', duration: m.duration || '',
+          status: m.status || '', author: m.author || '',
+        } as Activity
       })
       .filter(Boolean) as Activity[]
   } catch (e) {
@@ -608,7 +668,8 @@ async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Act
 }
 
 /**
- * Recent communication on a lead's contact, newest first.
+ * Recent communication on a lead's contact, grouped by type and newest first
+ * within each group.
  *
  * Activities hang off the contact, not the lead — hs_primary_contact_id comes
  * with every lead, so no association lookup is needed to find the person.
@@ -617,15 +678,24 @@ async function _activityOfType(contactId: string, cfg: ActivityCfg): Promise<Act
  * that type only, so one bad response degrades the timeline instead of
  * emptying it.
  */
-export async function fetchContactActivity(contactId: string, limit = 8): Promise<Activity[]> {
-  if (isDemo() || !contactId) return []
-  const perType = await Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg)))
-  return perType
-    .flat()
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, limit)
-}
+export async function fetchContactActivity(contactId: string, perGroup = 20): Promise<ActivityGroups> {
+  if (isDemo() || !contactId) return EMPTY_GROUPS()
+  const lists = await Promise.all(ACTIVITY_TYPES.map(cfg => _activityOfType(contactId, cfg)))
 
+  const groups = EMPTY_GROUPS()
+  lists.flat().forEach(a => groups[a.kind].push(a))
+  for (const kind of Object.keys(groups) as ActivityKind[]) {
+    groups[kind].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    groups[kind] = groups[kind].slice(0, perGroup)
+  }
+
+  // Only pay for the owners list when there is a note to attribute.
+  if (groups.note.length) {
+    const names = await _ownerNameMap()
+    groups.note = groups.note.map(n => ({ ...n, author: names.get(n.author) || '' }))
+  }
+  return groups
+}
 /**
  * Append the customer's details to a scheduler URL as query params.
  * Verified against HubSpot's public meetings link: firstName / lastName /
