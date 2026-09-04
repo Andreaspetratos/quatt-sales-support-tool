@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchTasksForLeads, fetchLtoLeads } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchLeadTasks, fetchLeadsByIds } from '@/lib/hubspot'
 import type { HsTask, TeamOwner } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -402,10 +402,40 @@ function EditTaskModal({
 }
 
 // ── Tasks tab ─────────────────────────────────────────────────────────────────
+// What the Stage column shows for one task.
+//
+// Tasks now outlive their lead's stay on the rep's board, so "not Long Term"
+// no longer means MQL — read the lead's real stage rather than inferring it
+// from a board/not-board binary.
+//
+// handedOver is the case the Long Term flow produces: three days after a
+// parked lead reactivates, the workflow clears the owner so a colleague can
+// pick it up, which leaves the rep who parked it holding a task for a lead
+// that is no longer theirs. That is worth saying out loud — the task is not
+// actionable by them any more, and without a label it just looks stale.
+type TaskStage = { label: string; isMql: boolean; isLto: boolean; handedOver: boolean }
+
+function taskStage(lead: Lead | undefined, meId: string, lang: 'nl' | 'en'): TaskStage {
+  if (!lead) return { label: translate(lang, 'stageUnknown'), isMql: false, isLto: false, handedOver: false }
+  const p = lead.properties
+  const stage = p.hs_pipeline_stage || ''
+  const isLto = stage === CONFIG.STAGES.LOST && p[CONFIG.PROPS.lostReasons] === 'Long Term Opportunity'
+  return {
+    label: isLto ? translate(lang, 'stageLto') : stageLabel(stage),
+    isMql: stage === CONFIG.STAGES.MQL,
+    isLto,
+    handedOver: !!meId && (p.hubspot_owner_id || '') !== meId,
+  }
+}
+
 // Reads tasks from HubSpot rather than localStorage. The old local list only
 // showed tasks created in this tool on this device, so a rep on another laptop
-// saw nothing and tasks made directly in HubSpot never appeared. Scoped to the
-// rep's MQL leads, which is what keeps it to two API calls.
+// saw nothing and tasks made directly in HubSpot never appeared.
+//
+// Every open task hanging off a lead, not just leads on the board: a task
+// routinely outlives its lead's stay there, and the board-scoped version hid
+// exactly the tasks that mattered most — the Long Term follow-up a rep is
+// forced to create as the lead goes Lost.
 function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const { state, selectLead } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
@@ -415,10 +445,10 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editing, setEditing] = useState<HsTask | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('due')
-  // LTO leads are Lost, so they are not on the board — fetched only so their
-  // tasks show up here. Parking a lead creates a task on purpose; leaving it
-  // invisible defeats the point.
-  const [ltoLeads, setLtoLeads] = useState<Lead[]>([])
+  // Leads a task points at that the board does not hold — parked, lost, or
+  // handed to a colleague. Resolved from the tasks themselves rather than
+  // searched for up front, so nothing has to guess which stages to look in.
+  const [extraLeads, setExtraLeads] = useState<Lead[]>([])
   const [stageFilter, setStageFilter] = useState<'all' | 'mql' | 'lto'>('all')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -429,10 +459,13 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     const ownerId = state.currentRep?.hubspotOwnerId || ''
     setLoading(true)
     try {
-      const lto = await fetchLtoLeads(ownerId)
-      setLtoLeads(lto)
-      const ids = [...state.leads.map(l => l.id), ...lto.map((l: Lead) => l.id)]
-      setTasks(ids.length ? await fetchTasksForLeads(ownerId, ids) : [])
+      const list = await fetchLeadTasks(ownerId)
+      setTasks(list)
+      const known = new Set(state.leads.map(l => l.id))
+      const missing = Array.from(new Set(
+        list.map(task => task.leadId).filter((id): id is string => !!id && !known.has(id)),
+      ))
+      setExtraLeads(missing.length ? await fetchLeadsByIds(missing) : [])
     } finally {
       setLoading(false)
     }
@@ -486,15 +519,20 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     )
   }
 
-  // Declared before use: the filter below references ltoIds.
-  const ltoIds = new Set(ltoLeads.map(l => l.id))
-  const findLead = (id: string | null) =>
-    state.leads.find(l => l.id === id) || ltoLeads.find(l => l.id === id)
+  // Declared before use: the filter below resolves each task's lead.
+  const meId = state.currentRep?.hubspotOwnerId || ''
+  const boardIds = new Set(state.leads.map(l => l.id))
+  const extraById = new Map(extraLeads.map(l => [l.id, l]))
+  const findLead = (id: string | null): Lead | undefined =>
+    id ? state.leads.find(l => l.id === id) || extraById.get(id) : undefined
 
-  const visible = tasks.filter(t => {
+  const visible = tasks.filter(task => {
     if (stageFilter === 'all') return true
-    const isLto = !!t.leadId && ltoIds.has(t.leadId)
-    return stageFilter === 'lto' ? isLto : !isLto
+    const lead = findLead(task.leadId)
+    if (stageFilter === 'lto') return taskStage(lead, meId, lang).isLto
+    // The MQL chip means the MQL stage, not "everything that is not Long
+    // Term". Tasks on Lost, SQL and handed-over leads live under All.
+    return taskStage(lead, meId, lang).isMql
   })
 
   // Sorting is client-side over the already-fetched list — no extra API calls.
@@ -509,9 +547,9 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
         r = an.localeCompare(bn); break
       }
       case 'stage': {
-        const av = a.leadId && ltoIds.has(a.leadId) ? 1 : 0
-        const bv = b.leadId && ltoIds.has(b.leadId) ? 1 : 0
-        r = av - bv; break
+        const al = taskStage(findLead(a.leadId), meId, lang).label
+        const bl = taskStage(findLead(b.leadId), meId, lang).label
+        r = al.localeCompare(bl); break
       }
       default: {
         // Undated tasks always sort last, whichever direction is active —
@@ -575,29 +613,47 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
             {sorted.map(task => {
               const dm = dueMeta(task.dueAt)
               const lead = findLead(task.leadId)
-              const isLto = !!task.leadId && ltoIds.has(task.leadId)
+              const st = taskStage(lead, meId, lang)
               return (
                 <tr key={task.hsId} style={{ cursor: 'default' }}>
                   <td className="tn" title={task.title}>{task.title || '--'}</td>
                   <td className="tm">{statusLabel(task.status)}</td>
                   <td><span className={`task-card-due ${dm.cls}`}>{dm.label}</span></td>
                   <td className="tm" style={{ maxWidth: 260, whiteSpace: 'normal' }}>{task.notes || '--'}</td>
+                  {/* Only board leads open the modal. DealModal resolves the
+                      selected id against state.leads and renders null on a
+                      miss, so making an off-board lead clickable is a click
+                      that visibly does nothing — now the common case, since
+                      this list no longer stops at the board. The task's own
+                      HubSpot link is the way through for those. */}
                   <td>
-                    {lead ? (
-                      <span
-                        style={{ cursor: 'pointer', color: 'var(--gr)', fontWeight: 600 }}
-                        onClick={() => selectLead(lead.id)}
-                      >{lead.properties?.hs_lead_name || '--'}</span>
-                    ) : <span className="tm">--</span>}
+                    {!lead ? <span className="tm">--</span>
+                      : boardIds.has(lead.id) ? (
+                        <span
+                          style={{ cursor: 'pointer', color: 'var(--gr)', fontWeight: 600 }}
+                          onClick={() => selectLead(lead.id)}
+                        >{lead.properties?.hs_lead_name || '--'}</span>
+                      ) : (
+                        <span title={t('taskLeadOffBoard')}>{lead.properties?.hs_lead_name || '--'}</span>
+                      )}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span className={`chip ${st.isMql ? 'on' : ''}`} style={{ pointerEvents: 'none', fontSize: 11 }}>
+                        {st.label}
+                      </span>
+                      {st.handedOver && (
+                        <span
+                          className="chip"
+                          style={{ pointerEvents: 'none', fontSize: 11, borderColor: 'var(--or)', color: 'var(--or)' }}
+                          title={t('taskHandedOverHint')}
+                        >{t('taskHandedOver')}</span>
+                      )}
+                    </div>
                   </td>
                   {/* Tasks are engagements, so they have no CRM record page —
                       /record/0-27/<id> 404s. The tasks index with the id as a
                       query param opens the task itself. */}
-                  <td>
-                    <span className={`chip ${isLto ? '' : 'on'}`} style={{ pointerEvents: 'none', fontSize: 11 }}>
-                      {isLto ? t('stageLto') : t('stageMql')}
-                    </span>
-                  </td>
                   <td>
                     {state.hubspotPortalId ? (
                       <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all?taskId=${task.hsId}`}

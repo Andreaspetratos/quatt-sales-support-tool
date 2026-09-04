@@ -1000,6 +1000,36 @@ export default function DealModal() {
 
           {/* Scrollable body */}
           <div className="dm-body">
+            {/* Long Term context, written when the lead was parked.
+                Read back here because whoever is looking at it is usually not
+                whoever parked it: three days after a parked lead reactivates,
+                the workflow clears the owner so a colleague can pick it up.
+                Without this the lead arrives on their board with no trace of
+                where it has been or why. */}
+            {(p['long_term_opportunity_reason_lead'] || p['long_term_opportunity_followup_date_lead']) && (
+              <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 4 }}>
+                  {t('ltoCtxTitle')}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {p['long_term_opportunity_followup_date_lead'] && (
+                    <div className="kv">
+                      <span className="kk">{t('ltoCtxDate')}</span>
+                      <span className="vv">{actDate(p['long_term_opportunity_followup_date_lead'])}</span>
+                    </div>
+                  )}
+                  {p['long_term_opportunity_reason_lead'] && (
+                    <div className="kv">
+                      <span className="kk">{t('ltoCtxReason')}</span>
+                      <span className="vv" style={{ whiteSpace: 'normal' }}>
+                        {p['long_term_opportunity_reason_lead']}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Lead info + Address side by side */}
             <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
               {/* Left: lead info */}

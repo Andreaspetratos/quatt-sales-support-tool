@@ -22,6 +22,9 @@ const LEAD_PROPS = [
   'contact_email',
   'hs_primary_contact_id',
   'long_term_opportunity_followup_date_lead',
+  // Written when a lead is parked as Long Term, and read back when it returns:
+  // the rep who picks it up is usually not the one who parked it.
+  'long_term_opportunity_reason_lead',
   'lost_reasons_lead',   // used to link straight to the contact from the lead modal
   'qualification_call_result_lead',
   'postnl_adrescheck_status',  // drives the address-check dot in the lead modal
@@ -283,35 +286,32 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<TeamOwner[]
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
 /**
- * Leads the rep parked as Long Term Opportunity.
+ * Batch-read leads by id, whatever stage or owner they are on.
  *
- * Kept separate from fetchLeads() on purpose: these are Lost, so they must not
- * appear on the board. They are fetched only so their tasks can surface in the
- * Tasks tab — an LTO task is the whole point of parking a lead, and it was
- * invisible while the tab was scoped to MQL leads alone.
+ * The Tasks tab needs this because a task outlives its lead's stay on the
+ * rep's board: parked, lost and handed-over leads all still have open tasks
+ * hanging off them, and none of them come back from fetchLeads().
+ *
+ * Returns only the leads that were found — batch/read answers 207 with the
+ * survivors when some ids are gone, which res.ok already accepts.
  */
-export async function fetchLtoLeads(ownerId: string): Promise<Lead[]> {
-  if (isDemo() || !ownerId) return []
+export async function fetchLeadsByIds(ids: string[]): Promise<Lead[]> {
+  if (isDemo() || ids.length === 0) return []
+  const out: Lead[] = []
   try {
-    const res = await hsProxy('POST', '/crm/v3/objects/leads/search', {
-      filterGroups: [{
-        filters: [
-          { propertyName: 'hubspot_owner_id',  operator: 'EQ', value: ownerId },
-          { propertyName: 'hs_pipeline',       operator: 'EQ', value: CONFIG.PIPELINE_ID },
-          { propertyName: 'hs_pipeline_stage', operator: 'EQ', value: CONFIG.STAGES.LOST },
-          { propertyName: 'lost_reasons_lead', operator: 'EQ', value: 'Long Term Opportunity' },
-        ],
-      }],
-      properties: LEAD_PROPS,
-      sorts: [{ propertyName: 'long_term_opportunity_followup_date_lead', direction: 'ASCENDING' }],
-      limit: 100,
-    })
-    if (!res.ok) return [] // logged by hsProxy
-    return ((await res.json()).results || []) as Lead[]
+    // batch/read takes at most 100 inputs per call.
+    for (let i = 0; i < ids.length; i += 100) {
+      const res = await retryProxy('POST', '/crm/v3/objects/leads/batch/read', {
+        properties: LEAD_PROPS,
+        inputs: ids.slice(i, i + 100).map(id => ({ id })),
+      })
+      if (!res.ok) continue // logged by hsProxy
+      out.push(...(((await res.json()).results || []) as Lead[]))
+    }
   } catch (e) {
-    console.error('[hs] fetchLtoLeads error:', e)
-    return []
+    console.error('[hs] fetchLeadsByIds error:', e)
   }
+  return out
 }
 
 export async function fetchLeads(ownerId: string): Promise<Lead[]> {
@@ -1141,7 +1141,7 @@ async function _linkTaskToLead(taskId: string, leadId: string): Promise<void> {
  * caller can tell the rep which link failed.
  *
  * Unlink first, then link. The other order risks leaving the task attached to
- * both records, and fetchTasksForLeads takes the first association it is given
+ * both records, and fetchLeadTasks takes the first association it is given
  * — so the task would show under whichever came back first.
  *
  * A failed unlink is only fatal when the association still exists: a 404 means
@@ -1237,51 +1237,72 @@ export async function fetchHsTasks(ownerId: string): Promise<HsTask[]> {
 }
 
 /**
- * Fetch the rep's open tasks that belong to one of the given leads.
+ * Fetch every open task the rep owns that hangs off a lead.
  *
  * Reads associations in the tasks -> leads direction, because that is the
  * direction the tool creates them in (_linkTaskToLead) and the only one known
  * to be defined in this portal. Reading leads -> tasks came back empty.
  *
- * Two calls regardless of volume: one task search, one batched association
- * read. Tasks not linked to any lead, or linked to a lead outside the given
- * set, are dropped — the list is deliberately scoped to the rep's MQL leads.
+ * Scoped to lead-linked tasks: a rep's tasks on contacts, deals or nothing at
+ * all belong to HubSpot, not to this tool. It is deliberately NOT scoped any
+ * further than that. It used to be limited to leads on the rep's board, which
+ * silently hid every task whose lead had moved on — including the Long Term
+ * follow-up the rep is forced to create in the moment the lead goes Lost, so
+ * the one thread back to a parked lead vanished the moment it was needed.
  */
-export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Promise<HsTask[]> {
-  if (isDemo() || !ownerId || leadIds.length === 0) return []
-  const wanted = new Set(leadIds.map(String))
+export async function fetchLeadTasks(ownerId: string): Promise<HsTask[]> {
+  if (isDemo() || !ownerId) return []
   try {
     // 1 — the rep's open tasks. Sorted on hs_timestamp: hs_task_due_date does
     // not exist in this portal, and sorting on a missing property fails.
-    const res = await retryProxy('POST', '/crm/v3/objects/tasks/search', {
-      filterGroups: [{
-        filters: [
-          { propertyName: 'hubspot_owner_id', operator: 'EQ',  value: ownerId },
-          { propertyName: 'hs_task_status',   operator: 'NEQ', value: 'COMPLETED' },
-        ],
-      }],
-      properties: ['hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_task_status', 'hubspot_owner_id'],
-      sorts: [{ propertyName: 'hs_timestamp', direction: 'ASCENDING' }],
-      limit: 100,
-    })
-    if (!res.ok) return [] // logged by hsProxy
-    const raw = ((await res.json()).results || []) as any[]
+    //
+    // Paginated: the page cap applies before the lead-link filter below, so a
+    // single page would drop real tasks for any rep holding more than a page
+    // of open ones — and drop them invisibly.
+    const PAGE = 100
+    const MAX_PAGES = 5
+    const raw: any[] = []
+    let after: string | undefined
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const body: Record<string, unknown> = {
+        filterGroups: [{
+          filters: [
+            { propertyName: 'hubspot_owner_id', operator: 'EQ',  value: ownerId },
+            { propertyName: 'hs_task_status',   operator: 'NEQ', value: 'COMPLETED' },
+          ],
+        }],
+        properties: ['hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_task_status', 'hubspot_owner_id'],
+        sorts: [{ propertyName: 'hs_timestamp', direction: 'ASCENDING' }],
+        limit: PAGE,
+      }
+      if (after) body.after = after
+      const res = await retryProxy('POST', '/crm/v3/objects/tasks/search', body)
+      if (!res.ok) return [] // logged by hsProxy
+      const json = await res.json()
+      const results = (json.results || []) as any[]
+      raw.push(...results)
+      after = json.paging?.next?.after
+      if (!after || results.length < PAGE) break
+    }
     if (raw.length === 0) return []
 
-    // 2 — which lead each task hangs off
-    const assocRes = await retryProxy('POST', '/crm/v4/associations/tasks/leads/batch/read', {
-      inputs: raw.map(t => ({ id: String(t.id) })),
-    })
+    // 2 — which lead each task hangs off. Chunked at 100, the batch limit:
+    // raw can now hold several pages.
     const taskToLead = new Map<string, string>()
-    if (assocRes.ok) {
+    for (let i = 0; i < raw.length; i += 100) {
+      const assocRes = await retryProxy('POST', '/crm/v4/associations/tasks/leads/batch/read', {
+        inputs: raw.slice(i, i + 100).map(t => ({ id: String(t.id) })),
+      })
+      if (!assocRes.ok) {
+        console.warn('[hs] fetchLeadTasks: association read failed, falling back to the [lead:] body marker')
+        continue
+      }
       const assoc = await assocRes.json()
       for (const row of (assoc.results || [])) {
         const taskId = String(row.from?.id || '')
         const first = (row.to || [])[0]
         if (taskId && first) taskToLead.set(taskId, String(first.toObjectId))
       }
-    } else {
-      console.warn('[hs] fetchTasksForLeads: association read failed, falling back to the [lead:] body marker')
     }
 
     return raw
@@ -1304,7 +1325,7 @@ export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Pr
           ownerId: t.properties?.hubspot_owner_id || '',
         } as HsTask
       })
-      .filter(t => t.leadId && wanted.has(t.leadId))
+      .filter(t => !!t.leadId)
       .sort((a, b) => {
         if (!a.dueAt && !b.dueAt) return 0
         if (!a.dueAt) return 1
@@ -1312,7 +1333,7 @@ export async function fetchTasksForLeads(ownerId: string, leadIds: string[]): Pr
         return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime()
       })
   } catch (e) {
-    console.error('[hs] fetchTasksForLeads error:', e)
+    console.error('[hs] fetchLeadTasks error:', e)
     return []
   }
 }
@@ -1368,7 +1389,7 @@ export async function updateHsTask(
     hs_task_subject: u.title || '(no title)',
     hs_task_status:  u.status,
     // Keep the [lead:xxx] marker in step with the association — it is the
-    // fallback fetchTasksForLeads uses when the association read fails.
+    // fallback fetchLeadTasks uses when the association read fails.
     hs_task_body:    _encodeLeadInBody(u.leadId, u.notes),
   }
   if (u.dueAtMs) props.hs_timestamp = u.dueAtMs
