@@ -4,7 +4,7 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
@@ -403,6 +403,125 @@ function EditableField({ label, value, onSave, highlight = false }: { label: str
           <span style={{ fontSize: 10, color: 'var(--cs)', opacity: 0.7 }}>✎</span>
         </span>
       )}
+    </div>
+  )
+}
+
+// ── Long Term Opportunity modal ───────────────────────────────────────────────
+// LTO was previously just Lost with the reason picked from the dropdown, which
+// captured no follow-up date and left nothing to bring the lead back. This sets
+// the date and reason the reactivation workflow needs, and forces a task so the
+// rep has something in their own list — a Lost lead is invisible to them.
+function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
+  const { state, setState } = useApp()
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+
+  const leadName = deal.properties?.hs_lead_name || ''
+
+  function plusMonths(n: number): string {
+    const d = new Date()
+    d.setMonth(d.getMonth() + n)
+    // Local, not toISOString(): that converts to UTC and can land on the
+    // previous day for anyone east of Greenwich.
+    const p = (x: number) => String(x).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+
+  const [date, setDate] = useState(plusMonths(1))
+  const [preset, setPreset] = useState<'1m' | '2m' | 'custom'>('1m')
+  const [reason, setReason] = useState('')
+  const [taskTitle, setTaskTitle] = useState(t('ltoTaskTitle', leadName))
+  const [saving, setSaving] = useState(false)
+
+  function pick(p: '1m' | '2m' | 'custom') {
+    setPreset(p)
+    if (p === '1m') setDate(plusMonths(1))
+    if (p === '2m') setDate(plusMonths(2))
+  }
+
+  async function confirm() {
+    if (!date) { showToast(t('ltoNeedDate'), 'error'); return }
+    if (!reason.trim()) { showToast(t('ltoNeedReason'), 'error'); return }
+    if (!taskTitle.trim()) { showToast(t('ltoNeedTask'), 'error'); return }
+
+    setSaving(true)
+    try {
+      // Task first, deliberately. The lead only moves to Lost once there is
+      // something to bring it back — if this fails, the lead stays workable
+      // rather than disappearing with no follow-up attached.
+      const taskId = await createHsTask(
+        taskTitle.trim(),
+        reason.trim(),
+        date,
+        state.currentRep?.hubspotOwnerId || '',
+        deal.id,
+      )
+      if (!taskId) throw new Error(t('ltoTaskFailed'))
+
+      await patchLeadApi(deal.id, {
+        hs_pipeline_stage: CONFIG.STAGES.LOST,
+        [CONFIG.PROPS.lostReasons]: 'Long Term Opportunity',
+        [CONFIG.PROPS.callResult]: 'Lost',
+        long_term_opportunity_followup_date_lead: date,
+        long_term_opportunity_reason_lead: reason.trim(),
+      }, state.leads, leads => setState({ leads }))
+
+      setState({ leads: state.leads.filter(l => l.id !== deal.id), selectedId: null, modal: null })
+      showToast(t('ltoSaved'), 'success')
+    } catch (e: any) {
+      showToast(e.message || 'Error', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mb" onClick={e => { if (e.target === e.currentTarget) setState({ modal: null }) }}>
+      <div className="mo">
+        <div className="moh">
+          <div className="mot">{t('ltoTitle')}</div>
+          <button className="xb" onClick={() => setState({ modal: null })}>✕</button>
+        </div>
+        <div className="mob">
+          <div className="iw">
+            <label className="il">{t('ltoWhen')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            <div className="cr2" style={{ marginBottom: 6 }}>
+              <button className={`chip ${preset === '1m' ? 'on' : ''}`} onClick={() => pick('1m')}>{t('lto1m')}</button>
+              <button className={`chip ${preset === '2m' ? 'on' : ''}`} onClick={() => pick('2m')}>{t('lto2m')}</button>
+              <button className={`chip ${preset === 'custom' ? 'on' : ''}`} onClick={() => pick('custom')}>{t('ltoCustom')}</button>
+            </div>
+            <input
+              className="inp"
+              type="date"
+              value={date}
+              onChange={e => { setDate(e.target.value); setPreset('custom') }}
+            />
+          </div>
+
+          <div className="iw">
+            <label className="il">{t('ltoReason')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            <textarea
+              className="inp"
+              rows={3}
+              placeholder={t('ltoReasonPh')}
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+            />
+          </div>
+
+          <div className="iw">
+            <label className="il">{t('ltoTask')} <span style={{ color: 'var(--rd)' }}>*</span></label>
+            <input className="inp" type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} />
+            <div style={{ fontSize: 11, color: 'var(--cs)', marginTop: 4 }}>{t('ltoTaskHint')}</div>
+          </div>
+        </div>
+        <div className="mof">
+          <button className="btn btn-sc btn-md" onClick={() => setState({ modal: null })}>{t('cancel')}</button>
+          <button className="btn btn-pr btn-md" disabled={saving} onClick={confirm}>
+            {saving ? t('ltoSaving') : t('ltoConfirm')}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -951,6 +1070,7 @@ export default function DealModal() {
           <div className="dm-foot" style={{ position: 'relative' }}>
             <button className="btn btn-gn btn-sm" onClick={() => handleCallResult('Plan HV')}>{t('homeVisit')}</button>
             <button className="btn btn-sc btn-sm" onClick={openSched}>{schedLabel}</button>
+            <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: 'lto', modalDealId: deal.id })}>{t('ltoBtn')}</button>
             <button className="btn btn-dn btn-sm" onClick={openLost}>{t('markLost')}</button>
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
               {t('taskAddFromDeal')}
@@ -970,6 +1090,10 @@ export default function DealModal() {
       {state.modal === 'lost' && state.modalDealId === deal.id && (
         <LostModal dealId={deal.id} lang={lang} />
       )}
+      {state.modal === 'lto' && state.modalDealId === deal.id && (
+        <LtoModal deal={deal} lang={lang} />
+      )}
+
       {state.modal === 'sched' && state.modalDealId === deal.id && (
         <SchedModal deal={deal} lang={lang} onBooked={() => handleCallResult('Plan Call')} />
       )}

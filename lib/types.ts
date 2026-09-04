@@ -151,7 +151,7 @@ export interface PerfData {
 
 export type Lang = 'nl' | 'en'
 export type Screen = 'login' | 'dashboard' | 'admin'
-export type Modal = 'lost' | 'sched' | 'delPb' | 'delSch' | null
+export type Modal = 'lost' | 'lto' | 'sched' | 'delPb' | 'delSch' | null
 export type AdminTab = 'playbooks' | 'schedulers'
 export type TaskTab = 'leads' | 'tasks'
 export type PerfPeriod = 'today' | 'week' | 'month'
