@@ -4,7 +4,7 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
@@ -412,6 +412,9 @@ function EditableField({ label, value, onSave, highlight = false }: { label: str
 // captured no follow-up date and left nothing to bring the lead back. This sets
 // the date and reason the reactivation workflow needs, and forces a task so the
 // rep has something in their own list — a Lost lead is invisible to them.
+// HubSpot enforces a 10-character minimum on long_term_opportunity_reason_lead.
+const LTO_REASON_MIN = 10
+
 function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
@@ -441,7 +444,10 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
 
   async function confirm() {
     if (!date) { showToast(t('ltoNeedDate'), 'error'); return }
-    if (!reason.trim()) { showToast(t('ltoNeedReason'), 'error'); return }
+    // long_term_opportunity_reason_lead has a 10-character minimum in HubSpot.
+    // Checked here so the rep is told before anything is written, rather than
+    // getting a 400 after the task has already been created.
+    if (reason.trim().length < LTO_REASON_MIN) { showToast(t('ltoReasonShort', LTO_REASON_MIN), 'error', 6000); return }
     if (!taskTitle.trim()) { showToast(t('ltoNeedTask'), 'error'); return }
 
     setSaving(true)
@@ -458,13 +464,21 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
       )
       if (!taskId) throw new Error(t('ltoTaskFailed'))
 
-      await patchLeadApi(deal.id, {
-        hs_pipeline_stage: CONFIG.STAGES.LOST,
-        [CONFIG.PROPS.lostReasons]: 'Long Term Opportunity',
-        [CONFIG.PROPS.callResult]: 'Lost',
-        long_term_opportunity_followup_date_lead: date,
-        long_term_opportunity_reason_lead: reason.trim(),
-      }, state.leads, leads => setState({ leads }))
+      try {
+        await patchLeadApi(deal.id, {
+          hs_pipeline_stage: CONFIG.STAGES.LOST,
+          [CONFIG.PROPS.lostReasons]: 'Long Term Opportunity',
+          [CONFIG.PROPS.callResult]: 'Lost',
+          long_term_opportunity_followup_date_lead: date,
+          long_term_opportunity_reason_lead: reason.trim(),
+        }, state.leads, leads => setState({ leads }))
+      } catch (patchErr) {
+        // The task was created first so the lead is never parked without a
+        // follow-up. If the patch then fails, that task is an orphan — remove
+        // it rather than leaving one behind on every failed attempt.
+        try { await deleteHsTask(taskId) } catch { /* best effort */ }
+        throw patchErr
+      }
 
       setState({ leads: state.leads.filter(l => l.id !== deal.id), selectedId: null, modal: null })
       showToast(t('ltoSaved'), 'success')
@@ -507,6 +521,9 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
               value={reason}
               onChange={e => setReason(e.target.value)}
             />
+            <div style={{ fontSize: 11, color: reason.trim().length < LTO_REASON_MIN ? 'var(--or)' : 'var(--cs)', marginTop: 4 }}>
+              {t('ltoReasonCount', reason.trim().length, LTO_REASON_MIN)}
+            </div>
           </div>
 
           <div className="iw">
