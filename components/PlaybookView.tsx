@@ -253,6 +253,47 @@ function TechCheckBlock({
 }
 
 // ── Choice question with optional immediate HubSpot save ─────────────────────
+// ── Per-question notepad ──────────────────────────────────────────────────────
+// Saves to personal_info___notes on blur, the same place open_text and
+// list_options write to.
+//
+// Replaces the notes box that used to sit under choice questions, which wrote
+// to pbState.notes[q.id + '_n'] — a key nothing in the tool ever read back.
+// Anything a rep typed there was lost when local state cleared. It looked
+// identical to the ones that work, which is exactly why it went unnoticed.
+function QuestionNotepad({ q, dealId, lang }: { q: Question; dealId: string; lang: 'nl' | 'en' }) {
+  const { state, patchLeadLocal } = useApp()
+  const [saving, setSaving] = useState(false)
+
+  async function save(value: string) {
+    const v = value.trim()
+    if (!v) return
+    setSaving(true)
+    try {
+      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label}: ${v}`)
+      showToast('✓ Notitie opgeslagen in HubSpot', 'success')
+    } catch (e: any) {
+      showToast(e.message || 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <textarea
+      className="inp"
+      rows={2}
+      style={{ marginTop: 6 }}
+      disabled={saving}
+      placeholder={translate(lang, 'callNotesPlaceholder')}
+      // Uncontrolled and cleared after save: the value is appended to the
+      // lead's notes, so leaving it in the box would invite the rep to save
+      // the same line twice.
+      onBlur={async e => { const v = e.target.value; e.target.value = ''; await save(v) }}
+    />
+  )
+}
+
 function ChoiceQuestion({
   q, dealId, pbState, setPbAnswer, setPbNote, lang,
 }: {
@@ -317,14 +358,7 @@ function ChoiceQuestion({
           → {q.hsProperty}{saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
         </div>
       )}
-      <textarea
-        className="inp"
-        style={{ marginTop: 5 }}
-        rows={2}
-        placeholder={translate(lang, 'callNotesPlaceholder')}
-        defaultValue={pbState.notes[q.id + '_n'] || ''}
-        onBlur={e => setPbNote(q.id + '_n', e.target.value)}
-      />
+      <QuestionNotepad q={q} dealId={dealId} lang={lang} />
     </div>
   )
 }
@@ -567,6 +601,7 @@ function MultiSelectQuestion({
         <button className="btn btn-sc btn-xs" onClick={handleSave}>{t('msSave')}</button>
         {saved && <span style={{ fontSize: 12, color: 'var(--gr)' }}>✓</span>}
       </div>
+      <QuestionNotepad q={q} dealId={dealId} lang={lang} />
     </div>
   )
 }
@@ -619,9 +654,9 @@ function ListOptionsQuestion({
 
 // ── Update property — renders input based on fieldType, saves immediately ─────
 function UpdatePropertyQuestion({
-  q, dealId, pbState, setPbAnswer,
+  q, dealId, pbState, setPbAnswer, lang,
 }: {
-  q: Question; dealId: string; pbState: PlaybookState; setPbAnswer: (k: string, v: string) => void
+  q: Question; dealId: string; pbState: PlaybookState; setPbAnswer: (k: string, v: string) => void; lang: 'nl' | 'en'
 }) {
   const { state, patchLeadLocal } = useApp()
   const [saving, setSaving] = useState(false)
@@ -684,12 +719,17 @@ function UpdatePropertyQuestion({
       {q.required && <span style={{ color: 'var(--rd)' }}> *</span>}
     </label>
   )
+  // Notepad rides along with the badge: every field-type branch below renders
+  // {badge}, so this is the one place that covers all of them.
   const badge = (
-    <div className="hs-badge">
-      → {propName}
-      {saving && <span style={{ marginLeft: 4 }}>…</span>}
-      {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
-    </div>
+    <>
+      <div className="hs-badge">
+        → {propName}
+        {saving && <span style={{ marginLeft: 4 }}>…</span>}
+        {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
+      </div>
+      <QuestionNotepad q={q} dealId={dealId} lang={lang} />
+    </>
   )
 
   if (fieldType === 'select') {
@@ -943,6 +983,7 @@ function QuestionItem({
           dealId={dealId}
           pbState={pbState}
           setPbAnswer={setPbAnswer}
+          lang={lang}
         />
       )
 
