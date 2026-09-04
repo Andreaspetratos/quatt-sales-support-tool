@@ -20,7 +20,9 @@ const LEAD_PROPS = [
   'screening_call_requested_at',
   'lead_router_qualification_score_lead',
   'contact_email',
-  'hs_primary_contact_id',   // used to link straight to the contact from the lead modal
+  'hs_primary_contact_id',
+  'long_term_opportunity_followup_date_lead',
+  'lost_reasons_lead',   // used to link straight to the contact from the lead modal
   'qualification_call_result_lead',
   'postnl_adrescheck_status',  // drives the address-check dot in the lead modal
 ]
@@ -280,6 +282,38 @@ export async function fetchOwnersByTeams(teamIds: string[]): Promise<TeamOwner[]
 }
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
+/**
+ * Leads the rep parked as Long Term Opportunity.
+ *
+ * Kept separate from fetchLeads() on purpose: these are Lost, so they must not
+ * appear on the board. They are fetched only so their tasks can surface in the
+ * Tasks tab — an LTO task is the whole point of parking a lead, and it was
+ * invisible while the tab was scoped to MQL leads alone.
+ */
+export async function fetchLtoLeads(ownerId: string): Promise<Lead[]> {
+  if (isDemo() || !ownerId) return []
+  try {
+    const res = await hsProxy('POST', '/crm/v3/objects/leads/search', {
+      filterGroups: [{
+        filters: [
+          { propertyName: 'hubspot_owner_id',  operator: 'EQ', value: ownerId },
+          { propertyName: 'hs_pipeline',       operator: 'EQ', value: CONFIG.PIPELINE_ID },
+          { propertyName: 'hs_pipeline_stage', operator: 'EQ', value: CONFIG.STAGES.LOST },
+          { propertyName: 'lost_reasons_lead', operator: 'EQ', value: 'Long Term Opportunity' },
+        ],
+      }],
+      properties: LEAD_PROPS,
+      sorts: [{ propertyName: 'long_term_opportunity_followup_date_lead', direction: 'ASCENDING' }],
+      limit: 100,
+    })
+    if (!res.ok) return [] // logged by hsProxy
+    return ((await res.json()).results || []) as Lead[]
+  } catch (e) {
+    console.error('[hs] fetchLtoLeads error:', e)
+    return []
+  }
+}
+
 export async function fetchLeads(ownerId: string): Promise<Lead[]> {
   if (isDemo()) return DEMO_LEADS
   if (!ownerId) { console.warn('[hs] fetchLeads called without ownerId'); return [] }

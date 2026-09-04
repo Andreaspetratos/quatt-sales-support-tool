@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchTasksForLeads } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchTasksForLeads, fetchLtoLeads } from '@/lib/hubspot'
 import type { HsTask, TeamOwner } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -288,7 +288,7 @@ function CreateTaskModal({ lang }: { lang: 'nl' | 'en' }) {
   )
 }
 
-type SortKey = 'title' | 'status' | 'due' | 'lead'
+type SortKey = 'title' | 'status' | 'due' | 'lead' | 'stage'
 
 // ── Edit Task Modal ───────────────────────────────────────────────────────────
 const TASK_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'WAITING', 'DEFERRED', 'COMPLETED']
@@ -415,17 +415,24 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editing, setEditing] = useState<HsTask | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('due')
+  // LTO leads are Lost, so they are not on the board — fetched only so their
+  // tasks show up here. Parking a lead creates a task on purpose; leaving it
+  // invisible defeats the point.
+  const [ltoLeads, setLtoLeads] = useState<Lead[]>([])
+  const [stageFilter, setStageFilter] = useState<'all' | 'mql' | 'lto'>('all')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Keyed on the lead ids so it reloads whenever the board's leads change.
   const leadIdsKey = state.leads.map(l => l.id).join(',')
 
   const load = useCallback(async () => {
-    const ids = state.leads.map(l => l.id)
-    if (ids.length === 0) { setTasks([]); setLoading(false); return }
+    const ownerId = state.currentRep?.hubspotOwnerId || ''
     setLoading(true)
     try {
-      setTasks(await fetchTasksForLeads(state.currentRep?.hubspotOwnerId || '', ids))
+      const lto = await fetchLtoLeads(ownerId)
+      setLtoLeads(lto)
+      const ids = [...state.leads.map(l => l.id), ...lto.map((l: Lead) => l.id)]
+      setTasks(ids.length ? await fetchTasksForLeads(ownerId, ids) : [])
     } finally {
       setLoading(false)
     }
@@ -479,16 +486,32 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     )
   }
 
+  // Declared before use: the filter below references ltoIds.
+  const ltoIds = new Set(ltoLeads.map(l => l.id))
+  const findLead = (id: string | null) =>
+    state.leads.find(l => l.id === id) || ltoLeads.find(l => l.id === id)
+
+  const visible = tasks.filter(t => {
+    if (stageFilter === 'all') return true
+    const isLto = !!t.leadId && ltoIds.has(t.leadId)
+    return stageFilter === 'lto' ? isLto : !isLto
+  })
+
   // Sorting is client-side over the already-fetched list — no extra API calls.
-  const sorted = [...tasks].sort((a, b) => {
+  const sorted = [...visible].sort((a, b) => {
     let r = 0
     switch (sortKey) {
       case 'title':  r = (a.title || '').localeCompare(b.title || ''); break
       case 'status': r = (a.status || '').localeCompare(b.status || ''); break
       case 'lead': {
-        const an = state.leads.find(l => l.id === a.leadId)?.properties?.hs_lead_name || ''
-        const bn = state.leads.find(l => l.id === b.leadId)?.properties?.hs_lead_name || ''
+        const an = findLead(a.leadId)?.properties?.hs_lead_name || ''
+        const bn = findLead(b.leadId)?.properties?.hs_lead_name || ''
         r = an.localeCompare(bn); break
+      }
+      case 'stage': {
+        const av = a.leadId && ltoIds.has(a.leadId) ? 1 : 0
+        const bv = b.leadId && ltoIds.has(b.leadId) ? 1 : 0
+        r = av - bv; break
       }
       default: {
         // Undated tasks always sort last, whichever direction is active —
@@ -527,6 +550,13 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
 
   return (
     <>
+      <div className="cr2" style={{ padding: '0 0 8px' }}>
+        {(['all', 'mql', 'lto'] as const).map(f => (
+          <button key={f} className={`chip ${stageFilter === f ? 'on' : ''}`} onClick={() => setStageFilter(f)}>
+            {t('taskFilter_' + f)}
+          </button>
+        ))}
+      </div>
       <div className="fade-up" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <table>
           <thead>
@@ -536,6 +566,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
               <SortTh k="due"    label={t('thTaskDue')} />
               <th>{t('thTaskNotes')}</th>
               <SortTh k="lead"   label={t('thTaskLead')} />
+              <SortTh k="stage"  label={t('thTaskStage')} />
               <th>{t('thTaskHs')}</th>
               <th>{t('thTaskActions')}</th>
             </tr>
@@ -543,7 +574,8 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
           <tbody>
             {sorted.map(task => {
               const dm = dueMeta(task.dueAt)
-              const lead = state.leads.find(l => l.id === task.leadId)
+              const lead = findLead(task.leadId)
+              const isLto = !!task.leadId && ltoIds.has(task.leadId)
               return (
                 <tr key={task.hsId} style={{ cursor: 'default' }}>
                   <td className="tn" title={task.title}>{task.title || '--'}</td>
@@ -561,6 +593,11 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
                   {/* Tasks are engagements, so they have no CRM record page —
                       /record/0-27/<id> 404s. The tasks index with the id as a
                       query param opens the task itself. */}
+                  <td>
+                    <span className={`chip ${isLto ? '' : 'on'}`} style={{ pointerEvents: 'none', fontSize: 11 }}>
+                      {isLto ? t('stageLto') : t('stageMql')}
+                    </span>
+                  </td>
                   <td>
                     {state.hubspotPortalId ? (
                       <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all?taskId=${task.hsId}`}
