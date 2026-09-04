@@ -421,6 +421,14 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
 
   const leadName = deal.properties?.hs_lead_name || ''
 
+  // Local date parts, not toISOString() — that converts to UTC and can report
+  // yesterday for anyone east of Greenwich.
+  function todayStr(): string {
+    const d = new Date()
+    const p = (x: number) => String(x).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+
   function plusMonths(n: number): string {
     const d = new Date()
     d.setMonth(d.getMonth() + n)
@@ -444,6 +452,10 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
 
   async function confirm() {
     if (!date) { showToast(t('ltoNeedDate'), 'error'); return }
+    // A follow-up in the past is meaningless: the reactivation workflow fires
+    // when the date is a day away, so a past date would never bring the lead
+    // back at all.
+    if (date < todayStr()) { showToast(t('ltoDatePast'), 'error', 6000); return }
     // long_term_opportunity_reason_lead has a 10-character minimum in HubSpot.
     // Checked here so the rep is told before anything is written, rather than
     // getting a 400 after the task has already been created.
@@ -507,6 +519,7 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
             <input
               className="inp"
               type="date"
+              min={todayStr()}
               value={date}
               onChange={e => { setDate(e.target.value); setPreset('custom') }}
             />
