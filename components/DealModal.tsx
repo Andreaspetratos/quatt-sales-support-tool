@@ -11,7 +11,7 @@ import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/l
 import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
-import type { Deal, Scheduler } from '@/lib/types'
+import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
 
 function initials(name: string) {
   return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -407,6 +407,46 @@ function EditableField({ label, value, onSave, highlight = false }: { label: str
   )
 }
 
+// ── Notepad flush helper ─────────────────────────────────────────────────────
+// Collects all notepad values stored in pbState.notes (keyed `q.id + '_np'`)
+// across every phase of every playbook, formats them as a timestamped block,
+// and appends the block to personal_info__notes_lead in HubSpot.
+// Called from every path that finalises a call (outcome dropdown, Book
+// Appointment, Move to LTO, Move to Lost).
+async function collectAndSaveNotepads(
+  dealId: string,
+  deal: Deal,
+  playbooks: Playbook[],
+  pbState: PlaybookState,
+  leads: Deal[],
+  patchLeadLocal: (id: string, props: Record<string, string>) => void,
+): Promise<void> {
+  const pbDefs = getPlaybookDefs(deal, playbooks.length > 0 ? playbooks : undefined)
+  const lines: string[] = []
+  for (const { def } of pbDefs) {
+    for (const phase of def.phases) {
+      for (const q of phase.questions) {
+        const val = (pbState.notes[q.id + '_np'] || '').trim()
+        if (val) lines.push(`${q.label || q.id}: ${val}`)
+      }
+    }
+  }
+  if (lines.length === 0) return
+
+  const now = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  const ts = `${p(now.getDate())}-${p(now.getMonth() + 1)}-${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}`
+  const block = `--- ${ts} ---\n${lines.join('\n')}`
+
+  const current = (deal?.properties?.['personal_info__notes_lead'] || '').trim()
+  const updated = current ? `${current}\n\n${block}` : block
+
+  await patchLeadApi(dealId, { personal_info__notes_lead: updated }, leads, () => {
+    patchLeadLocal(dealId, { personal_info__notes_lead: updated })
+  })
+  patchLeadLocal(dealId, { personal_info__notes_lead: updated })
+}
+
 // ── Long Term Opportunity modal ───────────────────────────────────────────────
 // LTO was previously just Lost with the reason picked from the dropdown, which
 // captured no follow-up date and left nothing to bring the lead back. This sets
@@ -416,7 +456,7 @@ function EditableField({ label, value, onSave, highlight = false }: { label: str
 const LTO_REASON_MIN = 10
 
 function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
-  const { state, setState } = useApp()
+  const { state, setState, getPbState, patchLeadLocal } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
 
   const leadName = deal.properties?.hs_lead_name || ''
@@ -484,6 +524,10 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
           long_term_opportunity_followup_date_lead: date,
           long_term_opportunity_reason_lead: reason.trim(),
         }, state.leads, leads => setState({ leads }))
+        // Flush notepads to personal_info__notes_lead before the lead disappears
+        const pbState = getPbState(deal.id)
+        await collectAndSaveNotepads(deal.id, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
+          .catch(() => { /* best effort */ })
       } catch (patchErr) {
         // The task was created first so the lead is never parked without a
         // follow-up. If the patch then fails, that task is an orphan — remove
@@ -557,7 +601,7 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
 }
 
 function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
-  const { state, setState } = useApp()
+  const { state, setState, getPbState, patchLeadLocal } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [options, setOptions] = useState<Array<{ label: string; value: string }>>([])
   const [selected, setSelected] = useState<string>('')
@@ -580,6 +624,13 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
         [CONFIG.PROPS.lostReasons]: selected,
         [CONFIG.PROPS.callResult]: 'Lost',
       }, state.leads, leads => setState({ leads }))
+      // Flush notepads before the lead is removed from local state
+      const deal = state.leads.find(l => l.id === dealId)
+      if (deal) {
+        const pbState = getPbState(dealId)
+        await collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
+          .catch(() => { /* best effort */ })
+      }
       setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastLost'), 'success')
     } catch (e: any) {
@@ -750,6 +801,13 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
       })
       patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: value })
       showToast(t('toastSaved'), 'success')
+      // Flush all notepad values to personal_info__notes_lead now that the
+      // call has an outcome — silently, the rep already got a toast above.
+      if (deal) {
+        const pbState = getPbState(dealId)
+        collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
+          .catch(() => { /* best effort — notepad flush should not block the outcome save */ })
+      }
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
     }
@@ -775,7 +833,7 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
 
 // ── DealModal ─────────────────────────────────────────────────────────────────
 export default function DealModal() {
-  const { state, setState, selectLead, patchLeadLocal } = useApp()
+  const { state, setState, selectLead, patchLeadLocal, getPbState } = useApp()
   const lang = state.lang
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
 
@@ -891,6 +949,12 @@ export default function DealModal() {
     try {
       await patchLeadApi(dealId, { [CONFIG.PROPS.callResult]: value }, state.leads, leads => setState({ leads }))
       patchLeadLocal(dealId, { [CONFIG.PROPS.callResult]: value })
+      // Flush notepad notes to personal_info__notes_lead now that the call is finalized
+      if (deal) {
+        const pbState = getPbState(dealId)
+        collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
+          .catch(() => { /* best effort */ })
+      }
       if (needsDeal) {
         // Poll for associated deal — HubSpot creates it ~30s after lead moves to SQL
         const capturedLang = lang

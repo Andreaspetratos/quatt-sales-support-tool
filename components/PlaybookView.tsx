@@ -254,42 +254,23 @@ function TechCheckBlock({
 
 // ── Choice question with optional immediate HubSpot save ─────────────────────
 // ── Per-question notepad ──────────────────────────────────────────────────────
-// Saves to personal_info___notes on blur, the same place open_text and
-// list_options write to.
-//
-// Replaces the notes box that used to sit under choice questions, which wrote
-// to pbState.notes[q.id + '_n'] — a key nothing in the tool ever read back.
-// Anything a rep typed there was lost when local state cleared. It looked
-// identical to the ones that work, which is exactly why it went unnoticed.
+// Stores the rep's notes locally in PlaybookState (pbState.notes[q.id + '_np']).
+// Nothing is written to HubSpot here — all notepad values are collected and
+// saved in bulk to personal_info__notes_lead the moment the call outcome is set
+// (via the dropdown, Book Appointment, Move to LTO, or Move to Lost).
 function QuestionNotepad({ q, dealId, lang }: { q: Question; dealId: string; lang: 'nl' | 'en' }) {
-  const { state, patchLeadLocal } = useApp()
-  const [saving, setSaving] = useState(false)
-
-  async function save(value: string) {
-    const v = value.trim()
-    if (!v) return
-    setSaving(true)
-    try {
-      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label}: ${v}`)
-      showToast('✓ Notitie opgeslagen in HubSpot', 'success')
-    } catch (e: any) {
-      showToast(e.message || 'Save failed', 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { getPbState, setPbNote } = useApp()
+  const pbState = getPbState(dealId)
+  const value = pbState.notes[q.id + '_np'] || ''
 
   return (
     <textarea
       className="inp"
       rows={2}
       style={{ marginTop: 6 }}
-      disabled={saving}
       placeholder={translate(lang, 'callNotesPlaceholder')}
-      // Uncontrolled and cleared after save: the value is appended to the
-      // lead's notes, so leaving it in the box would invite the rep to save
-      // the same line twice.
-      onBlur={async e => { const v = e.target.value; e.target.value = ''; await save(v) }}
+      value={value}
+      onChange={e => setPbNote(dealId, q.id + '_np', e.target.value)}
     />
   )
 }
