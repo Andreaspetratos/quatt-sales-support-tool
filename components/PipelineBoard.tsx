@@ -510,16 +510,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     return <div className="es"><div className="et">{t('taskLoading')}</div></div>
   }
 
-  if (!tasks.length) {
-    return (
-      <div className="es">
-        <div className="ei">✅</div>
-        <div className="et">{t('taskNone')}</div>
-        <div className="es2">{t('taskNoneSub')}</div>
-        {footer}
-      </div>
-    )
-  }
+  // Empty state is rendered inline so pills always show above it
 
   // Declared before use: the filter below resolves each task's lead.
   const meId = state.currentRep?.hubspotOwnerId || ''
@@ -598,7 +589,15 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
         ))}
       </div>
       <div className="fade-up" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <table>
+        {!tasks.length && (
+          <div className="es">
+            <div className="ei">✅</div>
+            <div className="et">{t('taskNone')}</div>
+            <div className="es2">{t('taskNoneSub')}</div>
+            {footer}
+          </div>
+        )}
+        {!!tasks.length && <table>
           <thead>
             <tr>
               <SortTh k="title"  label={t('thTaskTitle')} />
@@ -684,7 +683,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
               )
             })}
           </tbody>
-        </table>
+        </table>}
       </div>
       {footer}
       {editing && (

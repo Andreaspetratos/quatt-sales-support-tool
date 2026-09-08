@@ -1069,7 +1069,7 @@ function _encodeLeadInBody(leadId: string | null, notes: string): string {
   return leadId ? `[lead:${leadId}]\n${notes}` : notes
 }
 function _decodeLeadFromBody(body: string): { leadId: string | null; notes: string } {
-  const m = (body || '').match(/^\s*\[lead:([^\]]+)\]\s*/)
+  const m = (body || '').match(/\[lead:([^\]]+)\]/)
   if (m) return { leadId: m[1], notes: body.slice(m[0].length) }
   return { leadId: null, notes: body || '' }
 }
