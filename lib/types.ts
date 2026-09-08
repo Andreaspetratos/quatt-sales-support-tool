@@ -150,10 +150,10 @@ export interface PerfData {
 // ─── App-level enums ──────────────────────────────────────────────────────────
 
 export type Lang = 'nl' | 'en'
-export type Screen = 'login' | 'dashboard' | 'admin' | 'all-leads'
+export type Screen = 'login' | 'dashboard' | 'admin'
 export type Modal = 'lost' | 'lto' | 'sched' | 'delPb' | 'delSch' | null
 export type AdminTab = 'playbooks' | 'schedulers'
-export type TaskTab = 'leads' | 'tasks'
+export type TaskTab = 'all-leads' | 'leads' | 'tasks'
 export type PerfPeriod = 'today' | 'week' | 'month'
 
 // ─── Full app state ───────────────────────────────────────────────────────────

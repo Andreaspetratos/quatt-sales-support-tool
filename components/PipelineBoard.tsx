@@ -10,6 +10,7 @@ import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadT
 import { showToast } from './Toast'
 import CreateLeadModal from './CreateLeadModal'
 import DealModal from './DealModal'
+import AllLeadsPanel from './AllLeadsPanel'
 import type { Lead, Task } from '@/lib/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1079,6 +1080,12 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
         {/* Tab bar */}
         <div className="tab-bar">
           <button
+            className={`tab-btn ${state.taskTab === 'all-leads' ? 'on' : ''}`}
+            onClick={() => setState({ taskTab: 'all-leads' })}
+          >
+            {t('alTab')}
+          </button>
+          <button
             className={`tab-btn ${state.taskTab === 'leads' ? 'on' : ''}`}
             onClick={() => setState({ taskTab: 'leads' })}
           >
@@ -1107,11 +1114,13 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
         </div>
 
         {/* Tab content */}
-        {state.taskTab === 'leads'
-          ? (state.loading && !state.leads.length
-            ? <div className="es"><div className="sp spd" /></div>
-            : <DealsTable lang={lang} />)
-          : <TasksTab lang={lang} />
+        {state.taskTab === 'all-leads'
+          ? <AllLeadsPanel />
+          : state.taskTab === 'leads'
+            ? (state.loading && !state.leads.length
+              ? <div className="es"><div className="sp spd" /></div>
+              : <DealsTable lang={lang} />)
+            : <TasksTab lang={lang} />
         }
       </div>
 
