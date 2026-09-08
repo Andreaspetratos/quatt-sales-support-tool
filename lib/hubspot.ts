@@ -28,6 +28,7 @@ const LEAD_PROPS = [
   'lost_reasons_lead',   // used to link straight to the contact from the lead modal
   'qualification_call_result_lead',
   'postnl_adrescheck_status',  // drives the address-check dot in the lead modal
+  'selected_product_lead_all_time',  // set when creating a lead via inbound call
 ]
 
 // ── Demo data ─────────────────────────────────────────────────────────────────

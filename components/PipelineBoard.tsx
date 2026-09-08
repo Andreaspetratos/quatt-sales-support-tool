@@ -8,6 +8,7 @@ import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, 
 import type { HsTask, TeamOwner } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
+import CreateLeadModal from './CreateLeadModal'
 import DealModal from './DealModal'
 import type { Lead, Task } from '@/lib/types'
 
@@ -875,6 +876,7 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
 // ── Request leads / cooldown row ───────────────────────────────────────────────
 function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
   const { state, setState } = useApp()
+  const [showCreateLead, setShowCreateLead] = useState(false)
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [secs, setSecs] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -919,6 +921,7 @@ function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
   }
 
   return (
+    <>
     <div className="rr">
       <button
         className="btn btn-pr btn-sm"
@@ -936,7 +939,18 @@ function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
           <span>{t('nextReq', secs)}</span>
         </div>
       )}
+      <button
+        className="btn btn-sc btn-sm"
+        onClick={() => setShowCreateLead(true)}
+        style={{ whiteSpace: 'nowrap' }}
+      >
+        + Nieuwe lead
+      </button>
     </div>
+    {showCreateLead && (
+      <CreateLeadModal onClose={() => setShowCreateLead(false)} />
+    )}
+    </>
   )
 }
 
