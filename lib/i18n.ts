@@ -307,6 +307,16 @@ const nl: Dict = {
   clErrSearch: 'Zoekopdracht mislukt',
   clNoResults: 'Geen contacten gevonden',
   clNewLeadBtn: '+ Nieuwe lead',
+  alTab: 'Alle leads',
+  alSearchPlaceholder: 'Zoek op naam…',
+  alSearchBtn: 'Zoeken',
+  alOwner: 'Eigenaar',
+  alStage: 'Fase',
+  alNoResults: 'Geen leads gevonden',
+  alClaim: 'Claimen',
+  alOpen: 'Openen',
+  alLoadMore: 'Meer laden',
+  alSearching: 'Zoeken…',
 }
 
 const en: Dict = {
@@ -608,6 +618,16 @@ const en: Dict = {
   clErrSearch: 'Search failed',
   clNoResults: 'No contacts found',
   clNewLeadBtn: '+ New lead',
+  alTab: 'All leads',
+  alSearchPlaceholder: 'Search by name…',
+  alSearchBtn: 'Search',
+  alOwner: 'Owner',
+  alStage: 'Stage',
+  alNoResults: 'No leads found',
+  alClaim: 'Claim',
+  alOpen: 'Open',
+  alLoadMore: 'Load more',
+  alSearching: 'Searching…',
 }
 
 const dicts: Record<Lang, Dict> = { nl, en }

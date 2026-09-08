@@ -39,6 +39,10 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
     setState({ screen: 'admin' })
   }
 
+  function goAllLeads() {
+    setState({ screen: 'all-leads' })
+  }
+
   function goBack() {
     setState({ screen: 'dashboard' })
   }
@@ -100,6 +104,17 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
           )}
 
           {/* Admin button */}
+          {/* All Leads tab */}
+          {state.currentRep && (
+            <button
+              className={`btn btn-xs ${state.screen === 'all-leads' ? 'btn-pr' : 'btn-sc'}`}
+              style={state.screen !== 'all-leads' ? { borderColor: 'var(--gm)', color: 'var(--gm)' } : {}}
+              onClick={state.screen === 'all-leads' ? goBack : goAllLeads}
+            >
+              {t('alTab')}
+            </button>
+          )}
+
           {isAdmin && (
             <button
               className={`btn btn-xs ${state.screen === 'admin' ? 'btn-pr' : 'btn-sc'}`}

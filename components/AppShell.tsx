@@ -12,6 +12,8 @@ import HelpModal from './HelpModal'
 import LoginPage from './LoginPage'
 import PipelineBoard from './PipelineBoard'
 import AdminPanel from './AdminPanel'
+import AllLeadsPanel from './AllLeadsPanel'
+import DealModal from './DealModal'
 
 // ── Inner shell (inside AppProvider so it can use useApp) ─────────────────────
 function Shell() {
@@ -88,8 +90,12 @@ function Shell() {
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         {screen === 'login' && <LoginPage />}
         {screen === 'dashboard' && <PipelineBoard perfOpen={perfOpen} onOpenPerf={openPerf} onClosePerf={closePerf} />}
+        {screen === 'all-leads' && <AllLeadsPanel />}
         {screen === 'admin' && <AdminPanel />}
       </main>
+
+      {/* DealModal — available from any screen */}
+      {state.selectedId && screen !== 'dashboard' && <DealModal />}
 
       {/* Deal booking overlay — rendered AFTER <main> so it's always on top in DOM order */}
       {state.dealLoading && (

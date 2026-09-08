@@ -346,6 +346,45 @@ export async function fetchOneLead(id: string): Promise<Lead | null> {
   }
 }
 
+
+export interface SearchLeadsResult {
+  leads: Lead[]
+  paging: { next?: { after: string } } | null
+}
+
+export async function searchAllLeads(query: string, after?: string): Promise<SearchLeadsResult> {
+  if (isDemo()) return { leads: DEMO_LEADS, paging: null }
+  const filters: Array<Record<string, string>> = [
+    { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
+  ]
+  const q = query.trim()
+  if (q) filters.push({ propertyName: 'hs_lead_name', operator: 'CONTAINS_TOKEN', value: q })
+  const body: Record<string, unknown> = {
+    filterGroups: [{ filters }],
+    properties: LEAD_PROPS,
+    sorts: [{ propertyName: 'screening_call_requested_at', direction: 'DESCENDING' }],
+    limit: 20,
+    ...(after ? { after } : {}),
+  }
+  const res = await hsProxy('POST', '/crm/v3/objects/leads/search', body)
+  if (!res.ok) throw new Error('searchAllLeads HTTP ' + res.status)
+  const data = await res.json()
+  return { leads: data.results || [], paging: data.paging || null }
+}
+
+export async function fetchOwnerMap(): Promise<Record<string, string>> {
+  try {
+    const res = await hsProxy('GET', '/crm/v3/owners?limit=100&archived=false')
+    if (!res.ok) return {}
+    const data = await res.json()
+    const map: Record<string, string> = {}
+    for (const o of (data.results || [])) {
+      map[String(o.id)] = [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email || String(o.id)
+    }
+    return map
+  } catch { return {} }
+}
+
 export async function patchLead(
   id: string,
   props: Record<string, string>,
