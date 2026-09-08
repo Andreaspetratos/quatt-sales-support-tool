@@ -92,7 +92,6 @@ async function createHsContact(fields: {
       lastname: fields.lastname.trim(),
       phone: fields.phone.trim(),
       hubspot_owner_id: fields.ownerId,
-      hs_marketable_status: 'true',
     },
   })
   if (!res.ok) {
@@ -102,7 +101,14 @@ async function createHsContact(fields: {
     throw new Error(msg)
   }
   const data = await res.json()
-  return String(data.id)
+  const contactId = String(data.id)
+
+  // HubSpot ignores hs_marketable_status in the POST body — PATCH it separately.
+  await hsP('PATCH', `/crm/v3/objects/contacts/${contactId}`, {
+    properties: { hs_marketable_status: 'true' },
+  })
+
+  return contactId
 }
 
 async function subscribeContactToEmail(email: string): Promise<void> {
