@@ -48,7 +48,7 @@ async function fetchLeadContactAssocTypeId(): Promise<[number, string, string]> 
   const allDebug = results.map(r => `${r.typeId}:${r.label ?? 'null'}`).join(',')
   if (results.length > 0) {
     // Prefer the unlabeled (primary) type; fall back to first result
-    const primary = results.find(r => r.label == null || r.label === '') ?? results[0]
+    const primary = results.find(r => r.label?.toLowerCase() === 'primary') ?? results.find(r => r.label == null || r.label === '') ?? results[0]
     return [primary.typeId, 'v4-labels', allDebug]
   }
   return [578, 'fallback', 'none']
