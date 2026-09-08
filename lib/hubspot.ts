@@ -1366,7 +1366,6 @@ export async function fetchLeadTasks(ownerId: string): Promise<HsTask[]> {
           ownerId: t.properties?.hubspot_owner_id || '',
         } as HsTask
       })
-      .filter(t => !!t.leadId)
       .sort((a, b) => {
         if (!a.dueAt && !b.dueAt) return 0
         if (!a.dueAt) return 1
