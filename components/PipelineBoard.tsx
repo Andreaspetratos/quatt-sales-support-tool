@@ -1086,7 +1086,7 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
             onClick={() => setState({ taskTab: 'tasks' })}
           >
             {t('taskTabTasks')}
-            
+            <span className={`tab-count ${state.hsTaskCount ? 'has' : ''}`}>{state.hsTaskCount || ''}</span>
           </button>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
