@@ -30,20 +30,32 @@ async function hsP(method: string, path: string, body?: unknown): Promise<Respon
 }
 
 // Fetch the correct numeric associationTypeId for Lead → Contact (primary).
-// HubSpot requires this in the POST body when creating a Lead.
-async function fetchLeadContactAssocTypeId(): Promise<number> {
+// HubSpot requires a LEAD_TO_PRIMARY_CONTACT association in the POST body.
+// Returns [typeId, source] for debugging.
+async function fetchLeadContactAssocTypeId(): Promise<[number, string]> {
+  // Try v4 labels endpoint (object-name form)
   try {
     const res = await hsP('GET', '/crm/v4/associations/leads/contacts/labels')
-    if (!res.ok) return 578 // fallback
-    const data = await res.json()
-    const results: Array<{ category: string; typeId: number; label?: string | null }> =
-      data.results || []
-    // Prefer the unlabeled (primary) association type
-    const primary = results.find(r => !r.label) ?? results[0]
-    return primary?.typeId ?? 578
-  } catch {
-    return 578
-  }
+    if (res.ok) {
+      const data = await res.json()
+      const results: Array<{ typeId: number; label?: string | null }> = data.results || []
+      const primary = results.find(r => !r.label) ?? results[0]
+      if (primary?.typeId) return [primary.typeId, 'v4-labels']
+    }
+  } catch { /* fall through */ }
+
+  // Try v3 types endpoint as secondary
+  try {
+    const res = await hsP('GET', '/crm/v3/associations/leads/contacts/types')
+    if (res.ok) {
+      const data = await res.json()
+      const results: Array<{ id: number; label?: string | null }> = data.results || []
+      const primary = results.find(r => !r.label) ?? results[0]
+      if (primary?.id) return [primary.id, 'v3-types']
+    }
+  } catch { /* fall through */ }
+
+  return [578, 'fallback']
 }
 
 async function searchContactsByField(
@@ -154,7 +166,7 @@ async function createHsLead(fields: {
 
   // Fetch the correct association type ID first — HubSpot requires the
   // LEAD_TO_PRIMARY_CONTACT association to be present in the creation request.
-  const assocTypeId = await fetchLeadContactAssocTypeId()
+  const [assocTypeId, assocSource] = await fetchLeadContactAssocTypeId()
 
   const res = await hsP('POST', '/crm/v3/objects/leads', {
     properties: {
@@ -183,7 +195,7 @@ async function createHsLead(fields: {
     const txt = await res.text()
     let msg = 'Lead creation failed'
     try { const d = JSON.parse(txt); if (d.message) msg = d.message } catch { /**/ }
-    throw new Error(msg)
+    throw new Error(`${msg} [assocTypeId=${assocTypeId}, src=${assocSource}]`)
   }
   const data = await res.json()
   return String(data.id)
@@ -357,14 +369,14 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
               <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
                 <button
                   className="btn btn-sc"
-                  style={{ flex: 1, padding: '10px 16px' }}
+                  style={{ flex: 1, padding: '12px 20px', whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.3 }}
                   onClick={() => { setContactType('existing'); setStep('search') }}
                 >
                   {t('clExistingContact')}
                 </button>
                 <button
                   className="btn btn-sc"
-                  style={{ flex: 1, padding: '10px 16px' }}
+                  style={{ flex: 1, padding: '12px 20px', whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.3 }}
                   onClick={() => { setContactType('new'); setStep('contact-form') }}
                 >
                   {t('clNewContact')}

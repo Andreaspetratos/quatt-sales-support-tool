@@ -944,7 +944,7 @@ function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
         onClick={() => setShowCreateLead(true)}
         style={{ whiteSpace: 'nowrap' }}
       >
-        + Nieuwe lead
+        {t('clNewLeadBtn')}
       </button>
     </div>
     {showCreateLead && (

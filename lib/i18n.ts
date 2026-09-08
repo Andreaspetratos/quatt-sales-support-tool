@@ -306,6 +306,7 @@ const nl: Dict = {
   clErrContact: 'Contact aanmaken mislukt',
   clErrSearch: 'Zoekopdracht mislukt',
   clNoResults: 'Geen contacten gevonden',
+  clNewLeadBtn: '+ Nieuwe lead',
 }
 
 const en: Dict = {
@@ -606,6 +607,7 @@ const en: Dict = {
   clErrContact: 'Contact creation failed',
   clErrSearch: 'Search failed',
   clNoResults: 'No contacts found',
+  clNewLeadBtn: '+ New lead',
 }
 
 const dicts: Record<Lang, Dict> = { nl, en }
