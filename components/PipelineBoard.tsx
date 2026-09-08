@@ -490,22 +490,6 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     return { label: `${d.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: 'short' })} ${time}`, cls: 'task-due-ok' }
   }
 
-  const footer = (
-    <div className="es2" style={{ marginTop: 12, textAlign: 'center' }}>
-      {t('taskMqlOnly')}{' '}
-      {/* The second sentence ends in the link ("...by clicking here"), so it is
-          only rendered when there is a link to end it with — without the portal
-          id it would trail off mid-sentence. */}
-      {state.hubspotPortalId && (
-        <>
-          {t('taskOtherInHs')}{' '}
-          <a href={`https://app-eu1.hubspot.com/tasks/${state.hubspotPortalId}/view/all`}
-             target="_blank" rel="noreferrer">{t('taskAllInHs')}</a>
-        </>
-      )}
-    </div>
-  )
-
   // Loading and empty states are rendered inline so pills + refresh button always stay visible
 
   // Declared before use: the filter below resolves each task's lead.
@@ -601,7 +585,6 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
             <div className="ei">✅</div>
             <div className="et">{t('taskNone')}</div>
             <div className="es2">{t('taskNoneSub')}</div>
-            {footer}
           </div>
         )}
         {!loading && !!tasks.length && <table>
@@ -692,7 +675,6 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
           </tbody>
         </table>}
       </div>
-      {footer}
       {editing && (
         <EditTaskModal
           task={editing}
@@ -1103,7 +1085,7 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
             onClick={() => setState({ taskTab: 'tasks' })}
           >
             {t('taskTabTasks')}
-            <span className={`tab-count ${openTasks.length ? 'has' : ''}`}>{openTasks.length}</span>
+            
           </button>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
