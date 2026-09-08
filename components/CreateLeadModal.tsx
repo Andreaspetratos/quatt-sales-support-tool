@@ -170,7 +170,7 @@ async function createHsLead(fields: {
       hs_pipeline_stage: CONFIG.STAGES.MQL,
       hs_lead_name: fields.name.trim(),
       hubspot_owner_id: fields.ownerId,
-      most_recent_form_origin_lead: 'Inbound Call',
+      // most_recent_form_origin_lead: 'Inbound Call', // TODO: re-enable once HubSpot API accepts new option
       screening_call_requested_at: String(today.getTime()),
       selected_product_lead_all_time: fields.product,
       street_lead: fields.street.trim(),
