@@ -506,11 +506,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     </div>
   )
 
-  if (loading) {
-    return <div className="es"><div className="et">{t('taskLoading')}</div></div>
-  }
-
-  // Empty state is rendered inline so pills always show above it
+  // Loading and empty states are rendered inline so pills + refresh button always stay visible
 
   // Declared before use: the filter below resolves each task's lead.
   const meId = state.currentRep?.hubspotOwnerId || ''
@@ -581,15 +577,26 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
 
   return (
     <>
-      <div className="cr2" style={{ padding: '0 0 8px' }}>
-        {(['all', 'mql', 'lto'] as const).map(f => (
-          <button key={f} className={`chip ${stageFilter === f ? 'on' : ''}`} onClick={() => setStageFilter(f)}>
-            {t('taskFilter_' + f)}
-          </button>
-        ))}
+      <div className="cr2" style={{ padding: '0 0 8px', display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['all', 'mql', 'lto'] as const).map(f => (
+            <button key={f} className={`chip ${stageFilter === f ? 'on' : ''}`} onClick={() => setStageFilter(f)}>
+              {t('taskFilter_' + f)}
+            </button>
+          ))}
+        </div>
+        <button
+          className="btn btn-sc btn-sm"
+          style={{ marginLeft: 'auto' }}
+          disabled={loading}
+          onClick={load}
+        >
+          {loading ? '…' : t('refresh')}
+        </button>
       </div>
       <div className="fade-up" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        {!tasks.length && (
+        {loading && <div className="es"><div className="sp spd" /></div>}
+        {!loading && !tasks.length && (
           <div className="es">
             <div className="ei">✅</div>
             <div className="et">{t('taskNone')}</div>
@@ -597,7 +604,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
             {footer}
           </div>
         )}
-        {!!tasks.length && <table>
+        {!loading && !!tasks.length && <table>
           <thead>
             <tr>
               <SortTh k="title"  label={t('thTaskTitle')} />
