@@ -439,7 +439,7 @@ function taskStage(lead: Lead | undefined, meId: string, lang: 'nl' | 'en'): Tas
 // exactly the tasks that mattered most — the Long Term follow-up a rep is
 // forced to create as the lead goes Lost.
 function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
-  const { state, selectLead } = useApp()
+  const { state, setState, selectLead } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
 
   const [tasks, setTasks] = useState<HsTask[]>([])
@@ -463,6 +463,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     try {
       const list = await fetchLeadTasks(ownerId)
       setTasks(list)
+      setState({ hsTaskCount: list.length })
       const known = new Set(state.leads.map(l => l.id))
       const missing = Array.from(new Set(
         list.map(task => task.leadId).filter((id): id is string => !!id && !known.has(id)),

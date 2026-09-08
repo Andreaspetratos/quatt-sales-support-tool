@@ -192,6 +192,7 @@ export interface AppState {
   perfData: PerfData | null
   perfLoading: boolean
   // task system
+  hsTaskCount: number
   taskTab: TaskTab
   taskModal: 'create' | null
   taskDraft: Partial<Task>

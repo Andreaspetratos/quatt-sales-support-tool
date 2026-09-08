@@ -39,6 +39,7 @@ const initialState: AppState = {
   perfPeriod: 'today',
   perfData: null,
   perfLoading: false,
+  hsTaskCount: 0,
   taskTab: 'leads',
   taskModal: null,
   taskDraft: {},
