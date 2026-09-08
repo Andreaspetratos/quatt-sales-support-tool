@@ -354,13 +354,14 @@ export interface SearchLeadsResult {
 
 export async function searchAllLeads(query: string, after?: string): Promise<SearchLeadsResult> {
   if (isDemo()) return { leads: DEMO_LEADS, paging: null }
-  const filters: Array<Record<string, string>> = [
-    { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
-  ]
   const q = query.trim()
-  if (q) filters.push({ propertyName: 'hs_lead_name', operator: 'CONTAINS_TOKEN', value: q })
+  // Use top-level `query` for full-text search (matches partial tokens like "mustermann" in "Mustermann305")
+  // Keep pipeline filter to scope results to the Consumer Orders pipeline
   const body: Record<string, unknown> = {
-    filterGroups: [{ filters }],
+    ...(q ? { query: q } : {}),
+    filterGroups: [{ filters: [
+      { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
+    ]}],
     properties: LEAD_PROPS,
     sorts: [{ propertyName: 'screening_call_requested_at', direction: 'DESCENDING' }],
     limit: 20,
