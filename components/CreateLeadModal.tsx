@@ -4,6 +4,7 @@ import { useApp } from '@/context/AppContext'
 import { showToast } from './Toast'
 import { fetchLeadPropertyOptions, fetchOneLead } from '@/lib/hubspot'
 import { CONFIG } from '@/lib/config'
+import { translate } from '@/lib/i18n'
 
 // ── Local types ────────────────────────────────────────────────────────────────
 interface ContactResult {
@@ -19,13 +20,30 @@ interface ContactResult {
 
 type Step = 'type' | 'search' | 'contact-form' | 'lead-form' | 'creating'
 
-// ── HubSpot proxy helpers (not exported — internal to this modal) ───────────────
+// ── HubSpot proxy helper ───────────────────────────────────────────────────────
 async function hsP(method: string, path: string, body?: unknown): Promise<Response> {
   return fetch('/api/hs-write', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, path, body }),
   })
+}
+
+// Fetch the correct numeric associationTypeId for Lead → Contact (primary).
+// HubSpot requires this in the POST body when creating a Lead.
+async function fetchLeadContactAssocTypeId(): Promise<number> {
+  try {
+    const res = await hsP('GET', '/crm/v4/associations/leads/contacts/labels')
+    if (!res.ok) return 578 // fallback
+    const data = await res.json()
+    const results: Array<{ category: string; typeId: number; label?: string | null }> =
+      data.results || []
+    // Prefer the unlabeled (primary) association type
+    const primary = results.find(r => !r.label) ?? results[0]
+    return primary?.typeId ?? 578
+  } catch {
+    return 578
+  }
 }
 
 async function searchContactsByField(
@@ -46,7 +64,7 @@ async function searchContactsByField(
     properties: ['firstname', 'lastname', 'email', 'phone', 'address', 'city', 'zip'],
     limit: 10,
   })
-  if (!res.ok) throw new Error('Zoekopdracht mislukt (HTTP ' + res.status + ')')
+  if (!res.ok) throw new Error('Search failed (HTTP ' + res.status + ')')
   const data = await res.json()
   return (data.results || []).map((r: { id: string; properties: Record<string, string> }) => ({
     id: r.id,
@@ -79,11 +97,8 @@ async function createHsContact(fields: {
   })
   if (!res.ok) {
     const txt = await res.text()
-    let msg = 'Contact aanmaken mislukt'
-    try {
-      const d = JSON.parse(txt)
-      if (d.message) msg += ': ' + d.message
-    } catch { /* ignore */ }
+    let msg = 'Contact creation failed'
+    try { const d = JSON.parse(txt); if (d.message) msg = d.message } catch { /**/ }
     throw new Error(msg)
   }
   const data = await res.json()
@@ -91,28 +106,28 @@ async function createHsContact(fields: {
 }
 
 async function subscribeContactToEmail(email: string): Promise<void> {
-  // Best-effort: fetch available subscription definitions and subscribe the
-  // contact under the first marketing/commercial type we find.
+  // Best-effort. Fetch subscription definitions to find the marketing/commercial type.
   try {
     const defsRes = await hsP('GET', '/communication-preferences/v3/definitions')
     if (!defsRes.ok) return
     const defs = await defsRes.json()
-    const subs: Array<{ id: string | number; name?: string }> =
+    const subs: Array<{ id: string | number; name?: string; internalName?: string }> =
       defs.subscriptionDefinitions || []
+    // Try to find a marketing/commercial subscription type
     const target =
       subs.find(s =>
-        /(marketing|email|nieuwsbrief|newsletter|commercial)/i.test(s.name || ''),
-      ) || subs[0]
+        /(marketing|commercial|reclame|promotie)/i.test(s.name || s.internalName || ''),
+      ) ?? subs.find(s => /(email|nieuwsbrief|newsletter)/i.test(s.name || s.internalName || ''))
+      ?? subs[0]
     if (!target) return
     await hsP('POST', '/communication-preferences/v3/subscribe', {
       emailAddress: email,
       subscriptionId: String(target.id),
       legalBasis: 'LEGITIMATE_INTEREST_OTHER',
-      legalBasisExplanation:
-        'Inbound call — klant heeft contact opgenomen met sales',
+      legalBasisExplanation: 'Inbound call — klant heeft contact opgenomen met sales',
     })
   } catch {
-    // silently swallow — subscription must not block lead creation
+    // Silently ignore — subscription must not block lead creation
   }
 }
 
@@ -127,9 +142,13 @@ async function createHsLead(fields: {
   city: string
   product: string
 }): Promise<string> {
-  // HubSpot date fields expect milliseconds at midnight UTC
+  // HubSpot date fields expect milliseconds at midnight local time
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+
+  // Fetch the correct association type ID first — HubSpot requires the
+  // LEAD_TO_PRIMARY_CONTACT association to be present in the creation request.
+  const assocTypeId = await fetchLeadContactAssocTypeId()
 
   const res = await hsP('POST', '/crm/v3/objects/leads', {
     properties: {
@@ -146,42 +165,35 @@ async function createHsLead(fields: {
       postal_code: fields.postalCode.trim(),
       city: fields.city.trim(),
     },
+    associations: [
+      {
+        to: { id: fields.contactId },
+        types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: assocTypeId }],
+      },
+    ],
   })
+
   if (!res.ok) {
     const txt = await res.text()
-    let msg = 'Lead aanmaken mislukt'
-    try {
-      const d = JSON.parse(txt)
-      if (d.message) msg += ': ' + d.message
-    } catch { /* ignore */ }
+    let msg = 'Lead creation failed'
+    try { const d = JSON.parse(txt); if (d.message) msg = d.message } catch { /**/ }
     throw new Error(msg)
   }
   const data = await res.json()
-  const leadId = String(data.id)
-
-  // Associate lead with contact via the v4 default-association endpoint.
-  // This does not require knowing the numeric association type ID.
-  try {
-    await hsP(
-      'PUT',
-      `/crm/v4/objects/leads/${leadId}/associations/default/contacts/${fields.contactId}`,
-    )
-  } catch {
-    // best-effort — the lead was created; association can be done manually in HubSpot
-  }
-
-  return leadId
+  return String(data.id)
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
   const { state, setState } = useApp()
+  const lang = state.lang
+  const t = (k: string) => translate(lang, k)
   const ownerId = state.currentRep?.hubspotOwnerId || ''
 
   const [step, setStep] = useState<Step>('type')
   const [contactType, setContactType] = useState<'existing' | 'new' | null>(null)
 
-  // ── Search state ─────────────────────────────────────────────────────────────
+  // ── Search ────────────────────────────────────────────────────────────────
   const [searchField, setSearchField] = useState<'phone' | 'email'>('phone')
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
@@ -189,13 +201,13 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
   const [searched, setSearched] = useState(false)
   const [selectedContact, setSelectedContact] = useState<ContactResult | null>(null)
 
-  // ── New contact form ─────────────────────────────────────────────────────────
+  // ── New contact form ──────────────────────────────────────────────────────
   const [newFirstname, setNewFirstname] = useState('')
   const [newLastname, setNewLastname] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newPhone, setNewPhone] = useState('')
 
-  // ── Lead form ────────────────────────────────────────────────────────────────
+  // ── Lead form ─────────────────────────────────────────────────────────────
   const [leadStreet, setLeadStreet] = useState('')
   const [leadHouseNumber, setLeadHouseNumber] = useState('')
   const [leadHouseNumberSuffix, setLeadHouseNumberSuffix] = useState('')
@@ -208,8 +220,8 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
     fetchLeadPropertyOptions('selected_product_lead_all_time').then(setProductOptions)
   }, [])
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-  function prefilLleadFromContact(c: ContactResult) {
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function prefillLeadFromContact(c: ContactResult) {
     if (c.address) setLeadStreet(c.address)
     if (c.city) setLeadCity(c.city)
     if (c.zip) setLeadPostalCode(c.zip)
@@ -225,9 +237,9 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
       const results = await searchContactsByField(q, searchField)
       setSearchResults(results)
       setSearched(true)
-      if (results.length === 0) showToast('Geen contacten gevonden', 'error')
+      if (results.length === 0) showToast(t('clNoResults'), 'error')
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Zoeken mislukt', 'error')
+      showToast(e instanceof Error ? e.message : t('clErrSearch'), 'error')
     } finally {
       setSearching(false)
     }
@@ -235,7 +247,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
 
   function selectContact(c: ContactResult) {
     setSelectedContact(c)
-    prefilLleadFromContact(c)
+    prefillLeadFromContact(c)
     setStep('lead-form')
   }
 
@@ -257,8 +269,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
         contactName = `${newFirstname.trim()} ${newLastname.trim()}`.trim()
       } else {
         contactId = selectedContact!.id
-        contactName =
-          `${selectedContact!.firstname} ${selectedContact!.lastname}`.trim()
+        contactName = `${selectedContact!.firstname} ${selectedContact!.lastname}`.trim()
       }
 
       const leadId = await createHsLead({
@@ -273,28 +284,23 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
         product: leadProduct,
       })
 
-      // Fetch full lead and add it to the board
       const newLead = await fetchOneLead(leadId)
       if (newLead) {
         setState({ leads: [newLead, ...state.leads], selectedId: leadId })
       }
 
-      showToast('✓ Lead aangemaakt', 'success')
+      showToast(t('clSuccess'), 'success')
       onClose()
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Aanmaken mislukt', 'error')
+      showToast(e instanceof Error ? e.message : t('clErrLead'), 'error')
       setStep('lead-form')
     }
   }
 
-  // ── Validation guards ─────────────────────────────────────────────────────
+  // ── Validation ────────────────────────────────────────────────────────────
   function canProceedToLeadForm(): boolean {
     if (contactType === 'new') {
-      return (
-        !!newFirstname.trim() &&
-        !!newLastname.trim() &&
-        !!(newEmail.trim() || newPhone.trim())
-      )
+      return !!newFirstname.trim() && !!newLastname.trim() && !!(newEmail.trim() || newPhone.trim())
     }
     return !!selectedContact
   }
@@ -304,91 +310,76 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
   }
 
   // ── Step title ────────────────────────────────────────────────────────────
-  const stepTitle: Record<Step, string> = {
-    type: 'Nieuwe lead aanmaken',
-    search: 'Bestaand contact zoeken',
-    'contact-form': 'Nieuw contact aanmaken',
-    'lead-form': 'Leadgegevens invullen',
-    creating: 'Bezig met aanmaken…',
+  const stepTitles: Record<Step, string> = {
+    type: t('clTitle'),
+    search: t('clSearchTitle'),
+    'contact-form': t('clNewContactTitle'),
+    'lead-form': t('clLeadTitle'),
+    creating: '',
   }
 
-  // ── Back navigation ────────────────────────────────────────────────────────
   function goBack() {
     if (step === 'search' || step === 'contact-form') setStep('type')
-    else if (step === 'lead-form')
-      setStep(contactType === 'existing' ? 'search' : 'contact-form')
+    else if (step === 'lead-form') setStep(contactType === 'existing' ? 'search' : 'contact-form')
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
       className="mb"
-      onClick={e => {
-        if (e.target === e.currentTarget && step !== 'creating') onClose()
-      }}
+      onClick={e => { if (e.target === e.currentTarget && step !== 'creating') onClose() }}
     >
-      <div className="mo" style={{ maxWidth: 480, width: '100%' }}>
+      <div className="mo" style={{ maxWidth: 500, width: '100%' }}>
+
         {/* Header */}
         <div className="moh">
-          <div className="mot">{stepTitle[step]}</div>
+          <div className="mot">{step === 'creating' ? '' : stepTitles[step]}</div>
           {step !== 'creating' && (
-            <button className="xb" onClick={onClose}>
-              ✕
-            </button>
+            <button className="xb" onClick={onClose}>✕</button>
           )}
         </div>
 
         {/* Body */}
-        <div className="mob">
+        <div className="mob" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* ── type ── */}
           {step === 'type' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <>
               <p style={{ color: 'var(--cs)', fontSize: 13, margin: 0 }}>
-                Staat de beller al in HubSpot als contact?
+                {t('clContactQuestion')}
               </p>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
                 <button
                   className="btn btn-sc"
-                  style={{ flex: 1 }}
-                  onClick={() => {
-                    setContactType('existing')
-                    setStep('search')
-                  }}
+                  style={{ flex: 1, padding: '10px 16px' }}
+                  onClick={() => { setContactType('existing'); setStep('search') }}
                 >
-                  Ja — bestaand contact
+                  {t('clExistingContact')}
                 </button>
                 <button
                   className="btn btn-sc"
-                  style={{ flex: 1 }}
-                  onClick={() => {
-                    setContactType('new')
-                    setStep('contact-form')
-                  }}
+                  style={{ flex: 1, padding: '10px 16px' }}
+                  onClick={() => { setContactType('new'); setStep('contact-form') }}
                 >
-                  Nee — nieuw contact
+                  {t('clNewContact')}
                 </button>
               </div>
-            </div>
+            </>
           )}
 
           {/* ── search ── */}
           {step === 'search' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <>
               <div className="iw">
-                <label className="il">Zoeken op</label>
+                <label className="il">{t('clSearchOn')}</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['phone', 'email'] as const).map(f => (
                     <button
                       key={f}
                       className={`chip${searchField === f ? ' on' : ''}`}
-                      onClick={() => {
-                        setSearchField(f)
-                        setSearched(false)
-                        setSearchResults([])
-                      }}
+                      onClick={() => { setSearchField(f); setSearched(false); setSearchResults([]) }}
                     >
-                      {f === 'phone' ? 'Telefoonnummer' : 'E-mail'}
+                      {f === 'phone' ? t('clSearchPhone') : t('clSearchEmail')}
                     </button>
                   ))}
                 </div>
@@ -396,16 +387,14 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
 
               <div className="iw">
                 <label className="il">
-                  {searchField === 'phone' ? 'Telefoonnummer' : 'E-mailadres'}
+                  {searchField === 'phone' ? t('clSearchPhone') : t('clSearchEmail')}
                 </label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     className="inp"
                     style={{ flex: 1 }}
                     type={searchField === 'email' ? 'email' : 'tel'}
-                    placeholder={
-                      searchField === 'phone' ? '+31 6 12345678' : 'naam@email.com'
-                    }
+                    placeholder={searchField === 'phone' ? t('clSearchPlaceholderPhone') : t('clSearchPlaceholderEmail')}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -416,7 +405,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
                     onClick={handleSearch}
                     disabled={searching || !searchQuery.trim()}
                   >
-                    {searching ? <div className="sp" /> : 'Zoeken'}
+                    {searching ? <div className="sp" /> : t('clSearchBtn')}
                   </button>
                 </div>
               </div>
@@ -424,27 +413,18 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
               {searched && searchResults.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label className="il">
-                    {searchResults.length === 1
-                      ? '1 resultaat'
-                      : `${searchResults.length} resultaten`}
+                    {searchResults.length === 1 ? '1 resultaat' : `${searchResults.length} resultaten`}
                   </label>
                   {searchResults.map(c => (
                     <button
                       key={c.id}
                       onClick={() => selectContact(c)}
                       style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        padding: '10px 14px',
-                        background: 'var(--c2)',
-                        border: '1px solid var(--cb)',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        gap: 3,
-                        color: 'var(--ct)',
-                        width: '100%',
+                        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                        padding: '10px 14px', background: 'var(--c2)',
+                        border: '1px solid var(--cb)', borderRadius: 8,
+                        cursor: 'pointer', textAlign: 'left', gap: 3,
+                        color: 'var(--ct)', width: '100%',
                       }}
                     >
                       <span style={{ fontWeight: 600, fontSize: 14 }}>
@@ -459,236 +439,142 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
               )}
 
               {searched && searchResults.length === 0 && (
-                <p style={{ color: 'var(--cs)', fontSize: 13, margin: 0 }}>
-                  Geen contacten gevonden. Probeer een ander nummer of e-mailadres.
-                </p>
+                <p style={{ color: 'var(--cs)', fontSize: 13, margin: 0 }}>{t('clSearchNone')}</p>
               )}
-            </div>
+            </>
           )}
 
           {/* ── contact-form ── */}
           {step === 'contact-form' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="iw" style={{ flex: 1 }}>
                   <label className="il">
-                    Voornaam <span style={{ color: 'var(--or)' }}>*</span>
+                    {t('clFirstname')} <span style={{ color: 'var(--or)' }}>*</span>
                   </label>
-                  <input
-                    className="inp"
-                    autoFocus
-                    placeholder="Jan"
-                    value={newFirstname}
-                    onChange={e => setNewFirstname(e.target.value)}
-                  />
+                  <input className="inp" autoFocus placeholder="Jan"
+                    value={newFirstname} onChange={e => setNewFirstname(e.target.value)} />
                 </div>
                 <div className="iw" style={{ flex: 1 }}>
                   <label className="il">
-                    Achternaam <span style={{ color: 'var(--or)' }}>*</span>
+                    {t('clLastname')} <span style={{ color: 'var(--or)' }}>*</span>
                   </label>
-                  <input
-                    className="inp"
-                    placeholder="de Vries"
-                    value={newLastname}
-                    onChange={e => setNewLastname(e.target.value)}
-                  />
+                  <input className="inp" placeholder="de Vries"
+                    value={newLastname} onChange={e => setNewLastname(e.target.value)} />
                 </div>
               </div>
               <div className="iw">
-                <label className="il">E-mailadres</label>
-                <input
-                  className="inp"
-                  type="email"
-                  placeholder="jan@email.com"
-                  value={newEmail}
-                  onChange={e => setNewEmail(e.target.value)}
-                />
+                <label className="il">{t('clEmail')}</label>
+                <input className="inp" type="email" placeholder="jan@email.com"
+                  value={newEmail} onChange={e => setNewEmail(e.target.value)} />
               </div>
               <div className="iw">
-                <label className="il">Telefoonnummer</label>
-                <input
-                  className="inp"
-                  type="tel"
-                  placeholder="+31 6 12345678"
-                  value={newPhone}
-                  onChange={e => setNewPhone(e.target.value)}
-                />
+                <label className="il">{t('clPhone')}</label>
+                <input className="inp" type="tel" placeholder="+31 6 12345678"
+                  value={newPhone} onChange={e => setNewPhone(e.target.value)} />
               </div>
-              <p style={{ fontSize: 12, color: 'var(--cs)', margin: '4px 0 0' }}>
-                Minimaal voornaam, achternaam en één van e-mail of telefoon.
-              </p>
-            </div>
+              <p style={{ fontSize: 12, color: 'var(--cs)', margin: 0 }}>{t('clContactHint')}</p>
+            </>
           )}
 
           {/* ── lead-form ── */}
           {step === 'lead-form' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Contact summary pill */}
-              {selectedContact && (
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    background: 'var(--c2)',
-                    borderRadius: 8,
-                    fontSize: 13,
-                    color: 'var(--ct)',
-                    border: '1px solid var(--cb)',
-                  }}
-                >
+            <>
+              {/* Contact summary */}
+              {(selectedContact || contactType === 'new') && (
+                <div style={{
+                  padding: '8px 12px', background: 'var(--c2)',
+                  borderRadius: 8, fontSize: 13, color: 'var(--ct)',
+                  border: '1px solid var(--cb)',
+                }}>
                   <span style={{ fontWeight: 600 }}>
-                    {selectedContact.firstname} {selectedContact.lastname}
+                    {selectedContact
+                      ? `${selectedContact.firstname} ${selectedContact.lastname}`
+                      : `${newFirstname} ${newLastname}`}
                   </span>
-                  {selectedContact.email && (
-                    <span style={{ color: 'var(--cs)' }}> · {selectedContact.email}</span>
-                  )}
-                </div>
-              )}
-              {contactType === 'new' && (
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    background: 'var(--c2)',
-                    borderRadius: 8,
-                    fontSize: 13,
-                    color: 'var(--ct)',
-                    border: '1px solid var(--cb)',
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>
-                    {newFirstname} {newLastname}
-                  </span>
-                  {newEmail && (
-                    <span style={{ color: 'var(--cs)' }}> · {newEmail}</span>
+                  {(selectedContact?.email || newEmail) && (
+                    <span style={{ color: 'var(--cs)' }}>
+                      {' · '}{selectedContact?.email || newEmail}
+                    </span>
                   )}
                 </div>
               )}
 
-              {/* Address */}
-              <label className="il" style={{ marginTop: 4 }}>
-                Adres
-              </label>
+              <label className="il">{t('clAddress')}</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <div className="iw" style={{ flex: 3 }}>
-                  <label className="il">Straat</label>
-                  <input
-                    className="inp"
-                    placeholder="Hoofdstraat"
-                    value={leadStreet}
-                    onChange={e => setLeadStreet(e.target.value)}
-                    autoFocus
-                  />
+                  <label className="il">{t('clStreet')}</label>
+                  <input className="inp" placeholder="Hoofdstraat" autoFocus
+                    value={leadStreet} onChange={e => setLeadStreet(e.target.value)} />
                 </div>
                 <div className="iw" style={{ flex: 2 }}>
                   <label className="il">
-                    Huisnr <span style={{ color: 'var(--or)' }}>*</span>
+                    {t('clHouseNr')} <span style={{ color: 'var(--or)' }}>*</span>
                   </label>
-                  <input
-                    className="inp"
-                    placeholder="12"
-                    value={leadHouseNumber}
-                    onChange={e => setLeadHouseNumber(e.target.value)}
-                  />
+                  <input className="inp" placeholder="12"
+                    value={leadHouseNumber} onChange={e => setLeadHouseNumber(e.target.value)} />
                 </div>
                 <div className="iw" style={{ flex: 1 }}>
-                  <label className="il">Toev.</label>
-                  <input
-                    className="inp"
-                    placeholder="A"
-                    value={leadHouseNumberSuffix}
-                    onChange={e => setLeadHouseNumberSuffix(e.target.value)}
-                  />
+                  <label className="il">{t('clHouseSuffix')}</label>
+                  <input className="inp" placeholder="A"
+                    value={leadHouseNumberSuffix} onChange={e => setLeadHouseNumberSuffix(e.target.value)} />
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <div className="iw" style={{ flex: 2 }}>
                   <label className="il">
-                    Postcode <span style={{ color: 'var(--or)' }}>*</span>
+                    {t('clPostalCode')} <span style={{ color: 'var(--or)' }}>*</span>
                   </label>
-                  <input
-                    className="inp"
-                    placeholder="1234 AB"
-                    value={leadPostalCode}
-                    onChange={e => setLeadPostalCode(e.target.value)}
-                  />
+                  <input className="inp" placeholder="1234 AB"
+                    value={leadPostalCode} onChange={e => setLeadPostalCode(e.target.value)} />
                 </div>
                 <div className="iw" style={{ flex: 3 }}>
-                  <label className="il">Stad</label>
-                  <input
-                    className="inp"
-                    placeholder="Amsterdam"
-                    value={leadCity}
-                    onChange={e => setLeadCity(e.target.value)}
-                  />
+                  <label className="il">{t('clCity')}</label>
+                  <input className="inp" placeholder="Amsterdam"
+                    value={leadCity} onChange={e => setLeadCity(e.target.value)} />
                 </div>
               </div>
 
-              {/* Product */}
               <div className="iw">
                 <label className="il">
-                  Product <span style={{ color: 'var(--or)' }}>*</span>
+                  {t('clProduct')} <span style={{ color: 'var(--or)' }}>*</span>
                 </label>
-                <select
-                  className="inp"
-                  value={leadProduct}
-                  onChange={e => setLeadProduct(e.target.value)}
-                >
-                  <option value="">-- Selecteer product --</option>
+                <select className="inp" value={leadProduct} onChange={e => setLeadProduct(e.target.value)}>
+                  <option value="">{t('clProductPlaceholder')}</option>
                   {productOptions.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
+                    <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
               </div>
-            </div>
+            </>
           )}
 
           {/* ── creating ── */}
           {step === 'creating' && (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 16,
-                padding: '28px 0',
-              }}
-            >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '28px 0' }}>
               <div className="sp" style={{ width: 32, height: 32, borderWidth: 3 }} />
               <p style={{ color: 'var(--cs)', fontSize: 14, margin: 0 }}>
-                {contactType === 'new'
-                  ? 'Contact en lead aanmaken…'
-                  : 'Lead aanmaken…'}
+                {contactType === 'new' ? t('clCreatingContact') : t('clCreatingLead')}
               </p>
             </div>
           )}
         </div>
 
-        {/* Footer — hidden on type step and while creating */}
+        {/* Footer */}
         {step !== 'type' && step !== 'creating' && (
           <div className="mof">
             <button className="btn btn-sc btn-sm" onClick={goBack}>
-              ← Terug
+              {t('clBack')}
             </button>
             {step === 'lead-form' ? (
-              <button
-                className="btn btn-pr btn-sm"
-                disabled={!canCreateLead()}
-                onClick={handleCreateLead}
-              >
-                Lead aanmaken
+              <button className="btn btn-pr btn-sm" disabled={!canCreateLead()} onClick={handleCreateLead}>
+                {t('clCreate')}
               </button>
-            ) : (
-              step === 'contact-form' && (
-                <button
-                  className="btn btn-pr btn-sm"
-                  disabled={!canProceedToLeadForm()}
-                  onClick={() => setStep('lead-form')}
-                >
-                  Volgende →
-                </button>
-              )
-            )}
+            ) : step === 'contact-form' ? (
+              <button className="btn btn-pr btn-sm" disabled={!canProceedToLeadForm()} onClick={() => setStep('lead-form')}>
+                {t('clNext')}
+              </button>
+            ) : null}
           </div>
         )}
       </div>
