@@ -421,7 +421,7 @@ function taskStage(lead: Lead | undefined, meId: string, lang: 'nl' | 'en'): Tas
   if (!lead) return { label: translate(lang, 'stageUnknown'), isMql: false, isLto: false, handedOver: false }
   const p = lead.properties
   const stage = p.hs_pipeline_stage || ''
-  const isLto = stage === CONFIG.STAGES.LOST && p[CONFIG.PROPS.lostReasons] === 'Long Term Opportunity'
+  const isLto = stage === CONFIG.STAGES.LTO
   return {
     label: isLto ? translate(lang, 'stageLto') : stageLabel(stage),
     isMql: stage === CONFIG.STAGES.MQL,

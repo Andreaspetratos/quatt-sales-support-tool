@@ -518,9 +518,8 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
 
       try {
         await patchLeadApi(deal.id, {
-          hs_pipeline_stage: CONFIG.STAGES.LOST,
-          [CONFIG.PROPS.lostReasons]: 'Long Term Opportunity',
-          [CONFIG.PROPS.callResult]: 'Lost',
+          hs_pipeline_stage: CONFIG.STAGES.LTO,
+          [CONFIG.PROPS.callResult]: 'Long Term Opportunity',
           long_term_opportunity_followup_date_lead: date,
           long_term_opportunity_reason_lead: reason.trim(),
         }, state.leads, leads => setState({ leads }))

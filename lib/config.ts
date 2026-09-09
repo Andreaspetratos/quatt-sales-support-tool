@@ -6,6 +6,7 @@ interface StageIds {
   SQL: string
   LOST: string
   DUPLICATE_CHECK: string
+  LTO: string
 }
 
 interface PropNames {
@@ -56,6 +57,7 @@ export const CONFIG: AppConfig = {
     MQL:             '5404393694',
     SQL:             '5404393697',
     LOST:            '5404393698',
+    LTO:             process.env.NEXT_PUBLIC_LTO_STAGE_ID ?? '6021605583',
     DUPLICATE_CHECK: '5404393699',
   },
 
@@ -113,6 +115,7 @@ export const stageLabel = (stageId: string): string => {
     [CONFIG.STAGES.SQL]:            'SQL',
     [CONFIG.STAGES.LOST]:           'Lost',
     [CONFIG.STAGES.DUPLICATE_CHECK]:'Dup. Check',
+    [CONFIG.STAGES.LTO]:            'Long Term',
   }
   return map[stageId] ?? stageId
 }
