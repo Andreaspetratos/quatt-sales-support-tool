@@ -5,3 +5,9 @@ pages_build_output_dir = "./out"
 [[kv_namespaces]]
 binding = "PLAYBOOKS_KV"
 id = "313049fad0e849eba6b68dca3fec9131"
+
+[vars]
+NEXT_PUBLIC_LTO_STAGE_ID = "6021605583"
+
+[env.preview.vars]
+NEXT_PUBLIC_LTO_STAGE_ID = "6020017392"
