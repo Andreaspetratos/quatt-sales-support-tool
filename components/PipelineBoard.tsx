@@ -500,7 +500,6 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
           : [updated, ...prev.leads],
         selectedId: lead.id,
       }))
-      await load()
     } catch (e: unknown) {
       showToast('⚠ ' + (e instanceof Error ? e.message : 'Accept failed'), 'error', 6000)
     } finally {
@@ -660,7 +659,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span className="tm">{lead.properties?.hs_lead_name || '--'}</span>
-                          {state.currentRep?.hubspotOwnerId && (
+                          {state.currentRep?.hubspotOwnerId && lead.properties?.hubspot_owner_id !== state.currentRep.hubspotOwnerId && (
                             <button
                               className="btn btn-sc btn-xs"
                               disabled={acceptingId === lead.id}
