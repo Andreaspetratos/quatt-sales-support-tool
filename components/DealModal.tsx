@@ -590,7 +590,7 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
         </div>
         <div className="mof">
           <button className="btn btn-sc btn-md" onClick={() => setState({ modal: null })}>{t('cancel')}</button>
-          <button className="btn btn-pr btn-md" disabled={saving} onClick={confirm}>
+          <button className="btn btn-pr btn-md" disabled={saving || !date} onClick={confirm}>
             {saving ? t('ltoSaving') : t('ltoConfirm')}
           </button>
         </div>
