@@ -445,6 +445,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   const [tasks, setTasks] = useState<HsTask[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [acceptingId, setAcceptingId] = useState<string | null>(null)
   const [editing, setEditing] = useState<HsTask | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('due')
   // Leads a task points at that the board does not hold — parked, lost, or
@@ -475,6 +476,37 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   }, [leadIdsKey, state.currentRep?.hubspotOwnerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
+
+  async function handleAccept(lead: Lead) {
+    const ownerId = state.currentRep?.hubspotOwnerId
+    if (!ownerId) return
+    setAcceptingId(lead.id)
+    try {
+      const res = await fetch('/api/hs-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: 'PATCH',
+          path: `/crm/v3/objects/leads/${lead.id}`,
+          body: { properties: { hubspot_owner_id: ownerId } },
+        }),
+      })
+      if (!res.ok) throw new Error('Accept failed')
+      // Put the claimed lead on the board and open it
+      const updated: Lead = { ...lead, properties: { ...lead.properties, hubspot_owner_id: ownerId } }
+      setState(prev => ({
+        leads: prev.leads.some(l => l.id === lead.id)
+          ? prev.leads.map(l => l.id === lead.id ? updated : l)
+          : [updated, ...prev.leads],
+        selectedId: lead.id,
+      }))
+      await load()
+    } catch (e: unknown) {
+      showToast('⚠ ' + (e instanceof Error ? e.message : 'Accept failed'), 'error', 6000)
+    } finally {
+      setAcceptingId(null)
+    }
+  }
 
   function dueMeta(dueAt: string | undefined): { label: string; cls: string } {
     if (!dueAt) return { label: t('taskNoDate'), cls: '' }
@@ -626,7 +658,16 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
                           onClick={() => selectLead(lead.id)}
                         >{lead.properties?.hs_lead_name || '--'}</span>
                       ) : (
-                        <span title={t('taskLeadOffBoard')}>{lead.properties?.hs_lead_name || '--'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="tm">{lead.properties?.hs_lead_name || '--'}</span>
+                          {state.currentRep?.hubspotOwnerId && (
+                            <button
+                              className="btn btn-sc btn-xs"
+                              disabled={acceptingId === lead.id}
+                              onClick={() => handleAccept(lead)}
+                            >{acceptingId === lead.id ? '…' : t('taskAccept')}</button>
+                          )}
+                        </div>
                       )}
                   </td>
                   <td>

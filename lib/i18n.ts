@@ -565,6 +565,7 @@ const en: Dict = {
   taskNoneSub: 'Click "+ New task" to create one.',
   taskDone: '✓ Complete',
   taskDelete: 'Delete',
+  taskAccept: 'Accept',
   taskEdit: 'Edit',
   taskEditTitle: 'Edit task',
   taskCompletedHint: 'Completed tasks disappear from this list.',
