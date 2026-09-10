@@ -934,7 +934,10 @@ function ReqRow({ lang }: { lang: 'nl' | 'en' }) {
     if (onCD || state.loading || !state.currentRep) return
     setState({ loading: true })
     try {
-      await requestLeads(state.currentRep)
+      // Exclude everything currently on the rep's board: these are leads they
+      // have just been working, so the router must not hand any of them back
+      // before the call penalty has been recalculated.
+      await requestLeads(state.currentRep, state.leads.map(l => l.id))
       const newEnd = Date.now() + CONFIG.REQUEST_COOLDOWN * 1000
       setState({ cooldownEnd: newEnd })
       showToast(t('toastLeads'), 'success')

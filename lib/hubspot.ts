@@ -405,10 +405,32 @@ export async function patchLead(
   })
 }
 
-export async function requestLeads(rep: { hubspotUserId: string; name: string }): Promise<void> {
+/**
+ * Trigger the lead router for this rep.
+ *
+ * excludeLeadIds are leads the router must not hand back. Clearing the owner
+ * returns a lead to the pool immediately, but its call penalty is recalculated
+ * by a separate workflow — so a rep who set "Did not pick up" and pressed
+ * Request leads could be given the same lead straight back, because it was
+ * unowned and still carried its old low score.
+ *
+ * Sent in the SAME PATCH as the trigger, deliberately: any signal the router
+ * could check instead (score, last-try timestamp) is itself written by a
+ * workflow and can lag exactly as far as the score does. This value arrives
+ * with the request, so it cannot be stale.
+ */
+export async function requestLeads(
+  rep: { hubspotUserId: string; name: string },
+  excludeLeadIds: string[] = [],
+): Promise<void> {
   if (isDemo()) { await new Promise(r => setTimeout(r, 700)); return }
   const res = await retryProxy('PATCH', '/crm/v3/objects/users/' + rep.hubspotUserId, {
-    properties: { lead_router_trigger: 'true' },
+    properties: {
+      lead_router_trigger: 'true',
+      // Always written, empty included — otherwise a previous request's list
+      // would linger and keep excluding leads that are fine to hand out.
+      lead_router_exclude_lead_ids: excludeLeadIds.join(';'),
+    },
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
