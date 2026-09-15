@@ -928,8 +928,7 @@ export default function DealModal() {
     if (value === 'Plan HV') {
       // Belt-and-suspenders: the button is already disabled for Chill-only leads,
       // but guard here too in case this is ever called from somewhere else.
-      const productValues = String(p[P.product] || '').split(',').map(v => v.trim()).filter(Boolean)
-      if (productValues.length === 1 && productValues[0].toLowerCase() === 'chill') {
+      if (String(p[P.product] || '').trim().toLowerCase() === 'chill') {
         showToast(t('homeVisitChillDisabled'), 'error')
         return
       }
@@ -1029,10 +1028,12 @@ export default function DealModal() {
   const openTasks = dealOpenTasks(deal.id)
 
   // Chill-only leads don't get a home visit — Chill is a self-install product.
-  // Re-derived from `p` on every render, so the button re-enables the moment
-  // the rep adds another product or changes the selection via the playbook.
-  const productValues = String(p[P.product] || '').split(',').map(v => v.trim()).filter(Boolean)
-  const isChillOnly = productValues.length === 1 && productValues[0].toLowerCase() === 'chill'
+  // Exact match on the whole property value (not a substring/includes check):
+  // multi-checkbox values like "Chill;Hybrid Single" must NOT match here, only
+  // a lead where Chill is the sole selection. Re-derived from `p` on every
+  // render, so the button re-enables the moment the rep adds another product
+  // or changes the selection via the playbook.
+  const isChillOnly = String(p[P.product] || '').trim().toLowerCase() === 'chill'
 
   return (
     <>
