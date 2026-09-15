@@ -1010,13 +1010,22 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
         const leads = await fetchLeads(syncOwnerId)
         setState(prev => {
           if (leads.length === 0 && prev.leads.length > 0) return {} // safety: don't clear on empty
+          // fetchLeads only ever returns this rep's MQL-stage leads. On the My
+          // Leads tab that's the whole board, so replacing wholesale is correct.
+          // On any other tab (All Leads, Tasks), state.leads can also hold a
+          // lead in some other stage that was opened manually — a wholesale
+          // replace here would silently drop it and close its DealModal even
+          // though nothing changed. Keep those extras instead of wiping them.
+          const merged = prev.taskTab === 'leads'
+            ? leads
+            : [...leads, ...prev.leads.filter(l => !leads.some(nl => nl.id === l.id))]
           const changed =
-            leads.length !== prev.leads.length ||
-            leads.some(l => {
+            merged.length !== prev.leads.length ||
+            merged.some(l => {
               const pl = prev.leads.find(p => p.id === l.id)
               return !pl || JSON.stringify(pl.properties) !== JSON.stringify(l.properties)
             })
-          return changed ? { leads } : {} // only re-render when data actually changed
+          return changed ? { leads: merged } : {} // only re-render when data actually changed
         })
       } catch { /* silent — background errors don't toast */ }
     }
@@ -1037,6 +1046,16 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
         const fresh = await fetchOneLead(leadId)
         if (!fresh) return
         setState(prev => {
+          // Only auto-remove a lead from the board on the My Leads tab, where
+          // "no longer MQL / no longer mine" reliably means it just left the
+          // board because of what the rep did. On any other tab (All Leads,
+          // Tasks) the open lead may have been sitting in a different stage
+          // (e.g. Long Term Opportunity) before this session even touched it —
+          // evicting it here just slams the DealModal shut mid-playbook and
+          // loses whatever notes hadn't been flushed yet.
+          if (prev.taskTab !== 'leads') {
+            return { leads: prev.leads.map(l => l.id === leadId ? fresh : l) }
+          }
           // If the lead is no longer in MQL or no longer owned by this rep, remove it
           const stage = fresh.properties?.hs_pipeline_stage
           const owner = fresh.properties?.hubspot_owner_id
