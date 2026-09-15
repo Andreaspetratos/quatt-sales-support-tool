@@ -926,6 +926,13 @@ export default function DealModal() {
     // address the rep then waits ~3 minutes on a polling overlay and ends up with
     // a converted lead and no home visit booked.
     if (value === 'Plan HV') {
+      // Belt-and-suspenders: the button is already disabled for Chill-only leads,
+      // but guard here too in case this is ever called from somewhere else.
+      const productValues = String(p[P.product] || '').split(',').map(v => v.trim()).filter(Boolean)
+      if (productValues.length === 1 && productValues[0].toLowerCase() === 'chill') {
+        showToast(t('homeVisitChillDisabled'), 'error')
+        return
+      }
       const missingProps: string[] = []
       const missingLabels: string[] = []
       if (!String(p['postal_code'] || '').trim())  { missingProps.push('postal_code');  missingLabels.push(t('postalCode')) }
@@ -1020,6 +1027,12 @@ export default function DealModal() {
   const sched = getScheduler(deal, state.schedulers)
   const schedLabel = sched?.buttonLabel || t('schedVC')
   const openTasks = dealOpenTasks(deal.id)
+
+  // Chill-only leads don't get a home visit — Chill is a self-install product.
+  // Re-derived from `p` on every render, so the button re-enables the moment
+  // the rep adds another product or changes the selection via the playbook.
+  const productValues = String(p[P.product] || '').split(',').map(v => v.trim()).filter(Boolean)
+  const isChillOnly = productValues.length === 1 && productValues[0].toLowerCase() === 'chill'
 
   return (
     <>
@@ -1191,7 +1204,12 @@ export default function DealModal() {
 
           {/* Footer */}
           <div className="dm-foot" style={{ position: 'relative' }}>
-            <button className="btn btn-gn btn-sm" onClick={() => handleCallResult('Plan HV')}>{t('homeVisit')}</button>
+            <button
+              className="btn btn-gn btn-sm"
+              onClick={() => handleCallResult('Plan HV')}
+              disabled={isChillOnly}
+              title={isChillOnly ? t('homeVisitChillDisabled') : undefined}
+            >{t('homeVisit')}</button>
             <button className="btn btn-sc btn-sm" onClick={openSched}>{schedLabel}</button>
             <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: 'lto', modalDealId: deal.id })}>{t('ltoBtn')}</button>
             <button className="btn btn-dn btn-sm" onClick={openLost}>{t('markLost')}</button>

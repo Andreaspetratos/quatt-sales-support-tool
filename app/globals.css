@@ -34,7 +34,8 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',system-ui,sans-serif;backg
 .btn-sc{background:transparent;color:var(--ct);border-color:var(--cb)}.btn-sc:hover:not(:disabled){border-color:var(--cs);color:var(--ct)}
 .btn-gh{background:transparent;color:var(--cs);border-color:transparent}.btn-gh:hover{background:var(--ch);color:var(--ct)}
 .btn-dn{background:transparent;color:var(--rd);border-color:var(--rd)}.btn-dn:hover{background:rgba(199,34,35,.08)}
-.btn-gn{background:var(--gr);color:#fff;border-color:var(--gr)}.btn-gn:hover{background:#15695c}
+.btn-gn{background:var(--gr);color:#fff;border-color:var(--gr)}.btn-gn:hover:not(:disabled){background:#15695c}
+.btn-gn:disabled{background:var(--gg);border-color:var(--gg);color:var(--gd);cursor:not-allowed}
 .btn-bk{background:var(--bk);color:#fff}.btn-bk:hover{background:var(--dk)}
 .btn-full{width:100%;justify-content:center}
 
