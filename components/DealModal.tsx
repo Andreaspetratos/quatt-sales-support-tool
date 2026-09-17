@@ -903,6 +903,25 @@ export default function DealModal() {
     setState({ modal: 'lost', modalDealId: dealId })
   }
 
+  // Admin-only recovery for leads accidentally moved to Lost. Clears the
+  // properties the Lost flow sets so the lead re-enters MQL exactly as if it
+  // had never been closed, rather than carrying stale call-result/outcome data.
+  async function restoreFromLost() {
+    if (!confirm(t('restoreFromLostConfirm'))) return
+    try {
+      await patchLeadApi(dealId, {
+        hs_pipeline_stage: CONFIG.STAGES.MQL,
+        [CONFIG.PROPS.callResult]: '',
+        [CONFIG.PROPS.lostReasons]: '',
+        [CONFIG.PROPS.callOutcome]: '',
+      }, state.leads, leads => setState({ leads }))
+      showToast(t('toastRestored'), 'success')
+      closeDeal()
+    } catch (e: any) {
+      showToast(t('errLoad', e.message), 'error')
+    }
+  }
+
   function openSched() {
     setState({ modal: 'sched', modalDealId: dealId })
   }
@@ -1214,6 +1233,9 @@ export default function DealModal() {
             <button className="btn btn-sc btn-sm" onClick={openSched}>{schedLabel}</button>
             <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: 'lto', modalDealId: deal.id })}>{t('ltoBtn')}</button>
             <button className="btn btn-dn btn-sm" onClick={openLost}>{t('markLost')}</button>
+            {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
+              <button className="btn btn-sc btn-sm" onClick={restoreFromLost}>{t('restoreFromLost')}</button>
+            )}
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
               {t('taskAddFromDeal')}
               {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
