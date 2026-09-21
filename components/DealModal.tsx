@@ -339,7 +339,7 @@ function AddressCheckBadge({ status, lang }: { status: string; lang: 'nl' | 'en'
   )
 }
 
-function EditableField({ label, value, onSave, highlight = false }: { label: string; value: string; onSave: (v: string) => Promise<void>; highlight?: boolean }) {
+function EditableField({ label, value, onSave, highlight = false, disabled = false }: { label: string; value: string; onSave: (v: string) => Promise<void>; highlight?: boolean; disabled?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
@@ -377,7 +377,7 @@ function EditableField({ label, value, onSave, highlight = false }: { label: str
       }}
     >
       <span className="kk" style={{ flexShrink: 0 }}>{label}</span>
-      {editing ? (
+      {editing && !disabled ? (
         <input
           ref={inputRef}
           value={draft}
@@ -394,13 +394,17 @@ function EditableField({ label, value, onSave, highlight = false }: { label: str
       ) : (
         <span
           className="vv"
-          title="Click to edit"
-          onClick={() => setEditing(true)}
-          style={{ cursor: 'text', flex: 1 }}
+          title={disabled ? undefined : 'Click to edit'}
+          onClick={() => { if (!disabled) setEditing(true) }}
+          style={{ cursor: disabled ? 'default' : 'text', flex: 1 }}
         >
           {value || <span style={{ color: 'var(--cs)', fontStyle: 'italic' }}>--</span>}
-          {' '}
-          <span style={{ fontSize: 10, color: 'var(--cs)', opacity: 0.7 }}>✎</span>
+          {!disabled && (
+            <>
+              {' '}
+              <span style={{ fontSize: 10, color: 'var(--cs)', opacity: 0.7 }}>✎</span>
+            </>
+          )}
         </span>
       )}
     </div>
@@ -773,7 +777,7 @@ function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; o
 }
 
 // ── CallOutcome section ───────────────────────────────────────────────────────
-function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
+function CallOutcomeSection({ dealId, lang, disabled = false }: { dealId: string; lang: 'nl' | 'en'; disabled?: boolean }) {
   const { state, getPbState, setCallOutcome, setCallOutcomeNote, patchLeadLocal } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const pbSt = getPbState(dealId)
@@ -819,6 +823,7 @@ function CallOutcomeSection({ dealId, lang }: { dealId: string; lang: 'nl' | 'en
         className="inp"
         value={pbSt.callOutcome || savedOutcome || ''}
         onChange={e => handleChange(e.target.value)}
+        disabled={disabled}
         style={{ width: '100%' }}
       >
         <option value="">{lang === 'nl' ? '-- Selecteer uitkomst --' : '-- Select outcome --'}</option>
@@ -923,6 +928,12 @@ export default function DealModal() {
   }
 
   function openSched() {
+    // Belt-and-suspenders: the button is already disabled once a lead reaches
+    // SQL, but guard here too in case this is ever called from somewhere else.
+    if (p.hs_pipeline_stage === CONFIG.STAGES.SQL) {
+      showToast(t('sqlLockedNote'), 'error')
+      return
+    }
     setState({ modal: 'sched', modalDealId: dealId })
   }
 
@@ -934,6 +945,14 @@ export default function DealModal() {
   }
 
   async function handleCallResult(value: string) {
+    // Once a lead reaches SQL, HubSpot converts it into a deal — the lead
+    // record is done and no booking action should write to it anymore.
+    // The buttons that reach this are already disabled; this guard covers
+    // any other path that might call it (e.g. the scheduler's onBooked).
+    if (p.hs_pipeline_stage === CONFIG.STAGES.SQL) {
+      showToast(t('sqlLockedNote'), 'error')
+      return
+    }
     // Plan HV needs a resolvable address: the home-visit scheduler can't produce
     // a URL without one. Postcode + house number are the required pair — PostNL
     // Adrescheck backfills street and city from those two. House number suffix
@@ -1054,6 +1073,11 @@ export default function DealModal() {
   // or changes the selection via the playbook.
   const isChillOnly = String(p[P.product] || '').trim().toLowerCase() === 'chill'
 
+  // A lead that reached SQL has converted to a HubSpot deal — the lead record
+  // itself is done, so property edits and the booking actions below are
+  // locked. Re-derived from `p` on every render like `isChillOnly` above.
+  const isSQL = p.hs_pipeline_stage === CONFIG.STAGES.SQL
+
   return (
     <>
       <div
@@ -1096,6 +1120,16 @@ export default function DealModal() {
 
           {/* Scrollable body */}
           <div className="dm-body">
+            {/* Lead already converted to a deal — properties and the booking
+                buttons below are locked; this is the explanation for why. */}
+            {isSQL && (
+              <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12, background: 'rgba(247,102,34,0.10)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)' }}>
+                  {t('sqlLockedNote')}
+                </div>
+              </div>
+            )}
+
             {/* Long Term context, written when the lead was parked.
                 Read back here because whoever is looking at it is usually not
                 whoever parked it: three days after a parked lead reactivates,
@@ -1172,6 +1206,7 @@ export default function DealModal() {
                       label={label}
                       value={p[prop] || ''}
                       highlight={hvMissing.includes(prop)}
+                      disabled={isSQL}
                       onSave={async (val) => {
                         await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
                         patchLeadLocal(dealId, { [prop]: val })
@@ -1203,21 +1238,25 @@ export default function DealModal() {
             <div className="dv" />
 
             {/* Call outcome — always visible */}
-            <CallOutcomeSection dealId={deal.id} lang={lang} />
+            <CallOutcomeSection dealId={deal.id} lang={lang} disabled={isSQL} />
 
             <div className="dv" />
 
             {/* Playbook — pbDefs is empty only when there are genuinely no
                 playbooks to show. Leads without a product get all playbooks
-                (see getPlaybookDefs) so the rep can pick. */}
+                (see getPlaybookDefs) so the rep can pick. Once the lead is SQL,
+                the whole block is visible but non-interactive — no answers or
+                notepads should keep writing to a lead that already converted. */}
             {pbDefs.length > 0 && (
               <>
                 <div className="dv" />
                 <div className="sl2">{t('pbLabel')}</div>
-                <PlaybookView
-                  dealId={deal.id}
-                  pbDefs={pbDefs.map(pi => ({ key: pi.key, def: pi.def }))}
-                />
+                <div style={isSQL ? { pointerEvents: 'none', opacity: 0.55 } : undefined}>
+                  <PlaybookView
+                    dealId={deal.id}
+                    pbDefs={pbDefs.map(pi => ({ key: pi.key, def: pi.def }))}
+                  />
+                </div>
               </>
             )}
           </div>
@@ -1227,10 +1266,15 @@ export default function DealModal() {
             <button
               className="btn btn-gn btn-sm"
               onClick={() => handleCallResult('Plan HV')}
-              disabled={isChillOnly}
-              title={isChillOnly ? t('homeVisitChillDisabled') : undefined}
+              disabled={isChillOnly || isSQL}
+              title={isSQL ? t('sqlLockedNote') : (isChillOnly ? t('homeVisitChillDisabled') : undefined)}
             >{t('homeVisit')}</button>
-            <button className="btn btn-sc btn-sm" onClick={openSched}>{schedLabel}</button>
+            <button
+              className="btn btn-sc btn-sm"
+              onClick={openSched}
+              disabled={isSQL}
+              title={isSQL ? t('sqlLockedNote') : undefined}
+            >{schedLabel}</button>
             <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: 'lto', modalDealId: deal.id })}>{t('ltoBtn')}</button>
             <button className="btn btn-dn btn-sm" onClick={openLost}>{t('markLost')}</button>
             {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
