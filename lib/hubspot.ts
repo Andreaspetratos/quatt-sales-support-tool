@@ -392,6 +392,12 @@ export async function patchLead(
   currentLeads: Lead[],
   updateLeads: (leads: Lead[]) => void,
 ): Promise<void> {
+  // selected_product_lead_all_time and most_recent_selected_product_lead share
+  // the same option set and must always move together — whichever gets patched
+  // (e.g. from a playbook's "update_property" question) mirrors onto the other.
+  if ('selected_product_lead_all_time' in props && !('most_recent_selected_product_lead' in props)) {
+    props = { ...props, most_recent_selected_product_lead: props.selected_product_lead_all_time }
+  }
   if (isDemo()) {
     updateLeads(currentLeads.map(l =>
       l.id === id ? { ...l, properties: { ...l.properties, ...props } } : l
