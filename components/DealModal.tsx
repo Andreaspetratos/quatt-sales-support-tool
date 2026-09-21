@@ -905,7 +905,22 @@ export default function DealModal() {
   }
 
   function openLost() {
+    // Belt-and-suspenders: the button is already disabled once a lead reaches
+    // SQL, but guard here too in case this is ever called from somewhere else.
+    if (p.hs_pipeline_stage === CONFIG.STAGES.SQL) {
+      showToast(t('sqlLockedNote'), 'error')
+      return
+    }
     setState({ modal: 'lost', modalDealId: dealId })
+  }
+
+  function openLto() {
+    // Same guard as openLost()/openSched() above.
+    if (p.hs_pipeline_stage === CONFIG.STAGES.SQL) {
+      showToast(t('sqlLockedNote'), 'error')
+      return
+    }
+    setState({ modal: 'lto', modalDealId: dealId })
   }
 
   // Admin-only recovery for leads accidentally moved to Lost. Clears the
@@ -1275,8 +1290,18 @@ export default function DealModal() {
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
             >{schedLabel}</button>
-            <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: 'lto', modalDealId: deal.id })}>{t('ltoBtn')}</button>
-            <button className="btn btn-dn btn-sm" onClick={openLost}>{t('markLost')}</button>
+            <button
+              className="btn btn-sc btn-sm"
+              onClick={openLto}
+              disabled={isSQL}
+              title={isSQL ? t('sqlLockedNote') : undefined}
+            >{t('ltoBtn')}</button>
+            <button
+              className="btn btn-dn btn-sm"
+              onClick={openLost}
+              disabled={isSQL}
+              title={isSQL ? t('sqlLockedNote') : undefined}
+            >{t('markLost')}</button>
             {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
               <button className="btn btn-sc btn-sm" onClick={restoreFromLost}>{t('restoreFromLost')}</button>
             )}

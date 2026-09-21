@@ -32,8 +32,10 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',system-ui,sans-serif;backg
 .btn-pr{background:var(--or);color:#fff}.btn-pr:hover:not(:disabled){background:var(--orh);border-color:var(--orb)}
 .btn-pr:disabled{background:var(--gg);cursor:not-allowed}
 .btn-sc{background:transparent;color:var(--ct);border-color:var(--cb)}.btn-sc:hover:not(:disabled){border-color:var(--cs);color:var(--ct)}
+.btn-sc:disabled{color:var(--gm);border-color:var(--cb);cursor:not-allowed}
 .btn-gh{background:transparent;color:var(--cs);border-color:transparent}.btn-gh:hover{background:var(--ch);color:var(--ct)}
-.btn-dn{background:transparent;color:var(--rd);border-color:var(--rd)}.btn-dn:hover{background:rgba(199,34,35,.08)}
+.btn-dn{background:transparent;color:var(--rd);border-color:var(--rd)}.btn-dn:hover:not(:disabled){background:rgba(199,34,35,.08)}
+.btn-dn:disabled{color:var(--gm);border-color:var(--cb);cursor:not-allowed}
 .btn-gn{background:var(--gr);color:#fff;border-color:var(--gr)}.btn-gn:hover:not(:disabled){background:#15695c}
 .btn-gn:disabled{background:var(--gg);border-color:var(--gg);color:var(--gd);cursor:not-allowed}
 .btn-bk{background:var(--bk);color:#fff}.btn-bk:hover{background:var(--dk)}
