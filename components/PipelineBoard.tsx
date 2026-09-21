@@ -477,7 +477,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
 
   useEffect(() => { load() }, [load])
 
-  async function handleAccept(lead: Lead) {
+  async function handleAccept(lead: Lead, task: HsTask) {
     const ownerId = state.currentRep?.hubspotOwnerId
     if (!ownerId) return
     setAcceptingId(lead.id)
@@ -500,6 +500,29 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
           : [updated, ...prev.leads],
         selectedId: lead.id,
       }))
+      // The pipeline board's task badge (dealOpenTasks) reads a local cache
+      // that only gets refreshed from HubSpot once per login — so a task
+      // handed over mid-session never shows a badge for its accepted lead
+      // until the rep reloads. Merge it in now, same shape the login sync
+      // produces, keyed on this lead's id rather than whatever (or nothing)
+      // it decoded from the task body before.
+      const existing = loadTasks()
+      const merged = existing.some(t => t.hsTaskId === task.hsId)
+        ? existing.map(t => t.hsTaskId === task.hsId ? { ...t, dealId: lead.id, completed: false } : t)
+        : [...existing, {
+            id: task.hsId,
+            hsTaskId: task.hsId,
+            dealId: lead.id,
+            assigneeEmail: state.currentRep?.email || '',
+            creatorEmail: state.currentRep?.email || '',
+            title: task.title,
+            note: task.notes,
+            dueDate: task.dueDate,
+            completed: false,
+            completedAt: null,
+            createdAt: '',
+          } as Task]
+      saveTasks(merged)
     } catch (e: unknown) {
       showToast('⚠ ' + (e instanceof Error ? e.message : 'Accept failed'), 'error', 6000)
     } finally {
@@ -663,7 +686,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
                             <button
                               className="btn btn-sc btn-xs"
                               disabled={acceptingId === lead.id}
-                              onClick={() => handleAccept(lead)}
+                              onClick={() => handleAccept(lead, task)}
                             >{acceptingId === lead.id ? '…' : t('taskAccept')}</button>
                           )}
                         </div>
