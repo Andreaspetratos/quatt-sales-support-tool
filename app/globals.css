@@ -47,6 +47,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',system-ui,sans-serif;backg
 .inp,.sel,.ta{width:100%;padding:8px 12px;border-radius:9px;border:2px solid var(--cb);background:var(--c2);font-family:inherit;font-size:13px;color:var(--ct);transition:border-color .18s;outline:none;resize:vertical}
 .inp:hover,.sel:hover,.ta:hover{border-color:#2A4A40}
 .inp:focus,.sel:focus,.ta:focus{border-color:var(--gr)}
+.inp:disabled,.sel:disabled,.ta:disabled{color:var(--gm);border-color:var(--cb);cursor:not-allowed;opacity:.6}
 .sel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;cursor:pointer}
 .ta{min-height:60px}
 .inp-sm{padding:5px 10px;font-size:12px;border-radius:7px}
