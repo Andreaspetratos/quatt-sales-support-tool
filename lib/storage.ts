@@ -205,6 +205,17 @@ export async function submitFeedback(message: string, submittedBy: string): Prom
   if (!res.ok) throw new Error('HTTP ' + res.status)
 }
 
+export async function updateFeedbackStatus(id: string, status: import('./types').FeedbackStatus): Promise<import('./types').Feedback> {
+  const res = await fetch('/api/feedback', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, status }),
+  })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  const data = await res.json()
+  return data.item
+}
+
 export async function triageFeedback(id: string, message: string): Promise<string> {
   const res = await fetch('/api/triage-feedback', {
     method: 'POST',

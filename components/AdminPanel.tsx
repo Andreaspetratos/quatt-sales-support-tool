@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, uid } from '@/lib/storage'
+import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, updateFeedbackStatus, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
-import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback } from '@/lib/types'
+import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus } from '@/lib/types'
 
 type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'diagnostics'
 
@@ -1127,12 +1127,25 @@ function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v
   )
 }
 
-// ── FeedbackTab — admin view of submitted feedback with multi-select copy ─────
+// ── FeedbackTab — admin view of submitted feedback with status, filter and multi-select copy ─────
+const FEEDBACK_STATUSES: FeedbackStatus[] = ['open', 'in_progress', 'done', 'wont_do']
+const FEEDBACK_STATUS_LABEL: Record<'nl' | 'en', Record<FeedbackStatus, string>> = {
+  nl: { open: 'Open', in_progress: 'In behandeling', done: 'Klaar', wont_do: 'Wordt niet gedaan' },
+  en: { open: 'Open', in_progress: 'In progress', done: 'Done', wont_do: "Won't do" },
+}
+const FEEDBACK_STATUS_COLOR: Record<FeedbackStatus, string> = {
+  open: 'var(--gm)', in_progress: 'var(--or)', done: 'var(--gr)', wont_do: 'var(--rd)',
+}
+const feedbackStatus = (f: Feedback): FeedbackStatus => f.status ?? 'open'
+
 function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
-  const [feedbacks, setFeedbacks] = useState<import('@/lib/types').Feedback[]>([])
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [copied, setCopied] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<'all' | FeedbackStatus>('all')
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const labels = FEEDBACK_STATUS_LABEL[lang]
 
   useEffect(() => {
     setLoading(true)
@@ -1140,6 +1153,34 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
       .then(data => setFeedbacks(data))
       .finally(() => setLoading(false))
   }, [])
+
+  const visible = statusFilter === 'all' ? feedbacks : feedbacks.filter(f => feedbackStatus(f) === statusFilter)
+  const countFor = (s: 'all' | FeedbackStatus) =>
+    s === 'all' ? feedbacks.length : feedbacks.filter(f => feedbackStatus(f) === s).length
+
+  function changeFilter(s: 'all' | FeedbackStatus) {
+    setStatusFilter(s)
+    setSelected(new Set())   // selection is per filtered view — avoid copying hidden items
+  }
+
+  async function setStatus(f: Feedback, status: FeedbackStatus) {
+    if (feedbackStatus(f) === status || savingId) return
+    setSavingId(f.id)
+    try {
+      const updated = await updateFeedbackStatus(f.id, status)
+      setFeedbacks(prev => prev.map(x => x.id === f.id ? { ...x, ...updated } : x))
+      if (statusFilter !== 'all' && statusFilter !== status) {
+        // Card drops out of the filtered view — drop it from the selection too
+        setSelected(prev => { const next = new Set(prev); next.delete(f.id); return next })
+      }
+      showToast(`✓ ${labels[status]}`, 'success')
+    } catch (e) {
+      console.error('[admin] update feedback status failed:', e)
+      showToast(lang === 'nl' ? 'Status opslaan mislukt — probeer opnieuw' : 'Saving status failed — try again', 'error')
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   function toggleSelect(id: string) {
     setSelected(prev => {
@@ -1150,7 +1191,7 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
   }
 
   function selectAll() {
-    setSelected(new Set(feedbacks.map(f => f.id)))
+    setSelected(new Set(visible.map(f => f.id)))
   }
 
   function clearAll() {
@@ -1166,6 +1207,7 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
       ...items.map(f => [
         `From: ${f.submittedBy}`,
         `Date: ${new Date(f.submittedAt).toLocaleString(locale)}`,
+        `Status: ${FEEDBACK_STATUS_LABEL.en[feedbackStatus(f)]}`,
         `Message: ${f.message}`,
       ].join('\n')),
     ].join('\n\n---\n\n')
@@ -1191,9 +1233,18 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
 
   return (
     <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Status filter */}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {(['all', ...FEEDBACK_STATUSES] as const).map(s => (
+          <button key={s} className={`chip ${statusFilter === s ? 'on' : ''}`} onClick={() => changeFilter(s)}>
+            {s === 'all' ? (lang === 'nl' ? 'Alle' : 'All') : labels[s]} ({countFor(s)})
+          </button>
+        ))}
+      </div>
+
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn btn-xs btn-gh" onClick={selectAll} style={{ fontSize: 12 }}>Select all</button>
+        <button className="btn btn-xs btn-gh" onClick={selectAll} disabled={visible.length === 0} style={{ fontSize: 12 }}>Select all</button>
         {selected.size > 0 && (
           <button className="btn btn-xs btn-gh" onClick={clearAll} style={{ fontSize: 12 }}>Clear</button>
         )}
@@ -1207,13 +1258,20 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
           </button>
         )}
         <span style={{ fontSize: 11, color: 'var(--gm)', marginLeft: selected.size > 0 ? 0 : 'auto' }}>
-          {feedbacks.length} {feedbacks.length === 1 ? 'entry' : 'entries'}
+          {visible.length} {visible.length === 1 ? 'entry' : 'entries'}
         </span>
       </div>
 
+      {visible.length === 0 && (
+        <div style={{ padding: '12px 0', color: 'var(--gm)', fontSize: 13 }}>
+          {lang === 'nl' ? 'Geen feedback met deze status.' : 'No feedback with this status.'}
+        </div>
+      )}
+
       {/* Feedback cards */}
-      {feedbacks.map(f => {
+      {visible.map(f => {
         const isSelected = selected.has(f.id)
+        const status = feedbackStatus(f)
         return (
           <div
             key={f.id}
@@ -1242,12 +1300,32 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
             </div>
             {/* Content */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ marginBottom: 6 }}>
+              <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--gm)' }}>
                   {f.submittedBy} · {new Date(f.submittedAt).toLocaleString(lang === 'nl' ? 'nl-NL' : 'en-GB')}
                 </span>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                  color: FEEDBACK_STATUS_COLOR[status], border: `1.5px solid ${FEEDBACK_STATUS_COLOR[status]}`,
+                }}>
+                  {labels[status]}
+                </span>
               </div>
               <p style={{ fontSize: 13, color: 'var(--ct)', margin: 0, whiteSpace: 'pre-wrap' }}>{f.message}</p>
+              {/* Status controls — stopPropagation so clicking doesn't toggle card selection */}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                {FEEDBACK_STATUSES.map(s => (
+                  <button
+                    key={s}
+                    className={`chip ${status === s ? 'on' : ''}`}
+                    disabled={savingId === f.id}
+                    onClick={() => setStatus(f, s)}
+                    style={{ fontSize: 11, padding: '2px 8px', cursor: savingId === f.id ? 'wait' : 'pointer' }}
+                  >
+                    {labels[s]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )

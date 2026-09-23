@@ -90,12 +90,16 @@ export interface Scheduler {
 }
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
+export type FeedbackStatus = 'open' | 'in_progress' | 'done' | 'wont_do'
+
 export interface Feedback {
   id: string
   message: string
   submittedBy: string          // email of submitter
   submittedAt: string          // ISO timestamp
   triage?: string              // AI-generated triage comment
+  status?: FeedbackStatus      // admin-set; missing = 'open' (entries created before statuses existed)
+  statusUpdatedAt?: string     // ISO timestamp of last status change
 }
 
 // ─── Playbook runtime state ───────────────────────────────────────────────────
