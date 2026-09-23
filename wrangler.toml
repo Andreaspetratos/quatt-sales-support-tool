@@ -11,3 +11,9 @@ NEXT_PUBLIC_LTO_STAGE_ID = "6021605583"
 
 [env.preview.vars]
 NEXT_PUBLIC_LTO_STAGE_ID = "6020017392"
+
+# kv_namespaces is non-inheritable: once [env.preview] exists, preview gets NO KV
+# unless it's re-declared here. Same namespace as production (shared data, by choice).
+[[env.preview.kv_namespaces]]
+binding = "PLAYBOOKS_KV"
+id = "313049fad0e849eba6b68dca3fec9131"
