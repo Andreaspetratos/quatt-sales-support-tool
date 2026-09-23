@@ -1,4 +1,5 @@
 import type { Rep, Playbook, Scheduler } from './types'
+import { ADMINS, GOOGLE_CLIENT_ID } from './access'
 
 interface StageIds {
   UQL: string
@@ -45,7 +46,7 @@ interface AppConfig {
 }
 
 export const CONFIG: AppConfig = {
-  GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com',
+  GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
   MAKE_WEBHOOK_URL: process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL ?? '',
   CORS_PROXY: '',
   SCHEDULER_URL: '',
@@ -90,7 +91,8 @@ export const CONFIG: AppConfig = {
     },
   ],
 
-  ADMINS: ['andreas@quatt.io'],
+  // Edit the list in lib/access.ts — the server-side auth middleware reads it from there.
+  ADMINS,
   // Who can be assigned a task from the tool. Both teams work in the tool, so
   // both must be pickable. Order here is the order of the groups in the
   // dropdown; anyone in both teams is listed under the first one they match.

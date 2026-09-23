@@ -1,4 +1,11 @@
 name = "quatt-sales-support-tool"
+
+# Secrets (set in the Cloudflare Pages dashboard, not here), per environment:
+#   HUBSPOT_TOKEN_PROD / HUBSPOT_TOKEN  HubSpot Private App token
+#   SESSION_SECRET  signs 12h login sessions (functions/api/_middleware.js). Use a different
+#                   random value on production and preview. Unset = reps re-login every hour.
+#   SYNC_SECRET     lets sandbox's /api/sync-from-prod read production's playbooks, schedulers
+#                   and feedback. Same random value on both environments.
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "./out"
 

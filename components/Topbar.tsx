@@ -3,6 +3,7 @@
 import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveTheme, saveLang } from '@/lib/storage'
+import { clearAuthToken } from '@/lib/auth'
 import { isDemo } from '@/lib/config'
 import { CONFIG } from '@/lib/config'
 
@@ -32,7 +33,8 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
   }
 
   function handleLogout() {
-    setState({ screen: 'login', currentRep: null, userAvatar: null, leads: [], selectedId: null })
+    clearAuthToken()
+    setState({ screen: 'login', currentRep: null, userAvatar: null, leads: [], selectedId: null, isAdmin: false, feedbacks: [] })
   }
 
   function goAdmin() {

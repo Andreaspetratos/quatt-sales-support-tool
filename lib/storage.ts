@@ -1,5 +1,6 @@
 import type { Task, Playbook, Scheduler } from './types'
 import { CONFIG } from './config'
+import { apiFetch } from './auth'
 
 // ── uid ────────────────────────────────────────────────────────────────────────
 export function uid(): string {
@@ -135,7 +136,7 @@ export function deleteTask(id: string): void {
 // ── Shared playbooks (Cloudflare KV via /api/playbooks) ───────────────────────
 export async function fetchSharedPbs(): Promise<import('./types').Playbook[]> {
   try {
-    const res = await fetch('/api/playbooks')
+    const res = await apiFetch('/api/playbooks')
     if (!res.ok) throw new Error('HTTP ' + res.status)
     return await res.json()
   } catch (e) {
@@ -146,7 +147,7 @@ export async function fetchSharedPbs(): Promise<import('./types').Playbook[]> {
 
 export async function storeSharedPbs(pbs: import('./types').Playbook[]): Promise<void> {
   try {
-    const res = await fetch('/api/playbooks', {
+    const res = await apiFetch('/api/playbooks', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pbs),
@@ -161,7 +162,7 @@ export async function storeSharedPbs(pbs: import('./types').Playbook[]): Promise
 // ── Shared schedulers (Cloudflare KV via /api/schedulers) ─────────────────────
 export async function fetchSharedScheds(): Promise<import('./types').Scheduler[]> {
   try {
-    const res = await fetch('/api/schedulers')
+    const res = await apiFetch('/api/schedulers')
     if (!res.ok) throw new Error('HTTP ' + res.status)
     return await res.json()
   } catch (e) {
@@ -172,7 +173,7 @@ export async function fetchSharedScheds(): Promise<import('./types').Scheduler[]
 
 export async function storeSharedScheds(scheds: import('./types').Scheduler[]): Promise<void> {
   try {
-    const res = await fetch('/api/schedulers', {
+    const res = await apiFetch('/api/schedulers', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(scheds),
@@ -187,7 +188,8 @@ export async function storeSharedScheds(scheds: import('./types').Scheduler[]): 
 // ── Feedback (Cloudflare KV via /api/feedback) ─────────────────────────────────
 export async function fetchFeedbacks(): Promise<import('./types').Feedback[]> {
   try {
-    const res = await fetch('/api/feedback')
+    const res = await apiFetch('/api/feedback')
+    if (res.status === 403) return [] // not an admin — expected
     if (!res.ok) throw new Error('HTTP ' + res.status)
     return await res.json()
   } catch (e) {
@@ -197,7 +199,7 @@ export async function fetchFeedbacks(): Promise<import('./types').Feedback[]> {
 }
 
 export async function submitFeedback(message: string, submittedBy: string): Promise<void> {
-  const res = await fetch('/api/feedback', {
+  const res = await apiFetch('/api/feedback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, submittedBy }),
@@ -206,7 +208,7 @@ export async function submitFeedback(message: string, submittedBy: string): Prom
 }
 
 export async function updateFeedbackStatus(id: string, status: import('./types').FeedbackStatus): Promise<import('./types').Feedback> {
-  const res = await fetch('/api/feedback', {
+  const res = await apiFetch('/api/feedback', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, status }),
@@ -217,7 +219,7 @@ export async function updateFeedbackStatus(id: string, status: import('./types')
 }
 
 export async function deleteFeedback(id: string): Promise<void> {
-  const res = await fetch('/api/feedback', {
+  const res = await apiFetch('/api/feedback', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -228,7 +230,7 @@ export async function deleteFeedback(id: string): Promise<void> {
 // ── Sandbox-only: copy production KV data into sandbox (/api/sync-from-prod) ───
 export async function isProdSyncAvailable(): Promise<boolean> {
   try {
-    const res = await fetch('/api/sync-from-prod')
+    const res = await apiFetch('/api/sync-from-prod')
     if (!res.ok) return false
     return !!(await res.json()).available
   } catch {
@@ -237,14 +239,14 @@ export async function isProdSyncAvailable(): Promise<boolean> {
 }
 
 export async function syncFromProd(): Promise<Record<string, number>> {
-  const res = await fetch('/api/sync-from-prod', { method: 'POST' })
+  const res = await apiFetch('/api/sync-from-prod', { method: 'POST' })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status)
   return data.counts
 }
 
 export async function triageFeedback(id: string, message: string): Promise<string> {
-  const res = await fetch('/api/triage-feedback', {
+  const res = await apiFetch('/api/triage-feedback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, message }),

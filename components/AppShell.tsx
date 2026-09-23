@@ -5,6 +5,7 @@ import { AppProvider, useApp } from '@/context/AppContext'
 import { seedBuiltinPlaybooks } from '@/lib/playbooks'
 import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
 import { fetchSharedPbs, fetchSharedScheds, fetchFeedbacks } from '@/lib/storage'
+import { onAuthExpired } from '@/lib/auth'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
@@ -51,15 +52,23 @@ function Shell() {
       .catch(() => setState({ perfLoading: false }))
   }, [currentRep?.hubspotOwnerId])
 
-  // Load shared playbooks + schedulers from KV on mount (and whenever user logs in)
+  // The server rejected our token (expired, or signed out elsewhere): back to login.
+  // Unsaved input in an open modal is lost, but every write after this would fail anyway.
+  useEffect(() => onAuthExpired(() => {
+    showToast(state.lang === 'nl' ? 'Je sessie is verlopen. Log opnieuw in.' : 'Your session has expired. Please sign in again.', 'error')
+    setState({ screen: 'login', currentRep: null, userAvatar: null, leads: [], selectedId: null, isAdmin: false, feedbacks: [], loading: false })
+  }), [state.lang])
+
+  // Load shared playbooks + schedulers from KV whenever a user logs in (the API needs a signed-in user)
   useEffect(() => {
+    if (!currentRep) return
     fetchSharedPbs().then(pbs => {
       if (pbs.length > 0) setState({ playbooks: pbs })
     })
     fetchSharedScheds().then(scheds => {
       if (scheds.length > 0) setState({ schedulers: scheds })
     })
-    // Load feedbacks (admin only — non-admins just get empty array)
+    // Load feedbacks (admin only — the server answers 403 to non-admins, which gives an empty array)
     fetchFeedbacks().then(feedbacks => setState({ feedbacks }))
   }, [currentRep?.email])
 

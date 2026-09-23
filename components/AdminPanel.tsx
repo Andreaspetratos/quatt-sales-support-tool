@@ -7,6 +7,7 @@ import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, updateFeedbackStatus
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus } from '@/lib/types'
+import { apiFetch } from '@/lib/auth'
 
 type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'diagnostics'
 
@@ -774,7 +775,7 @@ function SchedEditor({
 type DiagResult = { label: string; ok: boolean; detail: string }
 
 async function hsCall(method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; text: string }> {
-  const res = await fetch('/api/hs-write', {
+  const res = await apiFetch('/api/hs-write', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, path, body }),

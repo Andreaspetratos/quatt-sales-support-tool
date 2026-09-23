@@ -2,7 +2,7 @@
  * POST /api/triage-feedback
  * Body: { id, message }
  * Calls Anthropic API to triage the feedback, stores result in KV.
- * Requires ANTHROPIC_API_KEY env var.
+ * Requires ANTHROPIC_API_KEY env var. Admin-only (enforced in _middleware.js).
  */
 export async function onRequestPost(ctx) {
   const kv = ctx.env.PLAYBOOKS_KV

@@ -5,6 +5,7 @@ import { showToast } from './Toast'
 import { fetchLeadPropertyOptions, fetchOneLead } from '@/lib/hubspot'
 import { CONFIG } from '@/lib/config'
 import { translate } from '@/lib/i18n'
+import { apiFetch } from '@/lib/auth'
 
 // ── Local types ────────────────────────────────────────────────────────────────
 interface ContactResult {
@@ -22,7 +23,7 @@ type Step = 'type' | 'search' | 'contact-form' | 'lead-form' | 'creating'
 
 // ── HubSpot proxy helper ───────────────────────────────────────────────────────
 async function hsP(method: string, path: string, body?: unknown): Promise<Response> {
-  return fetch('/api/hs-write', {
+  return apiFetch('/api/hs-write', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, path, body }),

@@ -12,6 +12,7 @@ import CreateLeadModal from './CreateLeadModal'
 import DealModal from './DealModal'
 import AllLeadsPanel from './AllLeadsPanel'
 import type { Lead, Task } from '@/lib/types'
+import { apiFetch } from '@/lib/auth'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function relTime(iso: string | undefined): string {
@@ -482,7 +483,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
     if (!ownerId) return
     setAcceptingId(lead.id)
     try {
-      const res = await fetch('/api/hs-write', {
+      const res = await apiFetch('/api/hs-write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

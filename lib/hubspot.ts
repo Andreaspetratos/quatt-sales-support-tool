@@ -1,5 +1,6 @@
 import type { Lead, PerfData, PerfPeriodData } from './types'
 import { CONFIG, isDemo } from './config'
+import { apiFetch } from './auth'
 
 // ── Properties to fetch for every lead ───────────────────────────────────────
 const LEAD_PROPS = [
@@ -68,7 +69,7 @@ function _parseHsError(bodyText: string): string {
 // Any non-2xx response logs the full body immediately — callers don't need to.
 async function hsProxy(method: string, path: string, body?: unknown): Promise<Response> {
   const label = `[hs] ${method} ${path}`
-  const res = await fetch('/api/hs-write', {
+  const res = await apiFetch('/api/hs-write', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, path, body }),

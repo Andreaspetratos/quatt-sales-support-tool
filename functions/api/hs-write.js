@@ -4,6 +4,9 @@
  * Body: { method?: string, path: string, body?: object }
  * method defaults to 'PATCH' for backward compat with existing callers.
  *
+ * Callers must be signed in, and only HubSpot endpoints on the allowlist in
+ * _middleware.js get through — see there.
+ *
  * All requests and errors are logged here (visible in Cloudflare dashboard → Functions → Logs).
  * The browser-side hsProxy() in lib/hubspot.ts also logs all non-2xx responses to the console.
  */
@@ -20,8 +23,12 @@ export async function onRequestPost(context) {
       })
     }
 
-    const method = req.method || 'PATCH'
-    const url = 'https://api.hubapi.com' + req.path
+    const method = String(req.method || 'PATCH').toUpperCase()
+    const url = new URL('https://api.hubapi.com' + req.path)
+    if (url.origin !== 'https://api.hubapi.com') {
+      return new Response(JSON.stringify({ error: 'Invalid path' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+    }
+    const who = context.data.user?.email || '?'
 
     const fetchOpts = {
       method,
@@ -34,7 +41,7 @@ export async function onRequestPost(context) {
       fetchOpts.body = JSON.stringify(req.body)
     }
 
-    console.log(`[proxy] → ${method} ${req.path}`)
+    console.log(`[proxy] → ${method} ${req.path} (${who})`)
 
     const hsRes = await fetch(url, fetchOpts)
     const data = await hsRes.text()

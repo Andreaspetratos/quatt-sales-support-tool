@@ -6,6 +6,7 @@ import { translate } from '@/lib/i18n'
 import { stageLabel } from '@/lib/config'
 import { searchAllLeads, fetchOwnerMap, fetchOneLead, SearchLeadsResult } from '@/lib/hubspot'
 import type { Lead } from '@/lib/types'
+import { apiFetch } from '@/lib/auth'
 
 export default function AllLeadsPanel() {
   const { state, setState } = useApp()
@@ -71,7 +72,7 @@ export default function AllLeadsPanel() {
     if (!ownerId) return
     setClaimingId(lead.id)
     try {
-      const res = await fetch('/api/hs-write', {
+      const res = await apiFetch('/api/hs-write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -4,6 +4,7 @@
  * POST /api/feedback  → appends a new feedback entry
  * PATCH /api/feedback → updates triage and/or status of one entry
  * DELETE /api/feedback → removes one entry ({ id })
+ * Everything but POST is admin-only (enforced in _middleware.js).
  */
 const STATUSES = ['open', 'in_progress', 'done', 'wont_do']
 
@@ -20,12 +21,13 @@ export async function onRequest(ctx) {
 
   if (method === 'POST') {
     const body = await ctx.request.json()
-    if (!body.message || !body.submittedBy) return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400 })
+    if (!body.message) return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400 })
     const existing = JSON.parse(await kv.get('feedbacks') ?? '[]')
     const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       message: String(body.message).slice(0, 2000),
-      submittedBy: String(body.submittedBy),
+      // From the verified sign-in, not the request body, so feedback can't be filed under someone else's name
+      submittedBy: ctx.data.user.email,
       submittedAt: new Date().toISOString(),
       triage: null,
     }

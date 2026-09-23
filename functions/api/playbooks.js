@@ -2,6 +2,7 @@
  * Shared playbook storage backed by Cloudflare KV.
  * GET  /api/playbooks        → returns current playbook array as JSON
  * PUT  /api/playbooks        → overwrites playbook array (admin UI calls this)
+ * GET needs a signed-in user; PUT needs an admin (enforced in _middleware.js).
  */
 export async function onRequest(ctx) {
   const method = ctx.request.method

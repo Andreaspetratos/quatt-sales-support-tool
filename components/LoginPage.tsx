@@ -7,8 +7,8 @@ import { saveLang } from '@/lib/storage'
 import { isDemo, CONFIG } from '@/lib/config'
 import { fetchLeads, lookupHubspotUserId, lookupHubspotOwnerId, fetchIsAdmin, fetchPortalId } from '@/lib/hubspot'
 import { showToast } from './Toast'
-
-const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.apps.googleusercontent.com'
+import { GOOGLE_CLIENT_ID } from '@/lib/access'
+import { startSession } from '@/lib/auth'
 
 export default function LoginPage() {
   const { state, setState } = useApp()
@@ -53,12 +53,19 @@ export default function LoginPage() {
         hubspotUserId: repConfig?.hubspotUserId || '', // will be overridden by dynamic lookup
         hubspotOwnerId: '',  // always resolved dynamically — NEVER seeded from config
       }
+      // The server verifies this token on every /api call (the email check above is
+      // only a friendly early message). startSession() puts the Google token in place
+      // right away, so the shared-data fetches triggered by setState below are signed
+      // in, and in the background swaps it for a longer-lived session token.
+      const sessionReady = startSession(response.credential)
+
       // Never use hardcoded owner ID — always resolve dynamically from HubSpot.
       // Chain: email → userId (Users API) → ownerId (Owners API) → leads
       // This is the only correct flow: owner ID and user ID are separate systems.
       setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, loading: true })
 
-      lookupHubspotUserId(email)
+      sessionReady
+        .then(() => lookupHubspotUserId(email))
         .then(userId => {
           if (userId) {
             setState(prev => ({

@@ -2,6 +2,7 @@
  * Shared scheduler storage backed by Cloudflare KV.
  * GET  /api/schedulers  → returns current scheduler array as JSON
  * PUT  /api/schedulers  → overwrites scheduler array (admin UI calls this)
+ * GET needs a signed-in user; PUT needs an admin (enforced in _middleware.js).
  */
 export async function onRequest(ctx) {
   const method = ctx.request.method
