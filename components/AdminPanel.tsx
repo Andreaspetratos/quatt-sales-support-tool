@@ -916,7 +916,7 @@ export default function AdminPanel() {
     const nb: Playbook = { id: uid(), name: '', productMatches: [], phases: [] }
     const updated = [nb, ...state.playbooks]
     setState({ playbooks: updated })
-    storeSharedPbs(updated).catch(e => console.error('[admin] save playbooks failed:', e))
+    storeSharedPbs(updated).catch(e => { console.error('[admin] save playbooks failed:', e); showToast('Opslaan mislukt — probeer opnieuw', 'error') })
     setSelectedPbId(nb.id)
   }
 
@@ -925,14 +925,16 @@ export default function AdminPanel() {
     const idx = all.findIndex(p => p.id === pb.id)
     if (idx >= 0) all[idx] = pb; else all.unshift(pb)
     setState({ playbooks: all })
-    storeSharedPbs(all).catch(e => console.error('[admin] save playbooks failed:', e))
-    showToast(t('toastSaved'), 'success')
+    // Only confirm once the server has it — a failed save used to show "Saved" anyway
+    storeSharedPbs(all)
+      .then(() => showToast(t('toastSaved'), 'success'))
+      .catch(e => { console.error('[admin] save playbooks failed:', e); showToast('Opslaan mislukt — probeer opnieuw', 'error') })
   }
 
   function deletePb(id: string) {
     const filtered = state.playbooks.filter(p => p.id !== id)
     setState({ playbooks: filtered })
-    storeSharedPbs(filtered).catch(e => console.error('[admin] save playbooks failed:', e))
+    storeSharedPbs(filtered).catch(e => { console.error('[admin] delete playbook failed:', e); showToast('Verwijderen mislukt — probeer opnieuw', 'error') })
     if (selectedPbId === id) setSelectedPbId(null)
   }
 
