@@ -17,18 +17,22 @@
  * X-Sync-Secret header equal to the SYNC_SECRET secret (same value on both
  * environments). Nothing else accepts it.
  *
- * Who may do what (ADMINS lives in lib/access.ts, shared with the frontend):
+ * Who may do what (lists live in lib/access.ts, shared with the frontend):
  *   - any signed-in @quatt.io user: everything not listed below
  *   - admins only: PUT playbooks/schedulers, GET/PATCH/DELETE feedback,
  *     POST triage-feedback, POST sync-from-prod
+ *   Admin = in ADMINS, or a member (primary or secondary team) of one of
+ *   ADMIN_TEAM_IDS in HubSpot, looked up with the portal's own token and
+ *   cached for ADMIN_CACHE_MS. If HubSpot can't be reached, only ADMINS pass.
  * /api/hs-write is further limited to the HubSpot endpoints the tool uses.
  */
-import { ADMINS, ALLOWED_DOMAIN, GOOGLE_CLIENT_ID } from '../../lib/access'
+import { ADMINS, ADMIN_TEAM_IDS, ALLOWED_DOMAIN, GOOGLE_CLIENT_ID } from '../../lib/access'
 
 const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs'
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com']
 const CLOCK_SKEW_S = 60
 export const SESSION_TTL_S = 12 * 60 * 60
+const ADMIN_CACHE_MS = 5 * 60 * 1000
 
 // Requests that X-Sync-Secret may authenticate (method + exact path).
 const SYNC_READABLE = new Set(['GET /api/playbooks', 'GET /api/schedulers', 'GET /api/feedback'])
@@ -75,14 +79,16 @@ export async function onRequest(ctx) {
     console.warn(`[auth] ✗ ${method} ${path}: ${e.message}`)
     return deny(401, 'Session expired or invalid — please sign in again')
   }
-  user.isAdmin = ADMINS.includes(user.email)
   ctx.data.user = user
 
   // POST /api/session (functions/api/session.js) mints a session token from a Google
   // ID token. Only a Google token may start one, so a session can't renew itself forever.
   if (path === '/api/session' && user.via !== 'google') return deny(400, 'Sign in with Google to start a session')
 
-  if (!user.isAdmin && ADMIN_ONLY.some(([m, p]) => p === path && (m === '*' || m === method))) {
+  // The HubSpot team lookup only runs for admin-only calls (and session start)
+  const needsAdmin = ADMIN_ONLY.some(([m, p]) => p === path && (m === '*' || m === method))
+  user.isAdmin = (needsAdmin || path === '/api/session') ? await isAdmin(user.email, env) : false
+  if (needsAdmin && !user.isAdmin) {
     console.warn(`[auth] ✗ ${user.email} is not an admin: ${method} ${path}`)
     return deny(403, 'Admins only')
   }
@@ -98,6 +104,39 @@ export async function onRequest(ctx) {
   }
 
   return ctx.next()
+}
+
+// ── Admin check ───────────────────────────────────────────────────────────────
+const adminCache = new Map() // email → { isAdmin, until }
+
+export async function isAdmin(email, env) {
+  if (ADMINS.includes(email)) return true
+  const hit = adminCache.get(email)
+  if (hit && hit.until > Date.now()) return hit.isAdmin
+  const token = env.HUBSPOT_TOKEN_PROD || env.HUBSPOT_TOKEN
+  if (!token) return false
+  try {
+    const res = await fetch('https://api.hubapi.com/crm/v3/objects/users/search', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
+        properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams'],
+        limit: 1,
+      }),
+    })
+    if (!res.ok) throw new Error('HubSpot users search HTTP ' + res.status)
+    const p = (await res.json()).results?.[0]?.properties || {}
+    // Primary team, plus secondary teams as a ';'-joined string — same parsing as fetchIsAdmin()
+    const teams = [p.hubspot_team_id || '', ...(p.hs_user_secondary_teams || '').split(';')].map(t => t.trim()).filter(Boolean)
+    const result = teams.some(t => ADMIN_TEAM_IDS.includes(t))
+    adminCache.set(email, { isAdmin: result, until: Date.now() + ADMIN_CACHE_MS })
+    return result
+  } catch (e) {
+    // Fail closed, and don't cache: the next call tries HubSpot again
+    console.error(`[auth] admin team lookup failed for ${email}:`, String(e))
+    return false
+  }
 }
 
 // ── HubSpot allowlist ─────────────────────────────────────────────────────────

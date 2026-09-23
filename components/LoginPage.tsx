@@ -72,7 +72,8 @@ export default function LoginPage() {
               currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
             }))
             // Check admin team membership in parallel
-            fetchIsAdmin(userId).then(isAdmin => setState({ isAdmin }))
+            // Same rule as the server: HubSpot admin team, or listed in ADMINS (lib/access.ts)
+            fetchIsAdmin(userId).then(isAdmin => setState({ isAdmin: isAdmin || CONFIG.ADMINS.includes(email.toLowerCase()) }))
             fetchPortalId().then(id => { if (id) setState({ hubspotPortalId: id }) })
           }
           return lookupHubspotOwnerId(email)

@@ -1,6 +1,7 @@
 import type { Lead, PerfData, PerfPeriodData } from './types'
 import { CONFIG, isDemo } from './config'
 import { apiFetch } from './auth'
+import { ADMIN_TEAM_IDS } from './access'
 
 // ── Properties to fetch for every lead ───────────────────────────────────────
 const LEAD_PROPS = [
@@ -425,7 +426,7 @@ export async function requestLeads(rep: { hubspotUserId: string; name: string })
 
 
 // ── Admin team check ──────────────────────────────────────────────────────────
-const ADMIN_TEAM_IDS = ['187118858', '187124885']
+// ADMIN_TEAM_IDS lives in lib/access.ts: the server-side middleware enforces the same list
 
 export async function fetchIsAdmin(userId: string): Promise<boolean> {
   if (isDemo() || !userId) return false

@@ -12,6 +12,14 @@ export const GOOGLE_CLIENT_ID = '389875784063-rg6aporjtdsb0trolriuqrp97d94rgi7.a
 // Only Google Workspace accounts of this domain can sign in.
 export const ALLOWED_DOMAIN = 'quatt.io'
 
-// Admin-only API writes (playbooks/schedulers PUT, feedback list/PATCH/DELETE,
-// AI triage, copy-from-production) are allowed for these emails only.
+// Admins: members of these HubSpot teams (primary or secondary team), plus the
+// ADMINS emails below. Admins get the admin panel, and only admins may make the
+// admin-only API calls (playbooks/schedulers PUT, feedback list/PATCH/DELETE,
+// AI triage, copy-from-production).
+export const ADMIN_TEAM_IDS: string[] = [
+  '187118858', // production portal: "Sales Support Tool Managers"
+  '187124885', // sandbox portal: the same team
+]
+
+// Always admin, even if the HubSpot team lookup fails. Keep this short.
 export const ADMINS: string[] = ['andreas@quatt.io']
