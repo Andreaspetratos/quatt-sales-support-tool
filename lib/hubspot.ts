@@ -4,7 +4,7 @@ import { apiFetch } from './auth'
 import { ADMIN_TEAM_IDS } from './access'
 
 // ── Properties to fetch for every lead ───────────────────────────────────────
-const LEAD_PROPS = [
+export const LEAD_PROPS = [
   'hs_lead_name',
   'hubspot_owner_id',
   'hs_pipeline',

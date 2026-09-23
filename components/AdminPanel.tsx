@@ -4,9 +4,11 @@ import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
 import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, updateFeedbackStatus, deleteFeedback, isProdSyncAvailable, syncFromProd, uid } from '@/lib/storage'
-import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
+import { fetchAllLeadProperties, fetchLeadPropertyOptions, LEAD_PROPS } from '@/lib/hubspot'
+import { CONFIG } from '@/lib/config'
+import { ADMIN_TEAM_IDS } from '@/lib/access'
 import { showToast } from './Toast'
-import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus } from '@/lib/types'
+import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus, Rep } from '@/lib/types'
 import { apiFetch } from '@/lib/auth'
 
 type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'diagnostics'
@@ -772,16 +774,22 @@ function SchedEditor({
 
 
 // ── HubSpot Diagnostics ────────────────────────────────────────────────────────
-type DiagResult = { label: string; ok: boolean; detail: string }
+type DiagStatus = 'ok' | 'warn' | 'fail'
+type DiagResult = { section: string; label: string; status: DiagStatus; detail: string }
 
-async function hsCall(method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; text: string }> {
+async function hsCall(method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; text: string; ms: number }> {
+  const t0 = Date.now()
   const res = await apiFetch('/api/hs-write', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, path, body }),
   })
   const text = await res.text()
-  return { ok: res.ok, status: res.status, text }
+  return { ok: res.ok, status: res.status, text, ms: Date.now() - t0 }
+}
+
+function parseJson(text: string): any {
+  try { return JSON.parse(text) } catch { return {} }
 }
 
 function parseHsErr(text: string): string {
@@ -799,7 +807,7 @@ function parseHsErr(text: string): string {
   } catch { return text.slice(0, 500) }
 }
 
-function HsDiagnostics({ ownerId }: { ownerId: string }) {
+function HsDiagnostics({ rep }: { rep: Rep | null }) {
   const [running, setRunning] = useState(false)
   const [results, setResults] = useState<DiagResult[]>([])
 
@@ -807,84 +815,265 @@ function HsDiagnostics({ ownerId }: { ownerId: string }) {
     setRunning(true)
     setResults([])
     const out: DiagResult[] = []
+    let section = ''
 
-    function add(label: string, ok: boolean, detail: string) {
-      out.push({ label, ok, detail })
+    function add(label: string, status: DiagStatus | boolean, detail: string) {
+      const s: DiagStatus = status === true ? 'ok' : status === false ? 'fail' : status
+      out.push({ section, label, status: s, detail })
       setResults([...out])
     }
+    const fail = (r: { status: number; text: string }) => `HTTP ${r.status}: ${parseHsErr(r.text)}`
 
-    // 1. Token / auth
-    const auth = await hsCall('GET', '/crm/v3/owners?limit=1')
-    add('Auth (token valid)', auth.ok, auth.ok ? `HTTP ${auth.status}` : parseHsErr(auth.text))
+    const ownerId = rep?.hubspotOwnerId || ''
+    const email = rep?.email || ''
 
-    // 2. Task schema — show required properties
-    const schema = await hsCall('GET', '/crm/v3/properties/tasks')
-    if (schema.ok) {
-      const props: any[] = JSON.parse(schema.text).results || []
-      const hasType = props.some((p: any) => p.name === 'hs_task_type')
-      const typeVals = props.find((p: any) => p.name === 'hs_task_type')?.options?.map((o: any) => o.value).join(', ') || '—'
-      const required = props.filter((p: any) => p.formField).map((p: any) => p.name)
-      add('Task schema readable', true, `${props.length} props. hs_task_type exists: ${hasType}. Valid values: ${typeVals}. Form-required: [${required.join(', ') || 'none'}]`)
-    } else {
-      add('Task schema readable', false, parseHsErr(schema.text))
-    }
+    try {
+      // ── Connection ──────────────────────────────────────────────────────────
+      section = 'Connection'
+      const auth = await hsCall('GET', '/crm/v3/owners?limit=1')
+      add('Auth (token valid)', auth.ok, auth.ok ? `HTTP ${auth.status} · ${auth.ms} ms` : fail(auth))
+      if (!auth.ok) return
 
-    // 3. Create — same properties as createHsTask() in lib/hubspot.ts.
-    // HubSpot requires hs_timestamp (the task's due date) on every task.
-    const create = await hsCall('POST', '/crm/v3/objects/tasks', {
-      properties: {
-        hs_task_subject: '[diag] test task',
-        hs_task_body: 'Sales Support Tool diagnostic — deleted automatically',
-        hs_task_status: 'NOT_STARTED',
-        hs_task_type: 'TODO',
-        hs_timestamp: String(Date.now() + 86400000),
-        hubspot_owner_id: ownerId,
-      },
-    })
-    const taskId: string | null = create.ok ? JSON.parse(create.text).id : null
-    add('Create task', create.ok, create.ok ? `id=${taskId}` : parseHsErr(create.text))
+      const me = await hsCall('GET', '/integrations/v1/me')
+      add('HubSpot portal', me.ok, me.ok ? `Portal ID ${parseJson(me.text).portalId ?? '?'} — check this is the portal you expect (sandbox vs production)` : fail(me))
 
-    if (taskId) {
-      // 4. Update — what completing a task does (completeHsTask)
-      const upd = await hsCall('PATCH', `/crm/v3/objects/tasks/${taskId}`, {
-        properties: { hs_task_status: 'COMPLETED' },
+      // ── Your account ────────────────────────────────────────────────────────
+      section = 'Your account'
+      const own = await hsCall('GET', `/crm/v3/owners?email=${encodeURIComponent(email)}&limit=1`)
+      const foundOwner = own.ok ? String(parseJson(own.text).results?.[0]?.id ?? '') : ''
+      if (!own.ok) add('Owner record', false, fail(own))
+      else if (!foundOwner) add('Owner record', false, `No HubSpot owner found for ${email} — this user can't own leads or tasks`)
+      else if (foundOwner !== ownerId) add('Owner record', 'warn', `HubSpot owner ${foundOwner}, but the tool is using ${ownerId || '(none)'} — sign out and in again`)
+      else add('Owner record', true, `Owner ${foundOwner}`)
+
+      const us = await hsCall('POST', '/crm/v3/objects/users/search', {
+        filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
+        properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams'],
+        limit: 1,
       })
-      add('Update task (mark completed)', upd.ok, upd.ok ? `HTTP ${upd.status}` : parseHsErr(upd.text))
-    }
+      const user = us.ok ? parseJson(us.text).results?.[0] : null
+      if (!us.ok) add('User record + teams', false, fail(us))
+      else if (!user) add('User record + teams', false, `No HubSpot user found for ${email} — "request leads" won't work`)
+      else {
+        const p = user.properties || {}
+        const teams = [p.hubspot_team_id || '', ...(p.hs_user_secondary_teams || '').split(';')].map((x: string) => x.trim()).filter(Boolean)
+        const adminTeam = teams.some((x: string) => ADMIN_TEAM_IDS.includes(x))
+        add('User record + teams', true, `User ${user.id}. Teams: [${teams.join(', ') || 'none'}]. In an admin team: ${adminTeam ? 'yes' : 'no'}`)
+      }
 
-    // 5. Association labels
-    const assoc = await hsCall('GET', '/crm/v4/associations/tasks/leads/labels')
-    add('Task→Lead association labels', assoc.ok,
-      assoc.ok ? `types: ${JSON.stringify(JSON.parse(assoc.text).results?.map((r: any) => `${r.typeId}:${r.label||'unlabeled'}`))}` : parseHsErr(assoc.text))
+      // ── Lead setup ──────────────────────────────────────────────────────────
+      section = 'Lead setup'
+      const lp = await hsCall('GET', '/crm/v3/properties/leads?limit=500')
+      if (lp.ok) {
+        const names = new Set<string>((parseJson(lp.text).results || []).map((p: any) => p.name))
+        const needed = Array.from(new Set([...LEAD_PROPS, ...Object.values(CONFIG.PROPS), 'personal_info___notes']))
+        const missing = needed.filter(n => !names.has(n))
+        add('Lead properties the tool uses', missing.length === 0,
+          missing.length ? `Missing in HubSpot (renamed or deleted?): ${missing.join(', ')}` : `All ${needed.length} properties exist`)
+      } else add('Lead properties the tool uses', false, fail(lp))
 
-    // 6. Delete — also cleans up the test task
-    if (taskId) {
-      const del = await hsCall('DELETE', `/crm/v3/objects/tasks/${taskId}`)
-      add('Delete task (cleanup)', del.ok,
-        del.ok ? `HTTP ${del.status}` : `${parseHsErr(del.text)} — delete task ${taskId} manually in HubSpot`)
+      const st = await hsCall('GET', '/crm/v3/properties/leads/hs_pipeline_stage')
+      if (st.ok) {
+        const opts = new Set<string>((parseJson(st.text).options || []).map((o: any) => String(o.value)))
+        const missing = Object.entries(CONFIG.STAGES).filter(([, id]) => !opts.has(id)).map(([k, id]) => `${k} (${id})`)
+        if (!opts.size) add('Pipeline stages', 'warn', 'HubSpot returned no stage list, so the stage IDs could not be checked')
+        else add('Pipeline stages', missing.length === 0,
+          missing.length ? `Stage IDs not found in HubSpot: ${missing.join(', ')}` : `All ${Object.keys(CONFIG.STAGES).length} stage IDs exist`)
+      } else add('Pipeline stages', false, fail(st))
+
+      const co = await hsCall('GET', `/crm/v3/properties/leads/${CONFIG.PROPS.callOutcome}`)
+      if (co.ok) {
+        const n = (parseJson(co.text).options || []).length
+        add('Call outcome options', n > 0 ? true : 'warn', n > 0 ? `${n} options` : 'No options defined — reps have nothing to pick')
+      } else add('Call outcome options', false, fail(co))
+
+      // ── Leads ───────────────────────────────────────────────────────────────
+      section = 'Leads'
+      let leadId: string | null = null
+      const mine = await hsCall('POST', '/crm/v3/objects/leads/search', {
+        filterGroups: [{ filters: [
+          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+          { propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID },
+          { propertyName: 'hs_pipeline_stage', operator: 'EQ', value: CONFIG.STAGES.MQL },
+        ] }],
+        properties: LEAD_PROPS,
+        sorts: [{ propertyName: 'screening_call_requested_at', direction: 'DESCENDING' }],
+        limit: 1,
+      })
+      if (mine.ok) {
+        const d = parseJson(mine.text)
+        leadId = d.results?.[0]?.id ?? null
+        add('Your board (MQL leads)', d.total > 0 ? true : 'warn', d.total > 0 ? `${d.total} leads · ${mine.ms} ms` : 'Search works, but you have no MQL leads assigned')
+      } else add('Your board (MQL leads)', false, fail(mine))
+
+      const all = await hsCall('POST', '/crm/v3/objects/leads/search', {
+        filterGroups: [{ filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: CONFIG.PIPELINE_ID }] }],
+        properties: ['hs_lead_name'],
+        limit: 1,
+      })
+      const anyLeadId: string | null = all.ok ? (parseJson(all.text).results?.[0]?.id ?? null) : null
+      add('Lead search (whole pipeline)', all.ok, all.ok ? `${parseJson(all.text).total ?? 0} leads in the pipeline · ${all.ms} ms` : fail(all))
+
+      // Read-only checks can use any lead; the task-link test below only uses one of yours.
+      const readId = leadId || anyLeadId
+      let contactEmail = ''
+      if (!readId) {
+        add('Open a lead', 'warn', 'Skipped — no lead found to read')
+      } else {
+        const one = await hsCall('GET', `/crm/v3/objects/leads/${readId}?properties=${LEAD_PROPS.join(',')}`)
+        add('Open a lead', one.ok, one.ok ? `Lead ${readId}` : fail(one))
+
+        const ca = await hsCall('GET', `/crm/v4/objects/leads/${readId}/associations/contacts?limit=1`)
+        const contactId = ca.ok ? parseJson(ca.text).results?.[0]?.toObjectId : null
+        if (!ca.ok) add('Lead → contact', false, fail(ca))
+        else if (!contactId) add('Lead → contact', 'warn', `Lead ${readId} has no contact linked`)
+        else {
+          const c = await hsCall('GET', `/crm/v3/objects/contacts/${contactId}?properties=firstname,lastname,email,phone`)
+          contactEmail = c.ok ? (parseJson(c.text).properties?.email || '') : ''
+          add('Lead → contact', c.ok, c.ok ? `Contact ${contactId}` : fail(c))
+        }
+
+        const da = await hsCall('GET', `/crm/v4/objects/leads/${readId}/associations/deals`)
+        add('Lead → deal', da.ok, da.ok ? `${(parseJson(da.text).results || []).length} deal(s) linked` : fail(da))
+      }
+
+      // ── Tasks ───────────────────────────────────────────────────────────────
+      section = 'Tasks'
+      const schema = await hsCall('GET', '/crm/v3/properties/tasks')
+      if (schema.ok) {
+        const props: any[] = parseJson(schema.text).results || []
+        const names = new Set(props.map(p => p.name))
+        const missing = ['hs_task_subject', 'hs_task_body', 'hs_task_status', 'hs_task_type', 'hs_timestamp', 'hubspot_owner_id'].filter(n => !names.has(n))
+        const typeVals = props.find(p => p.name === 'hs_task_type')?.options?.map((o: any) => o.value) || []
+        const typeOk = typeVals.includes('TODO')
+        add('Task properties', missing.length === 0 && typeOk,
+          missing.length ? `Missing: ${missing.join(', ')}` : typeOk ? `All task properties exist. Types: ${typeVals.join(', ')}` : `Task type TODO not allowed. Types: ${typeVals.join(', ')}`)
+      } else add('Task properties', false, fail(schema))
+
+      const ts = await hsCall('POST', '/crm/v3/objects/tasks/search', {
+        filterGroups: [{ filters: [
+          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+          { propertyName: 'hs_task_status', operator: 'NEQ', value: 'COMPLETED' },
+        ] }],
+        properties: ['hs_task_subject', 'hs_timestamp'],
+        sorts: [{ propertyName: 'hs_timestamp', direction: 'ASCENDING' }],
+        limit: 1,
+      })
+      add('Your open tasks', ts.ok, ts.ok ? `${parseJson(ts.text).total ?? 0} open · ${ts.ms} ms` : fail(ts))
+
+      const labels = await hsCall('GET', '/crm/v4/associations/tasks/leads/labels')
+      const types: Array<{ typeId: number; label?: string; category?: string }> = labels.ok ? (parseJson(labels.text).results || []) : []
+      const assocType = types.find(x => !x.label) ?? types[0]
+      add('Task → lead link type', labels.ok && !!assocType,
+        labels.ok ? (assocType ? `Type ${assocType.typeId}` : 'HubSpot returned no association types') : fail(labels))
+
+      // Same properties as createHsTask() in lib/hubspot.ts.
+      // HubSpot requires hs_timestamp (the task's due date) on every task.
+      const create = await hsCall('POST', '/crm/v3/objects/tasks', {
+        properties: {
+          hs_task_subject: '[diag] test task',
+          hs_task_body: 'Sales Support Tool diagnostic — deleted automatically',
+          hs_task_status: 'NOT_STARTED',
+          hs_task_type: 'TODO',
+          hs_timestamp: String(Date.now() + 86400000),
+          hubspot_owner_id: ownerId,
+        },
+      })
+      const taskId: string | null = create.ok ? (parseJson(create.text).id ?? null) : null
+      add('Create task', create.ok, create.ok ? `id=${taskId}` : fail(create))
+
+      if (taskId) {
+        // Link to one of your own leads only, so no other rep sees the test task
+        if (!leadId || !assocType) {
+          add('Link task to lead', 'warn', leadId ? 'Skipped — no link type' : 'Skipped — you have no lead on your board to link to')
+        } else {
+          const link = await hsCall('PUT', `/crm/v4/objects/tasks/${taskId}/associations/leads/${leadId}`,
+            [{ associationCategory: assocType.category ?? 'HUBSPOT_DEFINED', associationTypeId: assocType.typeId }])
+          add('Link task to lead', link.ok, link.ok ? `Linked to lead ${leadId}` : fail(link))
+
+          if (link.ok) {
+            const rb = await hsCall('POST', '/crm/v4/associations/tasks/leads/batch/read', { inputs: [{ id: taskId }] })
+            const linked = rb.ok && (parseJson(rb.text).results || [])
+              .some((r: any) => (r.to || []).some((t: any) => String(t.toObjectId) === String(leadId)))
+            add('Read task → lead link', linked, rb.ok ? (linked ? 'Task shows under the lead' : 'Link not returned — tasks may not show on the lead') : fail(rb))
+          }
+        }
+
+        const upd = await hsCall('PATCH', `/crm/v3/objects/tasks/${taskId}`, { properties: { hs_task_status: 'COMPLETED' } })
+        add('Complete task', upd.ok, upd.ok ? `HTTP ${upd.status}` : fail(upd))
+
+        const del = await hsCall('DELETE', `/crm/v3/objects/tasks/${taskId}`)
+        add('Delete task (cleanup)', del.ok, del.ok ? `HTTP ${del.status}` : `${fail(del)} — delete task ${taskId} manually in HubSpot`)
+      }
+
+      // ── Contact activity ────────────────────────────────────────────────────
+      section = 'Contact activity'
+      if (!contactEmail) {
+        add('Marketing emails', 'warn', 'Skipped — no contact email to look up')
+      } else {
+        const ev = await hsCall('GET', `/email/public/v1/events?recipient=${encodeURIComponent(contactEmail)}&limit=1`)
+        add('Marketing emails', ev.ok, ev.ok ? 'Email events readable' : fail(ev))
+      }
+      const cp = await hsCall('GET', '/communication-preferences/v3/definitions')
+      add('Subscription types', cp.ok, cp.ok ? `${(parseJson(cp.text).subscriptionDefinitions || []).length} subscription types` : fail(cp))
+
+      // ── Shared data (Cloudflare KV) ─────────────────────────────────────────
+      section = 'Shared data'
+      const stores = [
+        { label: 'Playbooks',  path: '/api/playbooks' },
+        { label: 'Schedulers', path: '/api/schedulers' },
+        { label: 'Feedback',   path: '/api/feedback' },
+      ]
+      for (const { label, path } of stores) {
+        const res = await apiFetch(path)
+        const text = await res.text()
+        const data = parseJson(text)
+        add(label, res.ok && Array.isArray(data),
+          res.ok ? (Array.isArray(data) ? `${data.length} stored` : `Unexpected response: ${text.slice(0, 200)}`) : `HTTP ${res.status}: ${text.slice(0, 200)}`)
+      }
+    } catch (e) {
+      add('Diagnostics stopped', false, e instanceof Error ? e.message : String(e))
+    } finally {
+      setRunning(false)
     }
-    setRunning(false)
+  }
+
+  const counts = { ok: 0, warn: 0, fail: 0 }
+  results.forEach(r => { counts[r.status]++ })
+  const style: Record<DiagStatus, { bg: string; bd: string; icon: string }> = {
+    ok:   { bg: 'var(--gn, #d1fae5)',     bd: 'var(--gn-bd, #6ee7b7)', icon: '✓' },
+    warn: { bg: 'var(--yl-bg, #fef3c7)',  bd: 'var(--yl-bd, #fcd34d)', icon: '!' },
+    fail: { bg: 'var(--rd-bg, #fee2e2)',  bd: 'var(--rd-bd, #fca5a5)', icon: '✗' },
   }
 
   return (
     <div style={{ padding: 20 }}>
       <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--gm)' }}>
-        Tests every HubSpot operation the tool uses. Runs directly from this browser — no DevTools needed.
-        Creates one test task, then deletes it again.
+        Tests every HubSpot operation the tool uses, plus its shared data. Runs directly from this browser — no DevTools needed.
+        Creates one test task (linked to one of your own leads), then deletes it again.
       </p>
       <button className="btn btn-pr" onClick={runTests} disabled={running}>
         {running ? '⏳ Running…' : '▶ Run HubSpot diagnostics'}
       </button>
       {results.length > 0 && (
-        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p style={{ marginTop: 16, fontSize: 13, fontWeight: 600, color: 'var(--ct)' }}>
+          {counts.ok} passed · {counts.warn} warnings · {counts.fail} failed{running ? ' · running…' : ''}
+        </p>
+      )}
+      {results.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {results.map((r, i) => (
-            <div key={i} style={{
-              padding: '8px 12px', borderRadius: 8, fontSize: 12,
-              background: r.ok ? 'var(--gn, #d1fae5)' : 'var(--rd-bg, #fee2e2)',
-              border: `1px solid ${r.ok ? 'var(--gn-bd, #6ee7b7)' : 'var(--rd-bd, #fca5a5)'}`,
-            }}>
-              <span style={{ fontWeight: 600 }}>{r.ok ? '✓' : '✗'} {r.label}</span>
-              <div style={{ marginTop: 3, color: 'var(--tx)', opacity: 0.8, wordBreak: 'break-all' }}>{r.detail}</div>
+            <div key={i}>
+              {r.section !== results[i - 1]?.section && (
+                <div style={{ margin: '12px 0 6px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--cs)' }}>{r.section}</div>
+              )}
+              <div style={{
+                padding: '8px 12px', borderRadius: 8, fontSize: 12,
+                background: style[r.status].bg, border: `1px solid ${style[r.status].bd}`,
+              }}>
+                <span style={{ fontWeight: 600 }}>{style[r.status].icon} {r.label}</span>
+                <div style={{ marginTop: 3, color: 'var(--tx)', opacity: 0.8, wordBreak: 'break-all' }}>{r.detail}</div>
+              </div>
             </div>
           ))}
         </div>
@@ -1065,7 +1254,7 @@ export default function AdminPanel() {
         )}
         {tab === 'diagnostics' && (
           <div className="adm-scroll">
-            <HsDiagnostics ownerId={state.currentRep?.hubspotOwnerId || ''} />
+            <HsDiagnostics rep={state.currentRep ?? null} />
           </div>
         )}
       </div>
