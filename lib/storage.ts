@@ -216,6 +216,33 @@ export async function updateFeedbackStatus(id: string, status: import('./types')
   return data.item
 }
 
+export async function deleteFeedback(id: string): Promise<void> {
+  const res = await fetch('/api/feedback', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+}
+
+// ── Sandbox-only: copy production KV data into sandbox (/api/sync-from-prod) ───
+export async function isProdSyncAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/sync-from-prod')
+    if (!res.ok) return false
+    return !!(await res.json()).available
+  } catch {
+    return false
+  }
+}
+
+export async function syncFromProd(): Promise<Record<string, number>> {
+  const res = await fetch('/api/sync-from-prod', { method: 'POST' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status)
+  return data.counts
+}
+
 export async function triageFeedback(id: string, message: string): Promise<string> {
   const res = await fetch('/api/triage-feedback', {
     method: 'POST',

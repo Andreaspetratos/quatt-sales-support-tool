@@ -2,17 +2,21 @@ name = "quatt-sales-support-tool"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "./out"
 
+# Production KV — production ONLY. Never re-declare this ID under [env.preview]:
+# sandbox tests leaked into production data when preview shared it (2026-09-23).
 [[kv_namespaces]]
 binding = "PLAYBOOKS_KV"
 id = "313049fad0e849eba6b68dca3fec9131"
 
 [vars]
 NEXT_PUBLIC_LTO_STAGE_ID = "6021605583"
+APP_ENV = "production"
 
 [env.preview.vars]
 NEXT_PUBLIC_LTO_STAGE_ID = "6020017392"
+APP_ENV = "sandbox"
+# One-way prod → sandbox copy (/api/sync-from-prod) reads production over these public GET endpoints
+PROD_ORIGIN = "https://quatt-sales-support-tool.pages.dev"
 
-# kv_namespaces is non-inheritable: once [env.preview] exists, preview gets NO KV
-# unless it's re-declared here. Preview must NEVER bind the production namespace
-# (313049fa…) — sandbox tests leaked into production when it did (2026-09-23).
+# kv_namespaces is non-inheritable: preview only gets the bindings declared here.
 # Sandbox KV namespace: pending — to be created and bound here.

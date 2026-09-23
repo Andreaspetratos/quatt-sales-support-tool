@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateMap, translateArr } from '@/lib/i18n'
-import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, updateFeedbackStatus, uid } from '@/lib/storage'
+import { storeSharedPbs, storeSharedScheds, fetchFeedbacks, updateFeedbackStatus, deleteFeedback, isProdSyncAvailable, syncFromProd, uid } from '@/lib/storage'
 import { fetchAllLeadProperties, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus } from '@/lib/types'
@@ -974,6 +974,7 @@ export default function AdminPanel() {
       >
         ← {t('backToSales')}
       </button>
+      <SandboxSyncBanner lang={lang} />
       <div className="adm-nav">
         <button className={`adm-tab ${tab === 'playbooks' ? 'on' : ''}`} onClick={() => setTab('playbooks')}>{t('adPb')}</button>
         <button className={`adm-tab ${tab === 'schedulers' ? 'on' : ''}`} onClick={() => setTab('schedulers')}>{t('adSch')}</button>
@@ -1127,6 +1128,45 @@ function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v
   )
 }
 
+// ── SandboxSyncBanner — sandbox only: copy production KV data into sandbox (one-way) ─────
+function SandboxSyncBanner({ lang }: { lang: 'nl' | 'en' }) {
+  const [available, setAvailable] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+
+  useEffect(() => { isProdSyncAvailable().then(setAvailable) }, [])
+  if (!available) return null
+
+  async function sync() {
+    const msg = lang === 'nl'
+      ? 'Productiedata (playbooks, schedulers, feedback) naar sandbox kopiëren? Alle sandbox-data wordt overschreven. Productie verandert niet.'
+      : 'Copy production data (playbooks, schedulers, feedback) into sandbox? All sandbox data will be overwritten. Production is not changed.'
+    if (!confirm(msg)) return
+    setSyncing(true)
+    try {
+      const counts = await syncFromProd()
+      showToast(`✓ Copied: ${counts.playbooks} playbooks, ${counts.schedulers} schedulers, ${counts.feedbacks} feedback`, 'success')
+      setTimeout(() => window.location.reload(), 800)   // reload so app state picks up the new playbooks/schedulers
+    } catch (e) {
+      console.error('[admin] sync from prod failed:', e)
+      showToast((lang === 'nl' ? 'Kopiëren mislukt: ' : 'Copy failed: ') + String((e as Error).message || e), 'error')
+      setSyncing(false)
+    }
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8, padding: '8px 12px',
+      borderRadius: 10, border: '1.5px solid var(--or)', background: 'rgba(247,102,34,.08)', fontSize: 12, color: 'var(--ct)',
+    }}>
+      <strong style={{ color: 'var(--or)' }}>SANDBOX</strong>
+      <span>{lang === 'nl' ? 'Aparte opslag — wijzigingen hier bereiken productie niet.' : 'Separate storage — changes here never reach production.'}</span>
+      <button className="btn btn-xs btn-sc" onClick={sync} disabled={syncing} style={{ marginLeft: 'auto' }}>
+        {syncing ? '⏳…' : (lang === 'nl' ? '⬇ Productiedata kopiëren' : '⬇ Copy production data')}
+      </button>
+    </div>
+  )
+}
+
 // ── FeedbackTab — admin view of submitted feedback with status, filter and multi-select copy ─────
 const FEEDBACK_STATUSES: FeedbackStatus[] = ['open', 'in_progress', 'done', 'wont_do']
 const FEEDBACK_STATUS_LABEL: Record<'nl' | 'en', Record<FeedbackStatus, string>> = {
@@ -1177,6 +1217,26 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
     } catch (e) {
       console.error('[admin] update feedback status failed:', e)
       showToast(lang === 'nl' ? 'Status opslaan mislukt — probeer opnieuw' : 'Saving status failed — try again', 'error')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  async function remove(f: Feedback) {
+    const preview = f.message.length > 80 ? f.message.slice(0, 80) + '…' : f.message
+    const msg = lang === 'nl'
+      ? `Deze feedback definitief verwijderen?\n\n"${preview}"`
+      : `Permanently delete this feedback?\n\n"${preview}"`
+    if (savingId || !confirm(msg)) return
+    setSavingId(f.id)
+    try {
+      await deleteFeedback(f.id)
+      setFeedbacks(prev => prev.filter(x => x.id !== f.id))
+      setSelected(prev => { const next = new Set(prev); next.delete(f.id); return next })
+      showToast(lang === 'nl' ? '✓ Verwijderd' : '✓ Deleted', 'success')
+    } catch (e) {
+      console.error('[admin] delete feedback failed:', e)
+      showToast(lang === 'nl' ? 'Verwijderen mislukt — probeer opnieuw' : 'Delete failed — try again', 'error')
     } finally {
       setSavingId(null)
     }
@@ -1325,6 +1385,15 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
                     {labels[s]}
                   </button>
                 ))}
+                <button
+                  className="btn btn-dn btn-xs"
+                  disabled={savingId === f.id}
+                  onClick={() => remove(f)}
+                  style={{ marginLeft: 'auto', fontSize: 11 }}
+                  title={lang === 'nl' ? 'Verwijderen' : 'Delete'}
+                >
+                  🗑 {lang === 'nl' ? 'Verwijderen' : 'Delete'}
+                </button>
               </div>
             </div>
           </div>

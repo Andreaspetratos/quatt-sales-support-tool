@@ -3,6 +3,7 @@
  * GET  /api/feedback  → returns all feedback entries
  * POST /api/feedback  → appends a new feedback entry
  * PATCH /api/feedback → updates triage and/or status of one entry
+ * DELETE /api/feedback → removes one entry ({ id })
  */
 const STATUSES = ['open', 'in_progress', 'done', 'wont_do']
 
@@ -49,6 +50,15 @@ export async function onRequest(ctx) {
     }
     await kv.put('feedbacks', JSON.stringify(existing))
     return Response.json({ ok: true, item })
+  }
+
+  if (method === 'DELETE') {
+    const { id } = await ctx.request.json()
+    const existing = JSON.parse(await kv.get('feedbacks') ?? '[]')
+    const remaining = existing.filter(f => f.id !== id)
+    if (remaining.length === existing.length) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })
+    await kv.put('feedbacks', JSON.stringify(remaining))
+    return Response.json({ ok: true })
   }
 
   return new Response('Method not allowed', { status: 405 })
