@@ -26,4 +26,8 @@ APP_ENV = "sandbox"
 PROD_ORIGIN = "https://quatt-sales-support-tool.pages.dev"
 
 # kv_namespaces is non-inheritable: preview only gets the bindings declared here.
-# Sandbox KV namespace: pending — to be created and bound here.
+# Sandbox-only namespace "qst-sandbox-kv" (created 2026-09-23). Fill it from production
+# with the admin panel's "Copy production data" button (/api/sync-from-prod, one-way).
+[[env.preview.kv_namespaces]]
+binding = "PLAYBOOKS_KV"
+id = "a305e676e03d402092bbd411568ea0e1"
