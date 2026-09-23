@@ -13,7 +13,6 @@ NEXT_PUBLIC_LTO_STAGE_ID = "6021605583"
 NEXT_PUBLIC_LTO_STAGE_ID = "6020017392"
 
 # kv_namespaces is non-inheritable: once [env.preview] exists, preview gets NO KV
-# unless it's re-declared here. Same namespace as production (shared data, by choice).
-[[env.preview.kv_namespaces]]
-binding = "PLAYBOOKS_KV"
-id = "313049fad0e849eba6b68dca3fec9131"
+# unless it's re-declared here. Preview must NEVER bind the production namespace
+# (313049fa…) — sandbox tests leaked into production when it did (2026-09-23).
+# Sandbox KV namespace: pending — to be created and bound here.
