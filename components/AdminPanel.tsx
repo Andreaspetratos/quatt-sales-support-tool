@@ -829,43 +829,39 @@ function HsDiagnostics({ ownerId }: { ownerId: string }) {
       add('Task schema readable', false, parseHsErr(schema.text))
     }
 
-    // 3. Minimal task (subject + status only)
-    const due = String(Date.now() + 86400000)
-    const t1 = await hsCall('POST', '/crm/v3/objects/tasks', {
-      properties: { hs_task_subject: '[diag] minimal', hs_task_status: 'NOT_STARTED' },
-    })
-    const t1id = t1.ok ? JSON.parse(t1.text).id : null
-    add('Create: minimal (subject+status)', t1.ok, t1.ok ? `id=${t1id}` : parseHsErr(t1.text))
-
-    // 4. + hs_task_type TODO
-    const t2 = await hsCall('POST', '/crm/v3/objects/tasks', {
-      properties: { hs_task_subject: '[diag] +type', hs_task_status: 'NOT_STARTED', hs_task_type: 'TODO' },
-    })
-    const t2id = t2.ok ? JSON.parse(t2.text).id : null
-    add('Create: +hs_task_type TODO', t2.ok, t2.ok ? `id=${t2id}` : parseHsErr(t2.text))
-
-    // 5. Full tool payload
-    const t3 = await hsCall('POST', '/crm/v3/objects/tasks', {
+    // 3. Create — same properties as createHsTask() in lib/hubspot.ts.
+    // HubSpot requires hs_timestamp (the task's due date) on every task.
+    const create = await hsCall('POST', '/crm/v3/objects/tasks', {
       properties: {
-        hs_task_subject: '[diag] full payload',
-        hs_task_body: 'diagnostic test',
+        hs_task_subject: '[diag] test task',
+        hs_task_body: 'Sales Support Tool diagnostic — deleted automatically',
         hs_task_status: 'NOT_STARTED',
         hs_task_type: 'TODO',
+        hs_timestamp: String(Date.now() + 86400000),
         hubspot_owner_id: ownerId,
-        hs_task_due_date: due,
       },
     })
-    const t3id = t3.ok ? JSON.parse(t3.text).id : null
-    add('Create: full tool payload', t3.ok, t3.ok ? `id=${t3id}` : parseHsErr(t3.text))
+    const taskId: string | null = create.ok ? JSON.parse(create.text).id : null
+    add('Create task', create.ok, create.ok ? `id=${taskId}` : parseHsErr(create.text))
 
-    // 6. Association labels
+    if (taskId) {
+      // 4. Update — what completing a task does (completeHsTask)
+      const upd = await hsCall('PATCH', `/crm/v3/objects/tasks/${taskId}`, {
+        properties: { hs_task_status: 'COMPLETED' },
+      })
+      add('Update task (mark completed)', upd.ok, upd.ok ? `HTTP ${upd.status}` : parseHsErr(upd.text))
+    }
+
+    // 5. Association labels
     const assoc = await hsCall('GET', '/crm/v4/associations/tasks/leads/labels')
     add('Task→Lead association labels', assoc.ok,
       assoc.ok ? `types: ${JSON.stringify(JSON.parse(assoc.text).results?.map((r: any) => `${r.typeId}:${r.label||'unlabeled'}`))}` : parseHsErr(assoc.text))
 
-    const created = [t1id, t2id, t3id].filter(Boolean)
-    if (created.length) {
-      add('⚠ Cleanup needed', false, `Delete these test tasks from HubSpot: ${created.join(', ')}`)
+    // 6. Delete — also cleans up the test task
+    if (taskId) {
+      const del = await hsCall('DELETE', `/crm/v3/objects/tasks/${taskId}`)
+      add('Delete task (cleanup)', del.ok,
+        del.ok ? `HTTP ${del.status}` : `${parseHsErr(del.text)} — delete task ${taskId} manually in HubSpot`)
     }
     setRunning(false)
   }
@@ -874,7 +870,7 @@ function HsDiagnostics({ ownerId }: { ownerId: string }) {
     <div style={{ padding: 20 }}>
       <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--gm)' }}>
         Tests every HubSpot operation the tool uses. Runs directly from this browser — no DevTools needed.
-        Test tasks created here must be deleted manually from HubSpot.
+        Creates one test task, then deletes it again.
       </p>
       <button className="btn btn-pr" onClick={runTests} disabled={running}>
         {running ? '⏳ Running…' : '▶ Run HubSpot diagnostics'}
