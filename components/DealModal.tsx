@@ -610,7 +610,9 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
   const [selected, setSelected] = useState<string>('')
 
   useEffect(() => {
-    fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(opts => {
+    fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(all => {
+      // Long Term Opportunity has its own button, so it's not offered as a Lost reason
+      const opts = all.filter(o => o.label.trim().toLowerCase() !== 'long term opportunity')
       if (opts.length > 0) {
         setOptions(opts)
       } else {
