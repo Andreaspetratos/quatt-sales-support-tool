@@ -4,8 +4,10 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals } from '@/lib/hubspot'
-import type { Activity, ActivityKind, ActivityGroups, DirectDeal } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError } from '@/lib/hubspot'
+import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails } from '@/lib/hubspot'
+import { PHONE_COUNTRIES, phoneCountryOf, normalizePhone } from '@/lib/phone'
+import type { PhoneCountry } from '@/lib/phone'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -375,28 +377,50 @@ function AddressCheckBadge({ status, lang }: { status: string; lang: 'nl' | 'en'
   )
 }
 
-function EditableField({ label, value, onSave, highlight = false, disabled = false }: { label: string; value: string; onSave: (v: string) => Promise<void>; highlight?: boolean; disabled?: boolean }) {
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+/** Red line under a field whose input was refused. */
+function FieldError({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 11, color: 'var(--rd)', paddingLeft: 93 }}>{children}</div>
+}
+
+function EditableField({ label, value, onSave, highlight = false, disabled = false, inputType = 'text', validate }: {
+  label: string; value: string; onSave: (v: string) => Promise<void>; highlight?: boolean; disabled?: boolean
+  inputType?: string
+  /** Returns why the input is refused; the field stays open until it's fixed or Esc'd. */
+  validate?: (v: string) => string | null
+}) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setDraft(value) }, [value])
   useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
 
+  // Enter and the blur that follows must not both save
+  const savingRef = useRef(false)
+
   async function save() {
+    if (savingRef.current) return
     const trimmed = draft.trim()
-    if (trimmed === value) { setEditing(false); return }
+    if (trimmed === value) { setEditing(false); setError(null); return }
+    const problem = validate?.(trimmed)
+    if (problem) { setError(problem); return }
+    setError(null)
+    savingRef.current = true
     setSaving(true)
-    try { await onSave(trimmed) } finally { setSaving(false); setEditing(false) }
+    try { await onSave(trimmed) } finally { savingRef.current = false; setSaving(false); setEditing(false) }
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') { e.preventDefault(); save() }
-    if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+    if (e.key === 'Escape') { setDraft(value); setEditing(false); setError(null) }
   }
 
   return (
+    <>
     <div
       className="kv"
       style={{
@@ -416,34 +440,135 @@ function EditableField({ label, value, onSave, highlight = false, disabled = fal
       {editing && !disabled ? (
         <input
           ref={inputRef}
+          type={inputType}
           value={draft}
-          onChange={e => setDraft(e.target.value)}
+          onChange={e => { setDraft(e.target.value); setError(null) }}
           onBlur={save}
           onKeyDown={onKeyDown}
           disabled={saving}
-          style={{
-            flex: 1, fontSize: 12, padding: '2px 6px', borderRadius: 5,
-            border: '1px solid var(--cp)', background: 'var(--bg)', color: 'var(--tx)',
-            outline: 'none', minWidth: 0,
-          }}
+          style={{ ...FIELD_INPUT_STYLE, flex: 1, borderColor: error ? 'var(--rd)' : 'var(--cp)' }}
         />
       ) : (
-        <span
-          className="vv"
-          title={disabled ? undefined : 'Click to edit'}
-          onClick={() => { if (!disabled) setEditing(true) }}
-          style={{ cursor: disabled ? 'default' : 'text', flex: 1 }}
-        >
-          {value || <span style={{ color: 'var(--cs)', fontStyle: 'italic' }}>--</span>}
-          {!disabled && (
-            <>
-              {' '}
-              <span style={{ fontSize: 10, color: 'var(--cs)', opacity: 0.7 }}>✎</span>
-            </>
-          )}
-        </span>
+        <FieldValue value={value} disabled={disabled} onEdit={() => setEditing(true)} />
       )}
     </div>
+    {editing && error && <FieldError>{error}</FieldError>}
+    </>
+  )
+}
+
+const FIELD_INPUT_STYLE: React.CSSProperties = {
+  fontSize: 12, padding: '2px 6px', borderRadius: 5,
+  border: '1px solid var(--cp)', background: 'var(--bg)', color: 'var(--tx)',
+  outline: 'none', minWidth: 0,
+}
+
+/** A field's value when not editing: click to edit, ✎ shows that you can. */
+function FieldValue({ value, disabled, onEdit }: { value: string; disabled: boolean; onEdit: () => void }) {
+  return (
+    <span
+      className="vv"
+      title={disabled ? undefined : 'Click to edit'}
+      onClick={() => { if (!disabled) onEdit() }}
+      style={{ cursor: disabled ? 'default' : 'text', flex: 1 }}
+    >
+      {value || <span style={{ color: 'var(--cs)', fontStyle: 'italic' }}>--</span>}
+      {!disabled && (
+        <>
+          {' '}
+          <span style={{ fontSize: 10, color: 'var(--cs)', opacity: 0.7 }}>✎</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Phone number with a country picker. The number is saved in E.164 (+31…);
+ * the picker only matters when the rep types it the national way (06…).
+ * Saves on Enter or when focus leaves both the picker and the input.
+ */
+function PhoneField({ label, value, onSave, disabled = false, lang }: {
+  label: string; value: string; onSave: (v: string) => Promise<void>; disabled?: boolean; lang: 'nl' | 'en'
+}) {
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [country, setCountry] = useState<PhoneCountry>(phoneCountryOf(value))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setDraft(value); setCountry(phoneCountryOf(value)) }, [value])
+  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+
+  function cancel() { setDraft(value); setCountry(phoneCountryOf(value)); setEditing(false); setError(null) }
+
+  // Enter and the blur that follows must not both save
+  const savingRef = useRef(false)
+
+  async function save() {
+    if (savingRef.current) return
+    const typed = draft.trim()
+    if (typed === value) { setEditing(false); setError(null); return }
+    if (!typed) { setError(t('phoneRequired')); return }
+    savingRef.current = true
+    setSaving(true)
+    try {
+      const e164 = await normalizePhone(typed, country)
+      if (!e164) { setError(t('phoneInvalid')); return }
+      setError(null)
+      if (e164 !== value) await onSave(e164)
+      setDraft(e164)
+      setEditing(false)
+    } finally { savingRef.current = false; setSaving(false) }
+  }
+
+  if (!editing || disabled) {
+    return (
+      <div className="kv" style={{ alignItems: 'center' }}>
+        <span className="kk" style={{ flexShrink: 0 }}>{label}</span>
+        <FieldValue value={value} disabled={disabled} onEdit={() => setEditing(true)} />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div
+        className="kv"
+        style={{ alignItems: 'center' }}
+        // Moving from the picker to the input (or back) is still editing
+        onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) save() }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); save() }
+          if (e.key === 'Escape') cancel()
+        }}
+      >
+        <span className="kk" style={{ flexShrink: 0 }}>{label}</span>
+        <div style={{ display: 'flex', gap: 4, flex: 1, minWidth: 0 }}>
+          <select
+            value={country}
+            onChange={e => { setCountry(e.target.value as PhoneCountry); setError(null) }}
+            disabled={saving}
+            aria-label={t('phoneCountry')}
+            style={{ ...FIELD_INPUT_STYLE, flexShrink: 0, padding: '2px 2px' }}
+          >
+            {PHONE_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code} +{c.dial}</option>)}
+          </select>
+          <input
+            ref={inputRef}
+            type="tel"
+            value={draft}
+            placeholder="06 12345678"
+            onChange={e => { setDraft(e.target.value); setError(null) }}
+            disabled={saving}
+            style={{ ...FIELD_INPUT_STYLE, flex: 1, borderColor: error ? 'var(--rd)' : 'var(--cp)' }}
+          />
+        </div>
+      </div>
+      {error && <FieldError>{error}</FieldError>}
+    </>
   )
 }
 
@@ -811,6 +936,11 @@ function SchedModal({ deal, lang, onBooked }: { deal: Deal; lang: 'nl' | 'en'; o
             ? <div className="wb">⚙️ {t('noSchedCfg')}</div>
             : (
               <>
+                {/* HubSpot's meetings form matches contacts on email: a changed
+                    email there books onto a new, duplicate contact. */}
+                <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '6px 10px', marginBottom: 10, background: 'rgba(247,102,34,0.10)', fontSize: 12, color: 'var(--ct)' }}>
+                  ⚠ {t('schedEmailHint')}
+                </div>
                 <a href={schedUrl} target="_blank" rel="noreferrer" className="btn btn-pr btn-md btn-full" style={{ textDecoration: 'none' }}>
                   {t('openSched')}
                 </a>
@@ -988,6 +1118,26 @@ export default function DealModal() {
       })
     return () => { stale = true }
   }, [state.selectedId, checkPartner, checkContactId])
+
+  // The contact's own email and phone, editable under Lead info. Read live
+  // because the lead's copies can be stale. emailTaken holds the id of another
+  // contact that already has the email the rep tried to save.
+  const [contact, setContact] = useState<{ status: 'off' | 'loading' | 'done' | 'error' } & ContactDetails>(
+    { status: 'off', email: '', phone: '' })
+  const [emailTaken, setEmailTaken] = useState<string | null>(null)  // '' = taken, id unknown
+  useEffect(() => {
+    setEmailTaken(null)
+    if (!checkContactId) { setContact({ status: 'off', email: '', phone: '' }); return }
+    let stale = false
+    setContact({ status: 'loading', email: '', phone: '' })
+    fetchContactDetails(checkContactId)
+      .then(c => { if (!stale) setContact({ status: 'done', ...c }) })
+      .catch(e => {
+        console.error('[hs] contact details failed:', checkContactId, e)
+        if (!stale) setContact({ status: 'error', email: '', phone: '' })
+      })
+    return () => { stale = true }
+  }, [checkContactId])
 
   // ── Deal-specific setup (after hooks) ──────────────────────────────────────
   const deal = selLead
@@ -1193,6 +1343,38 @@ export default function DealModal() {
   // locked. Re-derived from `p` on every render like `isChillOnly` above.
   const isSQL = p.hs_pipeline_stage === CONFIG.STAGES.SQL
 
+  // Until the contact has loaded (or when it can't be), show the lead's copies
+  // read-only. The header and Call button follow the contact once it's in.
+  const contactReady = contact.status === 'done'
+  const shownEmail = contactReady ? contact.email : (p['contact_email'] || '')
+  const shownPhone = contactReady ? contact.phone : (p.phone_number || '')
+  const callPhone = (contactReady && contact.phone) || p.phone_number || ''
+
+  // Email / phone are written to the contact. The lead's copy (contact_email /
+  // phone_number) follows, because the header, Call button, board and activity
+  // timeline read that copy.
+  async function saveContactField(field: 'email' | 'phone', value: string) {
+    if (!checkContactId) return
+    try {
+      await patchContact(checkContactId, field === 'email' ? { email: value } : { phone: value })
+    } catch (e: any) {
+      if (e instanceof ContactEmailTakenError) { setEmailTaken(e.existingId); return }
+      showToast(t('errLoad', e.message), 'error')
+      return
+    }
+    if (field === 'email') setEmailTaken(null)
+    setContact(c => ({ ...c, [field]: value }))
+    const leadProp = field === 'email' ? 'contact_email' : 'phone_number'
+    patchLeadLocal(dealId, { [leadProp]: value })
+    try {
+      await patchLeadApi(dealId, { [leadProp]: value }, state.leads, leads => setState({ leads }))
+      showToast(t('toastSaved'), 'success')
+    } catch (e) {
+      console.error('[hs] lead copy of contact', field, 'not updated:', dealId, e)
+      showToast(t('contactLeadCopyFailed'), 'error')
+    }
+  }
+
   return (
     <>
       <div
@@ -1219,10 +1401,10 @@ export default function DealModal() {
               >✕</button>
             </div>
             <div className="dm-meta">
-              <span className="dm-phone">{p.phone_number || '--'}</span>
-              {p.phone_number && (
+              <span className="dm-phone">{callPhone || '--'}</span>
+              {callPhone && (
                 <a
-                  href={`tel:${p.phone_number.replace(/\s/g, '')}`}
+                  href={`tel:${callPhone.replace(/\s/g, '')}`}
                   className="btn btn-pr btn-sm"
                   onMouseDown={e => e.stopPropagation()}
                   style={{ pointerEvents: 'auto', textDecoration: 'none' }}
@@ -1328,6 +1510,44 @@ export default function DealModal() {
                       <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
                       <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
                       <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
+                      {/* Saved on the contact, not the lead — the safe place to
+                          fix a wrong email instead of the scheduler form */}
+                      <EditableField
+                        label={t('email')}
+                        value={shownEmail}
+                        inputType="email"
+                        disabled={isSQL || !contactReady}
+                        validate={v => !v ? t('emailRequired') : EMAIL_RE.test(v) ? null : t('emailInvalid')}
+                        onSave={v => saveContactField('email', v.toLowerCase())}
+                      />
+                      {emailTaken !== null && (
+                        <FieldError>
+                          {t('emailTaken')}
+                          {emailTaken && state.hubspotPortalId && (
+                            <>
+                              {' '}
+                              <a
+                                href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-1/${emailTaken}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: 'var(--rd)', textDecoration: 'underline' }}
+                              >
+                                {t('emailTakenOpen')}
+                              </a>
+                            </>
+                          )}
+                        </FieldError>
+                      )}
+                      <PhoneField
+                        label={t('phone')}
+                        value={shownPhone}
+                        lang={lang}
+                        disabled={isSQL || !contactReady}
+                        onSave={v => saveContactField('phone', v)}
+                      />
+                      {contact.status === 'error' && (
+                        <div style={{ fontSize: 11, color: 'var(--cs)' }}>{t('contactLoadFailed')}</div>
+                      )}
                     </div>
                   </div>
                   {/* Right: editable address */}

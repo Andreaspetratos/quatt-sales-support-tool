@@ -570,6 +570,44 @@ export async function fetchLeadContact(leadId: string): Promise<{
   }
 }
 
+// ── Contact email / phone (editable under Lead info) ─────────────────────────
+// Reps used to fix a wrong email by typing the right one into the HubSpot
+// scheduler form. The meetings tool matches contacts on email, so that made a
+// second contact, linked to neither the lead nor its deal. Editing the
+// contact's own email and phone keeps it one contact.
+
+export interface ContactDetails { email: string; phone: string }
+
+/** Thrown when the new email already belongs to another contact. HubSpot refuses the write. */
+export class ContactEmailTakenError extends Error {
+  constructor(public existingId: string) {
+    super('Email already belongs to contact ' + (existingId || '?'))
+  }
+}
+
+/**
+ * The contact's own email and phone. The lead's copies (contact_email,
+ * phone_number) are set when the lead is made and can be out of date.
+ * Throws on read errors, so the modal can tell "empty" from "couldn't load".
+ */
+export async function fetchContactDetails(contactId: string): Promise<ContactDetails> {
+  if (isDemo()) return { email: '', phone: '' }
+  const res = await retryProxy('GET', `/crm/v3/objects/contacts/${contactId}?properties=email,phone`)
+  if (!res.ok) throw new Error('fetchContactDetails HTTP ' + res.status) // detail logged by hsProxy
+  const pr = (await res.json())?.properties || {}
+  return { email: pr.email || '', phone: pr.phone || '' }
+}
+
+export async function patchContact(contactId: string, props: Partial<ContactDetails>): Promise<void> {
+  if (isDemo()) return
+  const res = await retryProxy('PATCH', `/crm/v3/objects/contacts/${contactId}`, { properties: props })
+  if (res.ok) return
+  const body = await res.text().catch(() => '')
+  // HubSpot: 409 "Contact already exists. Existing ID: 123"
+  if (res.status === 409) throw new ContactEmailTakenError(body.match(/Existing ID:\s*(\d+)/)?.[1] || '')
+  throw new Error(_parseHsError(body) || 'HTTP ' + res.status)
+}
+
 // ── Contact activity timeline ─────────────────────────────────────────────────
 
 export type ActivityKind = 'email' | 'call' | 'note' | 'meeting' | 'marketing'
