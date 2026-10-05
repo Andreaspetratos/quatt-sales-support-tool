@@ -6,8 +6,8 @@ import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
 import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails } from '@/lib/hubspot'
-import { PHONE_COUNTRIES, phoneCountryOf, normalizePhone } from '@/lib/phone'
-import type { PhoneCountry } from '@/lib/phone'
+import { PHONE_COUNTRIES_TOP, phoneCountryOf, detectPhoneCountry, loadPhoneCountries, normalizePhone } from '@/lib/phone'
+import type { PhoneCountry, PhoneCountryOption } from '@/lib/phone'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -498,9 +498,24 @@ function PhoneField({ label, value, onSave, disabled = false, lang }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // All countries load with the phone library when editing starts; until then
+  // the picker offers the top countries only.
+  const [countries, setCountries] = useState<{ top: PhoneCountryOption[]; rest: PhoneCountryOption[] }>(
+    { top: PHONE_COUNTRIES_TOP.map(c => ({ ...c, name: c.code })), rest: [] })
+  const pickedRef = useRef(false)  // the rep chose a country: don't overwrite it with the detected one
 
   useEffect(() => { setDraft(value); setCountry(phoneCountryOf(value)) }, [value])
-  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+  useEffect(() => {
+    if (!editing) return
+    inputRef.current?.focus()
+    pickedRef.current = false
+    let stale = false
+    loadPhoneCountries(lang).then(l => { if (!stale) setCountries(l) }).catch(() => { /* top countries still work */ })
+    detectPhoneCountry(value).then(c => { if (!stale && !pickedRef.current) setCountry(c) }).catch(() => {})
+    return () => { stale = true }
+  }, [editing])
+
+  const countryDial = [...countries.top, ...countries.rest].find(c => c.code === country)?.dial
 
   function cancel() { setDraft(value); setCountry(phoneCountryOf(value)); setEditing(false); setError(null) }
 
@@ -547,20 +562,27 @@ function PhoneField({ label, value, onSave, disabled = false, lang }: {
       >
         <span className="kk" style={{ flexShrink: 0 }}>{label}</span>
         <div style={{ display: 'flex', gap: 4, flex: 1, minWidth: 0 }}>
-          <select
-            value={country}
-            onChange={e => { setCountry(e.target.value as PhoneCountry); setError(null) }}
-            disabled={saving}
-            aria-label={t('phoneCountry')}
-            style={{ ...FIELD_INPUT_STYLE, flexShrink: 0, padding: '2px 2px' }}
-          >
-            {PHONE_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code} +{c.dial}</option>)}
-          </select>
+          {/* Shows just "NL +31" so the row stays narrow; the list itself has
+              full country names, and typing a name's first letters jumps to it. */}
+          <span style={{ ...FIELD_INPUT_STYLE, position: 'relative', flexShrink: 0, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            {country}{countryDial ? ` +${countryDial}` : ''} ▾
+            <select
+              value={country}
+              onChange={e => { pickedRef.current = true; setCountry(e.target.value as PhoneCountry); setError(null) }}
+              disabled={saving}
+              aria-label={t('phoneCountry')}
+              style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0, cursor: 'pointer' }}
+            >
+              {countries.top.map(c => <option key={c.code} value={c.code}>{c.name} +{c.dial}</option>)}
+              {countries.rest.length > 0 && <option disabled>──────────</option>}
+              {countries.rest.map(c => <option key={c.code} value={c.code}>{c.name} +{c.dial}</option>)}
+            </select>
+          </span>
           <input
             ref={inputRef}
             type="tel"
             value={draft}
-            placeholder="06 12345678"
+            placeholder={country === 'NL' ? '06 12345678' : ''}
             onChange={e => { setDraft(e.target.value); setError(null) }}
             disabled={saving}
             style={{ ...FIELD_INPUT_STYLE, flex: 1, borderColor: error ? 'var(--rd)' : 'var(--cp)' }}
