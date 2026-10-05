@@ -32,6 +32,36 @@ function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 // ── Inline editable field ─────────────────────────────────────────────────────
+// ── Footer icons ──────────────────────────────────────────────────────────────
+// Line icons for the footer pills. Drawn in currentColor, so each icon takes the
+// colour of its button, including the grey of a disabled one.
+const FOOT_ICONS = {
+  home: <><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>,
+  video: <><rect width="20" height="14" x="2" y="3" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></>,
+  calendar: <><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></>,
+  plus: <><path d="M5 12h14" /><path d="M12 5v14" /></>,
+  restore: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></>,
+  close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+}
+
+function FootIcon({ name }: { name: keyof typeof FOOT_ICONS }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      {FOOT_ICONS[name]}
+    </svg>
+  )
+}
+
+/**
+ * Scheduler button labels are set by admins and may already start with an
+ * emoji (the old default did). The button now carries its own icon, so a
+ * leading symbol is dropped rather than shown twice.
+ */
+function stripLeadingSymbol(label: string): string {
+  return label.replace(/^[^\w\s\u00C0-\u024F(]+\s*/, '') || label
+}
+
 // ── Activity timeline ─────────────────────────────────────────────────────────
 
 /** How many rows of a group show before the rep asks for the rest. */
@@ -73,14 +103,16 @@ interface GroupDef {
  * One shared column grid for every group, sized off the widest (four columns).
  * Groups that do not use a slot leave it blank rather than collapsing it, so
  * dates sit under dates and statuses under statuses right down the section.
+ * Percentages, not pixels: the timeline sits in the modal's left column, whose
+ * width changes with the window and with the rep resizing the modal.
  */
 const ACTIVITY_COLS = (
   <colgroup>
-    <col style={{ width: 130 }} />
-    <col style={{ width: 150 }} />
-    <col style={{ width: 110 }} />
+    <col style={{ width: '18%' }} />
+    <col style={{ width: '16%' }} />
+    <col style={{ width: '15%' }} />
     <col />
-    <col style={{ width: 170 }} />
+    <col style={{ width: '21%' }} />
   </colgroup>
 )
 
@@ -158,7 +190,7 @@ function ActivityGroup({
         <span style={{ color: 'var(--cs)' }}>{collapsed ? '▸' : '▾'}</span>
       </div>
       {!collapsed && (<>
-      <table style={{ tableLayout: 'fixed', width: '100%' }}>
+      <table className="act-tbl" style={{ tableLayout: 'fixed', width: '100%' }}>
         {ACTIVITY_COLS}
         <thead>
           {/* An unused slot keeps its cell so the grid holds across groups. */}
@@ -318,7 +350,7 @@ function AddressCheckBadge({ status, lang }: { status: string; lang: 'nl' | 'en'
   )
   const base: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 5,
-    fontSize: 11, color: 'var(--cs)',
+    fontSize: 11, color: 'var(--cs)', whiteSpace: 'nowrap',
   }
 
   // A clean match needs no action. Every other state — including an unmapped
@@ -1141,7 +1173,7 @@ export default function DealModal() {
     : {}
 
   const sched = getScheduler(deal, state.schedulers)
-  const schedLabel = sched?.buttonLabel || t('schedVC')
+  const schedLabel = stripLeadingSymbol(sched?.buttonLabel || t('schedVC'))
   const openTasks = dealOpenTasks(deal.id)
 
   // Chill-only leads don't get a home visit — Chill is a self-install product.
@@ -1197,7 +1229,8 @@ export default function DealModal() {
             </div>
           </div>
 
-          {/* Scrollable body */}
+          {/* Body: warnings across the full width, then the lead on the left
+              and the playbook on the right. Each column scrolls on its own. */}
           <div className="dm-body">
             {/* Lead already converted to a deal — properties and the booking
                 buttons below are locked; this is the explanation for why. */}
@@ -1248,135 +1281,139 @@ export default function DealModal() {
               </div>
             )}
 
-            {/* Long Term context, written when the lead was parked.
-                Read back here because whoever is looking at it is usually not
-                whoever parked it: three days after a parked lead reactivates,
-                the workflow clears the owner so a colleague can pick it up.
-                Without this the lead arrives on their board with no trace of
-                where it has been or why. */}
-            {(p['long_term_opportunity_reason_lead'] || p['long_term_opportunity_followup_date_lead']) && (
-              <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 4 }}>
-                  {t('ltoCtxTitle')}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {p['long_term_opportunity_followup_date_lead'] && (
-                    <div className="kv">
-                      <span className="kk">{t('ltoCtxDate')}</span>
-                      <span className="vv">{actDate(p['long_term_opportunity_followup_date_lead'])}</span>
+            <div className={`dm-cols${pbDefs.length > 0 ? '' : ' solo'}`}>
+              {/* Left: what we know about the lead, and how this call went */}
+              <div className="dm-col">
+                {/* Long Term context, written when the lead was parked.
+                    Read back here because whoever is looking at it is usually not
+                    whoever parked it: three days after a parked lead reactivates,
+                    the workflow clears the owner so a colleague can pick it up.
+                    Without this the lead arrives on their board with no trace of
+                    where it has been or why. */}
+                {(p['long_term_opportunity_reason_lead'] || p['long_term_opportunity_followup_date_lead']) && (
+                  <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 4 }}>
+                      {t('ltoCtxTitle')}
                     </div>
-                  )}
-                  {p['long_term_opportunity_reason_lead'] && (
-                    <div className="kv">
-                      <span className="kk">{t('ltoCtxReason')}</span>
-                      <span className="vv" style={{ whiteSpace: 'normal' }}>
-                        {p['long_term_opportunity_reason_lead']}
-                      </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {p['long_term_opportunity_followup_date_lead'] && (
+                        <div className="kv">
+                          <span className="kk">{t('ltoCtxDate')}</span>
+                          <span className="vv">{actDate(p['long_term_opportunity_followup_date_lead'])}</span>
+                        </div>
+                      )}
+                      {p['long_term_opportunity_reason_lead'] && (
+                        <div className="kv">
+                          <span className="kk">{t('ltoCtxReason')}</span>
+                          <span className="vv" style={{ whiteSpace: 'normal' }}>
+                            {p['long_term_opportunity_reason_lead']}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Lead info + Address side by side */}
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-              {/* Left: lead info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="sl2">{t('leadInfo')}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
-                  <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
-                  <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
-                </div>
-              </div>
-              {/* Right: editable address */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <div className="sl2">{t('address')}</div>
-                    <AddressCheckBadge status={p['postnl_adrescheck_status'] || ''} lang={lang} />
                   </div>
-                  {/* Straight to the contact in HubSpot — reps need the activity
-                      history, which lives on the contact, not the lead. Uses the
-                      lead's own hs_primary_contact_id so no extra lookup is needed. */}
-                  {p['hs_primary_contact_id'] && state.hubspotPortalId && (
-                    <a
-                      className="btn btn-sc btn-xs"
-                      href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-1/${p['hs_primary_contact_id']}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
-                    >
-                      {t('openContact')}
-                    </a>
-                  )}
+                )}
+
+                {/* Lead info + Address side by side, stacked when the column
+                    gets too narrow for both */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+                  {/* Left: lead info */}
+                  <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                    <div className="sl2">{t('leadInfo')}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <div className="kv"><span className="kk">{t('origin')}</span><span className="vv">{p[P.formOrigin] || '--'}</span></div>
+                      <div className="kv"><span className="kk">{t('product')}</span><span className="vv">{p[P.product] || '--'}</span></div>
+                      <div className="kv"><span className="kk">{t('reqAt')}</span><span className="vv">{relTime(p[P.requestedAt])}</span></div>
+                    </div>
+                  </div>
+                  {/* Right: editable address */}
+                  <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <div className="sl2">{t('address')}</div>
+                        <AddressCheckBadge status={p['postnl_adrescheck_status'] || ''} lang={lang} />
+                      </div>
+                      {/* Straight to the contact in HubSpot — reps need the activity
+                          history, which lives on the contact, not the lead. Uses the
+                          lead's own hs_primary_contact_id so no extra lookup is needed. */}
+                      {p['hs_primary_contact_id'] && state.hubspotPortalId && (
+                        <a
+                          className="btn btn-sc btn-xs"
+                          href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-1/${p['hs_primary_contact_id']}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+                        >
+                          {t('openContact')}
+                        </a>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {([
+                        { label: t('street'),            prop: 'street_lead' },
+                        { label: t('houseNumber'),       prop: 'house_number' },
+                        { label: t('houseNumberSuffix'), prop: 'house_number_suffix' },
+                        { label: t('postalCode'),        prop: 'postal_code' },
+                        { label: t('city'),              prop: 'city' },
+                      ] as Array<{ label: string; prop: string }>).map(({ label, prop }) => (
+                        <EditableField
+                          key={prop}
+                          label={label}
+                          value={p[prop] || ''}
+                          highlight={hvMissing.includes(prop)}
+                          disabled={isSQL}
+                          onSave={async (val) => {
+                            await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
+                            patchLeadLocal(dealId, { [prop]: val })
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {([
-                    { label: t('street'),            prop: 'street_lead' },
-                    { label: t('houseNumber'),       prop: 'house_number' },
-                    { label: t('houseNumberSuffix'), prop: 'house_number_suffix' },
-                    { label: t('postalCode'),        prop: 'postal_code' },
-                    { label: t('city'),              prop: 'city' },
-                  ] as Array<{ label: string; prop: string }>).map(({ label, prop }) => (
-                    <EditableField
-                      key={prop}
-                      label={label}
-                      value={p[prop] || ''}
-                      highlight={hvMissing.includes(prop)}
-                      disabled={isSQL}
-                      onSave={async (val) => {
-                        await patchLeadApi(dealId, { [prop]: val }, state.leads, leads => setState({ leads }))
-                        patchLeadLocal(dealId, { [prop]: val })
-                      }}
-                    />
-                  ))}
-                </div>
+
+                {/* Recent communication, when we know which contact the lead is.
+                    Activities live on the contact, so without one there is nothing
+                    to show. */}
+                {p['hs_primary_contact_id'] && (
+                  <>
+                    <div className="dv" />
+                    <ErrorBoundary fallback={
+                      <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('activityFailed')}</div>
+                    }>
+                      <ActivityTimeline
+                        contactId={p['hs_primary_contact_id']}
+                        contactEmail={p['contact_email'] || ''}
+                        lang={lang}
+                      />
+                    </ErrorBoundary>
+                  </>
+                )}
+
+                <div className="dv" />
+
+                {/* Call outcome — always visible */}
+                <CallOutcomeSection dealId={deal.id} lang={lang} disabled={isSQL} />
               </div>
-            </div>
 
-            {/* Recent communication, when we know which contact the lead is.
-                Activities live on the contact, so without one there is nothing
-                to show. */}
-            {p['hs_primary_contact_id'] && (
-              <>
-                <div className="dv" />
-                <ErrorBoundary fallback={
-                  <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('activityFailed')}</div>
-                }>
-                  <ActivityTimeline
-                    contactId={p['hs_primary_contact_id']}
-                    contactEmail={p['contact_email'] || ''}
-                    lang={lang}
-                  />
-                </ErrorBoundary>
-              </>
-            )}
-
-            <div className="dv" />
-
-            {/* Call outcome — always visible */}
-            <CallOutcomeSection dealId={deal.id} lang={lang} disabled={isSQL} />
-
-            <div className="dv" />
-
-            {/* Playbook — pbDefs is empty only when there are genuinely no
-                playbooks to show. Leads without a product get all playbooks
-                (see getPlaybookDefs) so the rep can pick. Once the lead is SQL,
-                the whole block is visible but non-interactive — no answers or
-                notepads should keep writing to a lead that already converted. */}
-            {pbDefs.length > 0 && (
-              <>
-                <div className="dv" />
-                <div className="sl2">{t('pbLabel')}</div>
-                <div style={isSQL ? { pointerEvents: 'none', opacity: 0.55 } : undefined}>
-                  <PlaybookView
-                    dealId={deal.id}
-                    pbDefs={pbDefs.map(pi => ({ key: pi.key, def: pi.def }))}
-                  />
+              {/* Right: the playbook. pbDefs is empty only when there are
+                  genuinely no playbooks to show; the left column then takes
+                  the full width. Leads without a product get all playbooks
+                  (see getPlaybookDefs) so the rep can pick. Once the lead is SQL,
+                  the whole block is visible but non-interactive — no answers or
+                  notepads should keep writing to a lead that already converted. */}
+              {pbDefs.length > 0 && (
+                <div className="dm-col">
+                  <div className="sl2">{t('pbLabel')}</div>
+                  <div style={isSQL ? { pointerEvents: 'none', opacity: 0.55 } : undefined}>
+                    <PlaybookView
+                      dealId={deal.id}
+                      pbDefs={pbDefs.map(pi => ({ key: pi.key, def: pi.def }))}
+                    />
+                  </div>
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Footer */}
@@ -1386,32 +1423,35 @@ export default function DealModal() {
               onClick={() => handleCallResult('Plan HV')}
               disabled={isChillOnly || isSQL}
               title={isSQL ? t('sqlLockedNote') : (isChillOnly ? t('homeVisitChillDisabled') : undefined)}
-            >{t('homeVisit')}</button>
+            ><FootIcon name="home" />{t('homeVisit')}</button>
             <button
               className="btn btn-sc btn-sm"
               onClick={openSched}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
-            >{schedLabel}</button>
+            ><FootIcon name="video" />{schedLabel}</button>
             <button
               className="btn btn-sc btn-sm"
               onClick={openLto}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
-            >{t('ltoBtn')}</button>
+            ><FootIcon name="calendar" />{t('ltoBtn')}</button>
+            {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
+              <button className="btn btn-sc btn-sm" onClick={restoreFromLost}><FootIcon name="restore" />{t('restoreFromLost')}</button>
+            )}
+            <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
+              <FootIcon name="plus" />{t('taskAddFromDeal')}
+              {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
+            </button>
+            {/* Lost sits apart on the far right, away from the buttons that
+                move the lead forward, so it is not hit by accident. */}
             <button
               className="btn btn-dn btn-sm"
+              style={{ marginLeft: 'auto' }}
               onClick={openLost}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
-            >{t('markLost')}</button>
-            {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
-              <button className="btn btn-sc btn-sm" onClick={restoreFromLost}>{t('restoreFromLost')}</button>
-            )}
-            <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
-              {t('taskAddFromDeal')}
-              {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
-            </button>
+            ><FootIcon name="close" />{t('markLost')}</button>
             {/* Resize grip */}
             <div className="dm-grip" onMouseDown={e => startDrag(e, 'resize')}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">

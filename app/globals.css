@@ -98,8 +98,22 @@ tbody td{padding:9px 13px;vertical-align:middle}
 .dm-sub{font-size:12px;color:var(--cs);margin-top:2px;pointer-events:none}
 .dm-meta{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;pointer-events:none}
 .dm-phone{font-size:15px;font-weight:700;color:var(--ct)}
-.dm-body{flex:1;min-height:0;overflow-y:scroll;padding:18px 20px;display:flex;flex-direction:column;gap:11px;user-select:text;cursor:default}
-.dm-foot{padding:13px 20px;border-top:1px solid var(--cb);flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--c1);cursor:default;user-select:none}
+.dm-body{flex:1;min-height:0;overflow:hidden;padding:18px 20px;display:flex;flex-direction:column;gap:11px;user-select:text;cursor:default;container-type:inline-size}
+/* Lead info, activity and call outcome on the left; playbook on the right.
+   Each column scrolls on its own, so a rep working down the playbook keeps the
+   lead in view. Below 860px of modal width the columns stack and scroll as one.
+   A container query, not a media query: reps resize the modal itself. */
+.dm-cols{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);grid-template-rows:minmax(0,1fr);gap:24px}
+.dm-cols.solo{grid-template-columns:minmax(0,1fr)}
+.dm-col{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:11px;padding-right:6px}
+@container (max-width:860px){
+  .dm-cols{display:flex;flex-direction:column;gap:11px;overflow-y:auto}
+  .dm-col{overflow:visible;flex-shrink:0;padding-right:0}
+  .dm-col+.dm-col{border-top:1px solid var(--cb);padding-top:11px}
+}
+.act-tbl thead th,.act-tbl tbody td{padding:7px 8px}
+.act-tbl thead th{overflow:hidden;text-overflow:ellipsis}
+.dm-foot{padding:13px 30px 13px 20px;border-top:1px solid var(--cb);flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--c1);cursor:default;user-select:none}
 .dm-grip{position:absolute;bottom:0;right:0;width:22px;height:22px;cursor:se-resize;display:flex;align-items:flex-end;justify-content:flex-end;padding:4px;border-radius:0 0 20px 0}
 .dm-grip svg{opacity:.35;pointer-events:none}
 
