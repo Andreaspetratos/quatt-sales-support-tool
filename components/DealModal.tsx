@@ -32,10 +32,11 @@ function getScheduler(deal: Deal, scheds: Scheduler[]): Scheduler | null {
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 // ── Inline editable field ─────────────────────────────────────────────────────
-// ── Footer icons ──────────────────────────────────────────────────────────────
-// Line icons for the footer pills. Drawn in currentColor, so each icon takes the
-// colour of its button, including the grey of a disabled one.
-const FOOT_ICONS = {
+// ── Pill icons ────────────────────────────────────────────────────────────────
+// Line icons for the modal's pill buttons. Drawn in currentColor, so each icon
+// takes the colour of its button, including the grey of a disabled one.
+const PILL_ICONS = {
+  phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />,
   home: <><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>,
   video: <><rect width="20" height="14" x="2" y="3" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></>,
   calendar: <><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></>,
@@ -44,11 +45,14 @@ const FOOT_ICONS = {
   close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
 }
 
-function FootIcon({ name }: { name: keyof typeof FOOT_ICONS }) {
+// pointer-events: none so a click on the icon lands on the button or link
+// itself. The Call link relies on this: Aircall's extension picks up clicks on
+// the tel: link, and a click target of an inner <path> could slip past it.
+function PillIcon({ name }: { name: keyof typeof PILL_ICONS }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
-      {FOOT_ICONS[name]}
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, pointerEvents: 'none' }}>
+      {PILL_ICONS[name]}
     </svg>
   )
 }
@@ -1223,7 +1227,7 @@ export default function DealModal() {
                   onMouseDown={e => e.stopPropagation()}
                   style={{ pointerEvents: 'auto', textDecoration: 'none' }}
                 >
-                  {t('callBtn')}
+                  <PillIcon name="phone" />{t('callBtn')}
                 </a>
               )}
             </div>
@@ -1423,24 +1427,24 @@ export default function DealModal() {
               onClick={() => handleCallResult('Plan HV')}
               disabled={isChillOnly || isSQL}
               title={isSQL ? t('sqlLockedNote') : (isChillOnly ? t('homeVisitChillDisabled') : undefined)}
-            ><FootIcon name="home" />{t('homeVisit')}</button>
+            ><PillIcon name="home" />{t('homeVisit')}</button>
             <button
               className="btn btn-sc btn-sm"
               onClick={openSched}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
-            ><FootIcon name="video" />{schedLabel}</button>
+            ><PillIcon name="video" />{schedLabel}</button>
             <button
               className="btn btn-sc btn-sm"
               onClick={openLto}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
-            ><FootIcon name="calendar" />{t('ltoBtn')}</button>
+            ><PillIcon name="calendar" />{t('ltoBtn')}</button>
             {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
-              <button className="btn btn-sc btn-sm" onClick={restoreFromLost}><FootIcon name="restore" />{t('restoreFromLost')}</button>
+              <button className="btn btn-sc btn-sm" onClick={restoreFromLost}><PillIcon name="restore" />{t('restoreFromLost')}</button>
             )}
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
-              <FootIcon name="plus" />{t('taskAddFromDeal')}
+              <PillIcon name="plus" />{t('taskAddFromDeal')}
               {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
             </button>
             {/* Lost sits apart on the far right, away from the buttons that
@@ -1451,7 +1455,7 @@ export default function DealModal() {
               onClick={openLost}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
-            ><FootIcon name="close" />{t('markLost')}</button>
+            ><PillIcon name="close" />{t('markLost')}</button>
             {/* Resize grip */}
             <div className="dm-grip" onMouseDown={e => startDrag(e, 'resize')}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
