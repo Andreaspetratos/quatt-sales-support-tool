@@ -4,8 +4,8 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask } from '@/lib/hubspot'
-import type { Activity, ActivityKind, ActivityGroups } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals } from '@/lib/hubspot'
+import type { Activity, ActivityKind, ActivityGroups, DirectDeal } from '@/lib/hubspot'
 import { getPlaybookDefs } from '@/lib/playbooks'
 import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -603,11 +603,27 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
   )
 }
 
-function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
+/**
+ * Result of the "direct appointment already booked" check on a partner lead
+ * (see fetchDirectAppointmentDeals). `partner` is the lead's partner name, so
+ * the copy can say "VEH" or whichever partner is configured.
+ */
+type DirectCheck =
+  | { status: 'off' }
+  | { status: 'loading' | 'error'; partner: string }
+  | { status: 'done'; partner: string; deals: DirectDeal[] }
+
+function LostModal({ dealId, lang, directCheck }: { dealId: string; lang: 'nl' | 'en'; directCheck: DirectCheck }) {
   const { state, setState, getPbState, patchLeadLocal } = useApp()
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const [options, setOptions] = useState<Array<{ label: string; value: string }>>([])
   const [selected, setSelected] = useState<string>('')
+  // A partner lead whose customer already booked directly: Lost needs an
+  // explicit confirmation that the customer doesn't want the partner offer.
+  const [cancelConfirmed, setCancelConfirmed] = useState(false)
+  const hasDirect = directCheck.status === 'done' && directCheck.deals.length > 0
+  const checking = directCheck.status === 'loading'
+  const partner = directCheck.status === 'off' ? '' : directCheck.partner
 
   useEffect(() => {
     fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(all => {
@@ -623,6 +639,8 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
 
   async function confirmLost() {
     if (!selected) { showToast(t('errReason'), 'error'); return }
+    if (checking) { showToast(t('directDealChecking'), 'error'); return }
+    if (hasDirect && !cancelConfirmed) { showToast(t('directDealTickRequired', partner), 'error'); return }
     try {
       await patchLeadApi(dealId, {
         hs_pipeline_stage: CONFIG.STAGES.LOST,
@@ -651,6 +669,18 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
           <button className="xb" onClick={() => setState({ modal: null })}>✕</button>
         </div>
         <div className="mob">
+          {hasDirect && (
+            <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12, background: 'rgba(247,102,34,0.10)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 4 }}>⚠ {t('directDealTitle')}</div>
+              <div style={{ fontSize: 12, color: 'var(--ct)' }}>{t('directDealLostWarn', partner)}</div>
+            </div>
+          )}
+          {checking && (
+            <div style={{ fontSize: 12, color: 'var(--cs)', marginBottom: 12 }}>{t('directDealChecking')}</div>
+          )}
+          {directCheck.status === 'error' && (
+            <div style={{ fontSize: 12, color: 'var(--cs)', marginBottom: 12 }}>{t('directDealCheckFailed')}</div>
+          )}
           <div className="iw">
             <label className="il">{t('lostReason')} <span style={{ color: 'var(--rd)' }}>*</span></label>
             <select className="sel" value={selected} onChange={e => setSelected(e.target.value)}>
@@ -658,10 +688,16 @@ function LostModal({ dealId, lang }: { dealId: string; lang: 'nl' | 'en' }) {
               {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          {hasDirect && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, fontSize: 12, fontWeight: 600, color: 'var(--ct)', cursor: 'pointer' }}>
+              <input type="checkbox" className="chk" checked={cancelConfirmed} onChange={e => setCancelConfirmed(e.target.checked)} />
+              <span>{t('directDealTick', partner)} <span style={{ color: 'var(--rd)' }}>*</span></span>
+            </label>
+          )}
         </div>
         <div className="mof">
           <button className="btn btn-sc btn-sm" onClick={() => setState({ modal: null })}>{t('cancel')}</button>
-          <button className="btn btn-dn btn-sm" onClick={confirmLost} disabled={!selected}>
+          <button className="btn btn-dn btn-sm" onClick={confirmLost} disabled={!selected || checking || (hasDirect && !cancelConfirmed)}>
             {t('confirm')}
           </button>
         </div>
@@ -891,8 +927,34 @@ export default function DealModal() {
   // or React's hook order breaks when no deal is selected.
   const [hvMissing, setHvMissing] = useState<string[]>([])
 
+  // Partner leads (VEH) whose customer may already have booked directly with
+  // Quatt: checked once when the lead opens. Drives the banner below and the
+  // extra confirmation in the Lost popup. Skipped once the lead is SQL — by
+  // then the partner deal exists and the customer can compare prices.
+  const selLead = state.leads.find(l => l.id === state.selectedId)
+  const selPartner = String(selLead?.properties?.[CONFIG.PROPS.partner] || '').trim()
+  const checkPartner = selLead
+    && selLead.properties.hs_pipeline_stage !== CONFIG.STAGES.SQL
+    && CONFIG.DIRECT_DEAL_CHECK_PARTNERS.some(x => x.toLowerCase() === selPartner.toLowerCase())
+    ? selPartner : ''
+  const checkContactId = String(selLead?.properties?.hs_primary_contact_id || '')
+  const [directCheck, setDirectCheck] = useState<DirectCheck>({ status: 'off' })
+  useEffect(() => {
+    const leadId = state.selectedId
+    if (!leadId || !checkPartner) { setDirectCheck({ status: 'off' }); return }
+    let stale = false
+    setDirectCheck({ status: 'loading', partner: checkPartner })
+    fetchDirectAppointmentDeals(leadId, checkContactId || undefined)
+      .then(deals => { if (!stale) setDirectCheck({ status: 'done', partner: checkPartner, deals }) })
+      .catch(e => {
+        console.error('[hs] direct deal check failed:', leadId, e)
+        if (!stale) setDirectCheck({ status: 'error', partner: checkPartner })
+      })
+    return () => { stale = true }
+  }, [state.selectedId, checkPartner, checkContactId])
+
   // ── Deal-specific setup (after hooks) ──────────────────────────────────────
-  const deal = state.leads.find(l => l.id === state.selectedId)
+  const deal = selLead
   if (!deal) return null
 
   // Capture id so closures below don't re-evaluate the possibly-undefined find result
@@ -1147,6 +1209,45 @@ export default function DealModal() {
               </div>
             )}
 
+            {/* Partner lead whose customer already booked directly. Reps used
+                to move these to Lost ("I already have an appointment"), which
+                left the customer without the partner deal they need to see the
+                partner prices. */}
+            {directCheck.status === 'done' && directCheck.deals.length > 0 && (
+              <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12, background: 'rgba(247,102,34,0.10)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 6 }}>
+                  ⚠ {t('directDealTitle')}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+                  {directCheck.deals.map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ct)' }}>{d.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--cs)' }}>
+                          {t('directDealStage')}: {d.stage || '--'}
+                          {d.appointmentAt && <> · {t('directDealAppt')}: {actDate(d.appointmentAt)}</>}
+                        </div>
+                      </div>
+                      {state.hubspotPortalId && (
+                        <a
+                          className="btn btn-sc btn-xs"
+                          href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-3/${d.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+                        >
+                          {t('directDealOpen')}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ct)' }}>
+                  {t('directDealBody', directCheck.partner)}
+                </div>
+              </div>
+            )}
+
             {/* Long Term context, written when the lead was parked.
                 Read back here because whoever is looking at it is usually not
                 whoever parked it: three days after a parked lead reactivates,
@@ -1323,7 +1424,7 @@ export default function DealModal() {
 
       {/* Nested modals */}
       {state.modal === 'lost' && state.modalDealId === deal.id && (
-        <LostModal dealId={deal.id} lang={lang} />
+        <LostModal dealId={deal.id} lang={lang} directCheck={directCheck} />
       )}
       {state.modal === 'lto' && state.modalDealId === deal.id && (
         <LtoModal deal={deal} lang={lang} />

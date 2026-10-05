@@ -881,6 +881,14 @@ function HsDiagnostics({ rep }: { rep: Rep | null }) {
           missing.length ? `Stage IDs not found in HubSpot: ${missing.join(', ')}` : `All ${Object.keys(CONFIG.STAGES).length} stage IDs exist`)
       } else add('Pipeline stages', false, fail(st))
 
+      const dp = await hsCall('GET', `/crm/v3/pipelines/deals/${CONFIG.DEAL_PIPELINE_ID}`)
+      if (dp.ok) {
+        const labels: string[] = (parseJson(dp.text).stages || []).map((s: any) => String(s.label || ''))
+        const booked = labels.filter(l => /call scheduled|home visit scheduled/i.test(l))
+        add('Deal pipeline (direct-appointment check)', booked.length ? true : 'warn',
+          booked.length ? `${labels.length} stages. Booked from: ${booked.join(', ')}` : `${labels.length} stages, but none named "Call Scheduled" / "Home Visit Scheduled" — only deals with a first-appointment date will trigger the VEH warning`)
+      } else add('Deal pipeline (direct-appointment check)', false, fail(dp))
+
       const co = await hsCall('GET', `/crm/v3/properties/leads/${CONFIG.PROPS.callOutcome}`)
       if (co.ok) {
         const n = (parseJson(co.text).options || []).length
@@ -935,6 +943,21 @@ function HsDiagnostics({ rep }: { rep: Rep | null }) {
 
         const da = await hsCall('GET', `/crm/v4/objects/leads/${readId}/associations/deals`)
         add('Lead → deal', da.ok, da.ok ? `${(parseJson(da.text).results || []).length} deal(s) linked` : fail(da))
+
+        // The VEH "direct appointment already booked" check reads the contact's deals
+        if (contactId) {
+          const cd = await hsCall('GET', `/crm/v4/objects/contacts/${contactId}/associations/deals?limit=100`)
+          const dealIds: string[] = cd.ok ? (parseJson(cd.text).results || []).map((r: any) => String(r.toObjectId)) : []
+          if (!cd.ok) add('Contact → deals (direct-appointment check)', false, fail(cd))
+          else if (!dealIds.length) add('Contact → deals (direct-appointment check)', true, `Contact ${contactId} has no deals`)
+          else {
+            const br = await hsCall('POST', '/crm/v3/objects/deals/batch/read', {
+              properties: ['dealname', 'pipeline', 'dealstage', 'deal_origin', 'hs_is_closed_lost', 'date_of_first_appointment_static'],
+              inputs: dealIds.slice(0, 100).map(id => ({ id })),
+            })
+            add('Contact → deals (direct-appointment check)', br.ok, br.ok ? `${dealIds.length} deal(s) read` : fail(br))
+          }
+        }
       }
 
       // ── Tasks ───────────────────────────────────────────────────────────────

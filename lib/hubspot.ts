@@ -1041,6 +1041,128 @@ export async function fetchAssociatedDeal(leadId: string): Promise<AssociatedDea
   }
 }
 
+// ── Direct deals already on a partner lead's contact ─────────────────────────
+// VEH customers who also booked directly with Quatt tell the rep "I already
+// have an appointment", and the rep moves the VEH lead to Lost. But the VEH
+// prices only exist on a VEH deal, so a customer who wants to compare is then
+// stuck. The lead modal uses this to warn the rep before that happens.
+
+export interface DirectDeal {
+  id: string
+  name: string
+  /** Stage label, or the raw stage ID when the pipeline could not be read. */
+  stage: string
+  /** ISO timestamp of the first appointment, when HubSpot has one. */
+  appointmentAt: string | null
+}
+
+const DIRECT_DEAL_PROPS = [
+  'dealname', 'pipeline', 'dealstage', 'deal_origin', 'partner_name',
+  'hs_is_closed_lost', 'date_of_first_appointment_static',
+]
+
+/** Consumer Orders stages, id -> label + position. Fetched once per page load. */
+let _dealStages: Promise<Map<string, { label: string; order: number }>> | null = null
+function _consumerOrderStages(): Promise<Map<string, { label: string; order: number }>> {
+  if (!_dealStages) {
+    _dealStages = (async () => {
+      const map = new Map<string, { label: string; order: number }>()
+      try {
+        const res = await retryProxy('GET', `/crm/v3/pipelines/deals/${CONFIG.DEAL_PIPELINE_ID}`)
+        if (res.ok) {
+          for (const s of (await res.json()).stages || []) {
+            map.set(String(s.id), { label: String(s.label || ''), order: Number(s.displayOrder) })
+          }
+        }
+      } catch (e) {
+        console.error('[hs] _consumerOrderStages error:', e)
+      }
+      // Not cached when empty: the next lead opened tries again
+      if (!map.size) _dealStages = null
+      return map
+    })()
+  }
+  return _dealStages
+}
+
+/**
+ * The contact's direct (non-partner) deals in Consumer Orders that have an
+ * appointment booked or already held, and are not lost or cancelled.
+ *
+ * An appointment counts when the deal has a first-appointment date, or sits in
+ * "Call Scheduled" / "Home Visit Scheduled" or any stage after them (quote sent
+ * and so on). Old direct deals that never got that far — like the 2023
+ * "Calculation Completed" ones many contacts still carry — are skipped, so
+ * the warning only shows when there is a real appointment.
+ *
+ * Stage positions come from the pipeline itself rather than hardcoded IDs, so
+ * the sandbox portal works too. Throws when the deals cannot be read, so the
+ * caller can tell "no direct deal" apart from "could not check".
+ */
+export async function fetchDirectAppointmentDeals(leadId: string, contactId?: string): Promise<DirectDeal[]> {
+  if (isDemo() || !leadId) return []
+
+  let cid = contactId || ''
+  if (!cid) {
+    const ca = await retryProxy('GET', `/crm/v4/objects/leads/${leadId}/associations/contacts?limit=1`)
+    if (!ca.ok) throw new Error(`lead → contact HTTP ${ca.status}`)
+    cid = String((await ca.json()).results?.[0]?.toObjectId || '')
+    if (!cid) return []
+  }
+
+  const assocRes = await retryProxy('GET', `/crm/v4/objects/contacts/${cid}/associations/deals?limit=100`)
+  if (!assocRes.ok) throw new Error(`contact → deals HTTP ${assocRes.status}`)
+  const ids: string[] = ((await assocRes.json()).results || [])
+    .map((r: { toObjectId: string | number }) => String(r.toObjectId))
+    .filter(Boolean)
+  if (!ids.length) return []
+
+  const [readRes, stages] = await Promise.all([
+    retryProxy('POST', '/crm/v3/objects/deals/batch/read', {
+      properties: DIRECT_DEAL_PROPS,
+      inputs: ids.slice(0, 100).map(id => ({ id })),
+    }),
+    _consumerOrderStages(),
+  ])
+  if (!readRes.ok) throw new Error(`deals batch read HTTP ${readRes.status}`)
+
+  // Position of the first "appointment booked" stage. Undefined when the
+  // pipeline could not be read; then only the appointment date counts.
+  const bookedOrders = Array.from(stages.values())
+    .filter(s => /call scheduled|home visit scheduled/i.test(s.label))
+    .map(s => s.order)
+  const firstBooked = bookedOrders.length ? Math.min(...bookedOrders) : undefined
+
+  const deals: DirectDeal[] = []
+  for (const r of ((await readRes.json()).results || []) as Array<{ id: string; properties?: Record<string, string | null> }>) {
+    const p = r.properties || {}
+    if (p.pipeline !== CONFIG.DEAL_PIPELINE_ID) continue
+
+    // Direct = deal_origin "Direct". Old deals without an origin count too,
+    // as long as no partner is set on them.
+    const origin = String(p.deal_origin || '').trim()
+    if (origin !== 'Direct' && (origin || String(p.partner_name || '').trim())) continue
+
+    if (p.hs_is_closed_lost === 'true') continue
+    const stage = stages.get(String(p.dealstage || ''))
+    if (stage && /cancel/i.test(stage.label)) continue // e.g. "WPS7C - Meeting Cancelled"
+
+    const appointmentAt = p.date_of_first_appointment_static || null
+    const pastBooking = stage !== undefined && firstBooked !== undefined && stage.order >= firstBooked
+    if (!appointmentAt && !pastBooking) continue
+
+    deals.push({
+      id: String(r.id),
+      name: p.dealname || 'Deal',
+      stage: stage?.label || String(p.dealstage || ''),
+      appointmentAt,
+    })
+  }
+  // Most recent appointment first; deals without a date last
+  deals.sort((a, b) => (b.appointmentAt || '').localeCompare(a.appointmentAt || ''))
+  return deals
+}
+
 // ── Fetch HubSpot portal ID (for constructing deal URLs) ─────────────────────
 export async function fetchPortalId(): Promise<string | null> {
   try {

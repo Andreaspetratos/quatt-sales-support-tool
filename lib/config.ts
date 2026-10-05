@@ -34,6 +34,8 @@ interface AppConfig {
   CORS_PROXY: string
   SCHEDULER_URL: string
   PIPELINE_ID: string
+  DEAL_PIPELINE_ID: string
+  DIRECT_DEAL_CHECK_PARTNERS: string[]
   STAGES: StageIds
   PROPS: PropNames
   REQUEST_COOLDOWN: number
@@ -53,6 +55,12 @@ export const CONFIG: AppConfig = {
 
   // Consumer Orders lead pipeline
   PIPELINE_ID: '3837045967',
+  // Consumer Orders deal pipeline — direct and partner deals both live here,
+  // told apart by the deal's deal_origin (Direct / Partner).
+  DEAL_PIPELINE_ID: 'default',
+  // Partner leads (partner_name_lead) that get the "direct appointment already
+  // booked" warning in the lead modal. Add a partner here to extend it.
+  DIRECT_DEAL_CHECK_PARTNERS: ['VEH'],
   STAGES: {
     UQL:             '5404393700',
     MQL:             '5404393694',

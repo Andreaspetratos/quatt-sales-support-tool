@@ -153,6 +153,7 @@ const HS_ALLOW = {
     `/crm/v4/associations/(tasks|leads)/(leads|contacts)/labels`,
     `/crm/v3/properties/(leads|tasks)`,
     `/crm/v3/properties/leads/[A-Za-z0-9_]+`,
+    `/crm/v3/pipelines/deals/(default|${ID})`,
     `/email/public/v1/campaigns/${ID}`,
     `/email/public/v1/events`,
     `/integrations/v1/me`,
@@ -160,7 +161,7 @@ const HS_ALLOW = {
   ],
   POST: [
     `/crm/v3/objects/(leads|contacts|deals|users|tasks)/search`,
-    `/crm/v3/objects/(leads|emails|calls|notes|meetings)/batch/read`,
+    `/crm/v3/objects/(leads|deals|emails|calls|notes|meetings)/batch/read`,
     `/crm/v4/associations/tasks/leads/batch/read`,
     `/crm/v3/objects/(leads|contacts|tasks)`,
     `/communication-preferences/v3/subscribe`,
