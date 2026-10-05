@@ -586,8 +586,9 @@ export class ContactEmailTakenError extends Error {
 }
 
 /**
- * The contact's own email and phone. The lead's copies (contact_email,
- * phone_number) are set when the lead is made and can be out of date.
+ * The contact's own email and phone. The lead's contact_email / phone_number
+ * are HubSpot sync properties: they follow the contact, but read-only and
+ * not always instantly.
  * Throws on read errors, so the modal can tell "empty" from "couldn't load".
  */
 export async function fetchContactDetails(contactId: string): Promise<ContactDetails> {

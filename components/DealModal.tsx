@@ -1120,7 +1120,7 @@ export default function DealModal() {
   }, [state.selectedId, checkPartner, checkContactId])
 
   // The contact's own email and phone, editable under Lead info. Read live
-  // because the lead's copies can be stale. emailTaken holds the id of another
+  // because the lead's synced copies can lag behind. emailTaken holds the id of another
   // contact that already has the email the rep tried to save.
   const [contact, setContact] = useState<{ status: 'off' | 'loading' | 'done' | 'error' } & ContactDetails>(
     { status: 'off', email: '', phone: '' })
@@ -1350,9 +1350,10 @@ export default function DealModal() {
   const shownPhone = contactReady ? contact.phone : (p.phone_number || '')
   const callPhone = (contactReady && contact.phone) || p.phone_number || ''
 
-  // Email / phone are written to the contact. The lead's copy (contact_email /
-  // phone_number) follows, because the header, Call button, board and activity
-  // timeline read that copy.
+  // Email / phone are written to the contact only. The lead's contact_email /
+  // phone_number are HubSpot sync properties that follow the contact by
+  // themselves (and refuse direct writes); the local copy is updated so the
+  // header, board and activity timeline show the new value straight away.
   async function saveContactField(field: 'email' | 'phone', value: string) {
     if (!checkContactId) return
     try {
@@ -1364,15 +1365,8 @@ export default function DealModal() {
     }
     if (field === 'email') setEmailTaken(null)
     setContact(c => ({ ...c, [field]: value }))
-    const leadProp = field === 'email' ? 'contact_email' : 'phone_number'
-    patchLeadLocal(dealId, { [leadProp]: value })
-    try {
-      await patchLeadApi(dealId, { [leadProp]: value }, state.leads, leads => setState({ leads }))
-      showToast(t('toastSaved'), 'success')
-    } catch (e) {
-      console.error('[hs] lead copy of contact', field, 'not updated:', dealId, e)
-      showToast(t('contactLeadCopyFailed'), 'error')
-    }
+    patchLeadLocal(dealId, { [field === 'email' ? 'contact_email' : 'phone_number']: value })
+    showToast(t('toastSaved'), 'success')
   }
 
   return (
