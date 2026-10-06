@@ -1406,7 +1406,24 @@ export default function DealModal() {
           <div className="dm-head" onMouseDown={e => startDrag(e, 'move')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="dm-title" title={p.hs_lead_name || ''}>{p.hs_lead_name || '--'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <div className="dm-title" style={{ minWidth: 0 }} title={p.hs_lead_name || ''}>{p.hs_lead_name || '--'}</div>
+                  {/* Straight to the contact in HubSpot — reps need the activity
+                      history, which lives on the contact, not the lead. In the
+                      header so it stays in reach while the columns scroll. */}
+                  {p['hs_primary_contact_id'] && state.hubspotPortalId && (
+                    <a
+                      className="btn btn-sc btn-xs"
+                      href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-1/${p['hs_primary_contact_id']}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onMouseDown={e => e.stopPropagation()}
+                      style={{ pointerEvents: 'auto', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      {t('openContact')}
+                    </a>
+                  )}
+                </div>
                 <div className="dm-sub">{p[P.product] || '--'}</div>
               </div>
               <button
@@ -1568,25 +1585,9 @@ export default function DealModal() {
                   </div>
                   {/* Right: editable address */}
                   <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <div className="sl2">{t('address')}</div>
-                        <AddressCheckBadge status={p['postnl_adrescheck_status'] || ''} lang={lang} />
-                      </div>
-                      {/* Straight to the contact in HubSpot — reps need the activity
-                          history, which lives on the contact, not the lead. Uses the
-                          lead's own hs_primary_contact_id so no extra lookup is needed. */}
-                      {p['hs_primary_contact_id'] && state.hubspotPortalId && (
-                        <a
-                          className="btn btn-sc btn-xs"
-                          href={`https://app-eu1.hubspot.com/contacts/${state.hubspotPortalId}/record/0-1/${p['hs_primary_contact_id']}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
-                        >
-                          {t('openContact')}
-                        </a>
-                      )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <div className="sl2">{t('address')}</div>
+                      <AddressCheckBadge status={p['postnl_adrescheck_status'] || ''} lang={lang} />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {([
