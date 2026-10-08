@@ -172,10 +172,12 @@ const HS_ALLOW = {
   ],
   PUT: [
     `/crm/v4/objects/tasks/${ID}/associations/(leads|contacts)/${ID}`,
+    `/crm/v4/objects/leads/${ID}/associations/contacts/${ID}`,   // move a lead to another contact
   ],
   DELETE: [
     `/crm/v3/objects/tasks/${ID}`,
     `/crm/v4/objects/tasks/${ID}/associations/(leads|contacts)/${ID}`,
+    `/crm/v4/objects/leads/${ID}/associations/contacts/${ID}`,   // unlink the old contact after a move
   ],
 }
 const HS_ALLOW_RE = Object.fromEntries(

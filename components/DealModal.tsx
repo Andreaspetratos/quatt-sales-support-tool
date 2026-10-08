@@ -4,8 +4,8 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError } from '@/lib/hubspot'
-import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
+import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails, ContactSummary } from '@/lib/hubspot'
 import { PHONE_COUNTRIES_TOP, phoneCountryOf, detectPhoneCountry, loadPhoneCountries, normalizePhone } from '@/lib/phone'
 import type { PhoneCountry, PhoneCountryOption } from '@/lib/phone'
 import { getPlaybookDefs } from '@/lib/playbooks'
@@ -1061,6 +1061,74 @@ function CallOutcomeSection({ dealId, lang, disabled = false }: { dealId: string
   )
 }
 
+// ── Email already on another contact ─────────────────────────────────────────
+// HubSpot allows an email on one contact only. When the rep's new email is
+// already someone's, it is usually the same customer who got a second contact
+// (e.g. a typo in a form). Show who has it, and offer to move the lead there.
+function ContactConflictModal({ email, other, portalId, lang, onLink, onClose }: {
+  email: string; other: ContactSummary; portalId: string | null; lang: 'nl' | 'en'
+  onLink: () => Promise<void>; onClose: () => void
+}) {
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function link() {
+    setBusy(true)
+    setError('')
+    try { await onLink() } catch (e: any) { setError(t('conflictFailed', e?.message || String(e))) } finally { setBusy(false) }
+  }
+
+  const rows: Array<[string, string]> = [
+    [t('email'), other.email || email],
+    [t('phone'), other.phone || '--'],
+    [t('address'), other.address || '--'],
+    [t('conflictSince'), other.createdAt ? actDate(other.createdAt) : '--'],
+    [t('conflictDeals'), String(other.deals)],
+  ]
+
+  return (
+    <div className="mb" onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}>
+      <div className="mo" style={{ maxWidth: 460 }}>
+        <div className="moh">
+          <div className="mot">{t('conflictTitle')}</div>
+          <button className="xb" onClick={onClose} disabled={busy}>✕</button>
+        </div>
+        <div className="mob" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>{t('conflictIntro', email)}</div>
+          <div style={{ border: '1px solid var(--cb)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ct)' }}>{other.name || '--'}</div>
+              {portalId && (
+                <a
+                  className="btn btn-sc btn-xs"
+                  href={`https://app-eu1.hubspot.com/contacts/${portalId}/record/0-1/${other.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+                >
+                  {t('openContact')}
+                </a>
+              )}
+            </div>
+            {rows.map(([k, v]) => (
+              <div key={k} className="kv"><span className="kk">{k}</span><span className="vv">{v}</span></div>
+            ))}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>{t('conflictQuestion')}</div>
+          {error && <div style={{ fontSize: 12, color: 'var(--rd)' }}>{error}</div>}
+        </div>
+        <div className="mof">
+          <button className="btn btn-sc btn-sm" onClick={onClose} disabled={busy}>{t('cancel')}</button>
+          <button className="btn btn-pr btn-sm" onClick={link} disabled={busy}>
+            {busy ? '…' : t('conflictConfirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── DealModal ─────────────────────────────────────────────────────────────────
 export default function DealModal() {
   const { state, setState, selectLead, patchLeadLocal, getPbState } = useApp()
@@ -1147,8 +1215,12 @@ export default function DealModal() {
   const [contact, setContact] = useState<{ status: 'off' | 'loading' | 'done' | 'error' } & ContactDetails>(
     { status: 'off', email: '', phone: '' })
   const [emailTaken, setEmailTaken] = useState<string | null>(null)  // '' = taken, id unknown
+  // The rep's new email belongs to another contact: shown in a popup that
+  // offers to move the lead to that contact.
+  const [conflict, setConflict] = useState<{ email: string; other: ContactSummary } | null>(null)
   useEffect(() => {
     setEmailTaken(null)
+    setConflict(null)
     if (!checkContactId) { setContact({ status: 'off', email: '', phone: '' }); return }
     let stale = false
     setContact({ status: 'loading', email: '', phone: '' })
@@ -1378,17 +1450,45 @@ export default function DealModal() {
   // header, board and activity timeline show the new value straight away.
   async function saveContactField(field: 'email' | 'phone', value: string) {
     if (!checkContactId) return
+    setEmailTaken(null)
+    // Who already has this email? Asked first, so the rep sees that contact
+    // and can move the lead there instead of getting a refusal.
+    if (field === 'email') {
+      const other = await findContactByEmail(value).catch(e => {
+        console.warn('[hs] email pre-check failed, saving anyway:', e)
+        return null
+      })
+      if (other && other.id !== checkContactId) { setConflict({ email: value, other }); return }
+    }
     try {
       await patchContact(checkContactId, field === 'email' ? { email: value } : { phone: value })
     } catch (e: any) {
-      if (e instanceof ContactEmailTakenError) { setEmailTaken(e.existingId); return }
+      if (e instanceof ContactEmailTakenError) {
+        // Missed by the pre-check (search lags behind, or it's a secondary email)
+        const other = e.existingId ? await fetchContactSummary(e.existingId).catch(() => null) : null
+        if (other) setConflict({ email: value, other })
+        else setEmailTaken(e.existingId)
+        return
+      }
       showToast(t('errLoad', e.message), 'error')
       return
     }
-    if (field === 'email') setEmailTaken(null)
     setContact(c => ({ ...c, [field]: value }))
     patchLeadLocal(dealId, { [field === 'email' ? 'contact_email' : 'phone_number']: value })
     showToast(t('toastSaved'), 'success')
+  }
+
+  // The rep confirmed the other contact is the same customer: it becomes the
+  // lead's contact, and the old contact is unlinked (it stays in HubSpot).
+  // The lead's contact fields follow the new contact in HubSpot by themselves;
+  // locally they're set now so the modal, board and checks switch over at once.
+  async function linkLeadToOther() {
+    if (!conflict || !checkContactId) return
+    const { other } = conflict
+    await relinkLeadContact(dealId, checkContactId, other.id)
+    patchLeadLocal(dealId, { hs_primary_contact_id: other.id, contact_email: other.email, phone_number: other.phone })
+    setConflict(null)
+    showToast(t('conflictLinked', other.name || other.email), 'success')
   }
 
   return (
@@ -1713,6 +1813,17 @@ export default function DealModal() {
 
       {state.modal === 'sched' && state.modalDealId === deal.id && (
         <SchedModal deal={deal} lang={lang} onBooked={() => handleCallResult('Plan Call')} />
+      )}
+
+      {conflict && (
+        <ContactConflictModal
+          email={conflict.email}
+          other={conflict.other}
+          portalId={state.hubspotPortalId}
+          lang={lang}
+          onLink={linkLeadToOther}
+          onClose={() => setConflict(null)}
+        />
       )}
     </>
   )

@@ -605,8 +605,108 @@ export async function patchContact(contactId: string, props: Partial<ContactDeta
   if (res.ok) return
   const body = await res.text().catch(() => '')
   // HubSpot: 409 "Contact already exists. Existing ID: 123"
-  if (res.status === 409) throw new ContactEmailTakenError(body.match(/Existing ID:\s*(\d+)/)?.[1] || '')
+  if (res.status === 409 || /already exists/i.test(body)) {
+    throw new ContactEmailTakenError(body.match(/Existing ID:\s*(\d+)/)?.[1] || '')
+  }
   throw new Error(_parseHsError(body) || 'HTTP ' + res.status)
+}
+
+/** What a rep needs to see to tell whether another contact is the same customer. */
+export interface ContactSummary {
+  id: string
+  name: string
+  email: string
+  phone: string
+  address: string     // street, postcode and city in one line
+  createdAt: string
+  deals: number
+}
+
+const SUMMARY_PROPS = ['firstname', 'lastname', 'email', 'phone', 'mobilephone', 'address', 'zip', 'city', 'createdate', 'num_associated_deals']
+
+function _toSummary(r: { id: string | number; properties?: Record<string, string | null> }): ContactSummary {
+  const p = r.properties || {}
+  return {
+    id: String(r.id),
+    name: [p.firstname, p.lastname].filter(Boolean).join(' '),
+    email: p.email || '',
+    phone: p.phone || p.mobilephone || '',
+    address: [p.address, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+    createdAt: p.createdate || '',
+    deals: Number(p.num_associated_deals) || 0,
+  }
+}
+
+/**
+ * The contact that has this email as its main address, if any. Checked before
+ * an email change so the rep sees who already has it. HubSpot's search index
+ * lags a few seconds, so a brand-new contact can be missed; the 409 from the
+ * update itself covers that case.
+ */
+export async function findContactByEmail(email: string): Promise<ContactSummary | null> {
+  if (isDemo() || !email) return null
+  const res = await retryProxy('POST', '/crm/v3/objects/contacts/search', {
+    filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ', value: email }] }],
+    properties: SUMMARY_PROPS,
+    limit: 1,
+  })
+  if (!res.ok) throw new Error('findContactByEmail HTTP ' + res.status) // detail logged by hsProxy
+  const hit = (await res.json())?.results?.[0]
+  return hit ? _toSummary(hit) : null
+}
+
+export async function fetchContactSummary(contactId: string): Promise<ContactSummary> {
+  const res = await retryProxy('GET', `/crm/v3/objects/contacts/${contactId}?properties=${SUMMARY_PROPS.join(',')}`)
+  if (!res.ok) throw new Error('fetchContactSummary HTTP ' + res.status) // detail logged by hsProxy
+  return _toSummary(await res.json())
+}
+
+/**
+ * Move a lead from one contact to another: the new contact becomes the lead's
+ * primary contact and the old one is unlinked. The old contact itself stays
+ * in HubSpot untouched.
+ *
+ * A lead must always keep a primary contact, so the new one is linked first.
+ * HubSpot allows one primary contact per lead and moves the label on its own;
+ * if it refuses instead, the new contact is linked without the label, the old
+ * one unlinked, and the label set again.
+ */
+export async function relinkLeadContact(leadId: string, oldContactId: string, newContactId: string): Promise<void> {
+  if (isDemo() || oldContactId === newContactId) return
+  const types = await _leadContactAssocTypes()
+  const link = (typeId: number) => retryProxy('PUT', `/crm/v4/objects/leads/${leadId}/associations/contacts/${newContactId}`,
+    [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: typeId }])
+  const unlinkOld = async () => {
+    const del = await retryProxy('DELETE', `/crm/v4/objects/leads/${leadId}/associations/contacts/${oldContactId}`)
+    if (!del.ok && del.status !== 404) throw new Error('Could not unlink the old contact (HTTP ' + del.status + ')')
+  }
+
+  const asPrimary = await link(types.primary)
+  if (asPrimary.ok) { await unlinkOld(); return }
+
+  console.warn('[hs] relinkLeadContact: primary link refused, retrying in steps', asPrimary.status)
+  const plain = await link(types.plain)
+  if (!plain.ok) throw new Error('Could not link the new contact (HTTP ' + plain.status + ')')
+  await unlinkOld()
+  const retry = await link(types.primary)
+  if (!retry.ok) throw new Error('Linked the new contact, but could not make it the primary contact (HTTP ' + retry.status + ')')
+}
+
+/** Lead → contact association types: "Primary" and the plain one. */
+async function _leadContactAssocTypes(): Promise<{ primary: number; plain: number }> {
+  try {
+    const res = await retryProxy('GET', '/crm/v4/associations/leads/contacts/labels')
+    if (res.ok) {
+      const types = ((await res.json())?.results || []) as Array<{ typeId: number; label?: string | null; category?: string }>
+      const defined = types.filter(t => (t.category ?? 'HUBSPOT_DEFINED') === 'HUBSPOT_DEFINED')
+      const primary = defined.find(t => t.label?.toLowerCase() === 'primary')
+      const plain = defined.find(t => !t.label)
+      if (primary) return { primary: primary.typeId, plain: plain?.typeId ?? primary.typeId }
+    }
+  } catch (e) {
+    console.warn('[hs] lead → contact association labels unavailable, using defaults', e)
+  }
+  return { primary: 578, plain: 578 }
 }
 
 // ── Contact activity timeline ─────────────────────────────────────────────────
