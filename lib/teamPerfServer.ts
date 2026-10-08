@@ -54,6 +54,23 @@ export async function searchAll(token: string, objectType: string, body: Record<
   return out
 }
 
+/**
+ * Property history for many records: `id → history entries` of one property.
+ * HubSpot returns fewer records per batch read when history is asked for, so 50 at a time.
+ */
+export async function readHistory(token: string, objectType: string, ids: string[], property: string): Promise<Map<string, any[]>> {
+  const out = new Map<string, any[]>()
+  for (let i = 0; i < ids.length; i += 50) {
+    const data = await hubspot(token, 'POST', `/crm/v3/objects/${objectType}/batch/read`, {
+      inputs: ids.slice(i, i + 50).map(id => ({ id })),
+      properties: [],
+      propertiesWithHistory: [property],
+    })
+    for (const r of data.results || []) out.set(String(r.id), r.propertiesWithHistory?.[property] || [])
+  }
+  return out
+}
+
 // ── Team members ──────────────────────────────────────────────────────────────
 // Members of TEAM_PERF_TEAM_IDS (primary or secondary team), as HubSpot owners.
 // Cached in KV for an hour and in memory for 5 minutes: every week request needs

@@ -9,11 +9,14 @@
 //     (hs_v2_date_exited_<MQL>), counted on the Amsterdam day it left and for its
 //     current owner. Same rule as the reps' own Performance drawer.
 //   - Outcome: the lead's current stage — SQL, Lost, LTO, anything else is "other".
-//   - Time to process: working minutes (Mon–Fri 08:00–18:00 Amsterdam) from the
-//     owner being assigned to the lead leaving MQL. HubSpot only keeps the most
-//     recent assignment; when that is after the lead left MQL (reassigned later),
-//     the clock starts when the lead entered MQL instead. The clock never starts
-//     before the lead entered MQL: reps only see MQL leads on their board.
+//   - Time to process (Andreas, 2026-10-08): working minutes (Mon–Fri 08:00–18:00
+//     Amsterdam) from the lead being assigned to its owner until the owner first
+//     updates the Call outcome (qualificationcalloutcome_lead, read from its
+//     property history). HubSpot only keeps the most recent assignment. The clock
+//     never starts before the lead entered MQL: reps only see MQL leads on their
+//     board. Leads with no Call outcome update after the assignment (e.g. closed
+//     as LTO without one, or reassigned after they were processed) are counted as
+//     processed but left out of the average.
 
 /** HubSpot teams whose members show up in Team performance: production portal, sandbox portal. */
 export const TEAM_PERF_TEAM_IDS: string[] = [
@@ -162,7 +165,7 @@ export interface OwnerDayStats {
   lost: number
   lto: number
   other: number
-  /** working minutes from assignment to processed, one entry per lead with a known start */
+  /** working minutes from assignment to the first Call outcome update, one entry per lead that has one */
   t: number[]
   /** tasks completed */
   tc: number
@@ -206,8 +209,11 @@ const ms = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null
 }
 
-/** Count one HubSpot lead (search result `properties`) into the week. */
-export function addLead(days: TeamPerfWeek['days'], props: Record<string, any>, stages: StageIds): void {
+/**
+ * Count one HubSpot lead (search result `properties`) into the week.
+ * `minutes`: its time to process (timeToFirstOutcome), or null to leave it out of the average.
+ */
+export function addLead(days: TeamPerfWeek['days'], props: Record<string, any>, stages: StageIds, minutes: number | null): void {
   const ownerId = String(props.hubspot_owner_id || '')
   const exited = ms(props[`hs_v2_date_exited_${stages.mql}`])
   if (!ownerId || exited === null) return
@@ -218,13 +224,34 @@ export function addLead(days: TeamPerfWeek['days'], props: Record<string, any>, 
   else if (stage === stages.lost) s.lost++
   else if (stage === stages.lto) s.lto++
   else s.other++
+  if (minutes !== null) s.t.push(minutes)
+}
 
+/**
+ * Time to process: working minutes from the lead being assigned to its owner until
+ * the first Call outcome update after that, or null when there is none.
+ * `outcomeUpdates`: when the Call outcome was set to a value — see outcomeUpdateTimes().
+ */
+export function timeToFirstOutcome(props: Record<string, any>, stages: StageIds, outcomeUpdates: number[]): number | null {
+  const exited = ms(props[`hs_v2_date_exited_${stages.mql}`])
   const entered = ms(props[`hs_v2_date_entered_${stages.mql}`])
   const assigned = ms(props.hubspot_owner_assigneddate)
-  let start: number | null = null
-  if (assigned !== null && assigned <= exited) start = entered !== null ? Math.max(assigned, entered) : assigned
-  else if (entered !== null && entered <= exited) start = entered
-  if (start !== null) s.t.push(workingMinutes(start, exited))
+  if (exited === null || assigned === null || assigned > exited) return null // reassigned after it was processed: not this owner's call
+  const start = entered !== null ? Math.max(assigned, entered) : assigned
+  let stop = Infinity
+  for (const at of outcomeUpdates) if (at >= start && at < stop) stop = at
+  return stop === Infinity ? null : workingMinutes(start, stop)
+}
+
+/** Times (ms) the property was set to a non-empty value, from a HubSpot `propertiesWithHistory` entry list. */
+export function outcomeUpdateTimes(history: Array<{ value?: unknown; timestamp?: unknown }> | undefined): number[] {
+  const out: number[] = []
+  for (const h of history || []) {
+    if (h.value === null || h.value === undefined || String(h.value) === '') continue
+    const at = ms(h.timestamp)
+    if (at !== null) out.push(at)
+  }
+  return out
 }
 
 /** Count one completed HubSpot task into the week. */

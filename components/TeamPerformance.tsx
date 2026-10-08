@@ -9,7 +9,7 @@ import { translate } from '@/lib/i18n'
 import { fetchTeamOverview, fetchTeamWeek } from '@/lib/storage'
 import {
   HISTORY_START, MAX_MONTHS_BACK, amsDay, dayAdd, weekStartOf, monthAdd, weeksCovering, daysBetween,
-  sumRange, mean, median,
+  sumRange, mean,
   type TeamOverview, type TeamPerfWeek, type PerfTotals,
 } from '@/lib/teamPerf'
 
@@ -298,7 +298,7 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
           <Kpi label={t('tpSQL')} swatch="var(--tp-sql)" value={fmtNum(tot.sql, lang)} sub={t('tpOfProcessed', pct(tot.sql, tot.p))} />
           <Kpi label={t('tpLTO')} swatch="var(--tp-lto)" value={fmtNum(tot.lto, lang)} sub={t('tpOfProcessed', pct(tot.lto, tot.p))} />
           <Kpi label={t('tpLost')} swatch="var(--tp-lost)" value={fmtNum(tot.lost, lang)} sub={t('tpOfProcessed', pct(tot.lost, tot.p))} />
-          <Kpi label={t('tpAvgTime')} value={fmtDur(mean(tot.t), lang)} sub={tot.t.length ? t('tpMedianWork', fmtDur(median(tot.t), lang)) : undefined} />
+          <Kpi label={t('tpAvgTime')} value={fmtDur(mean(tot.t), lang)} sub={t('tpAvgTimeSub')} />
           <Kpi label={t('tpOpenTasks')} value={fmtNum(open.open, lang)} sub={t('tpOverdue', open.overdue)} />
           <Kpi label={t('tpTasksDone')} value={fmtNum(tot.tc, lang)} />
         </div>

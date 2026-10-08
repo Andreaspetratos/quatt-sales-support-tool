@@ -7,7 +7,7 @@
  *                                         in the week starting that Monday (Amsterdam time)
  * Add &force=1 to skip the caches (the tab's Refresh button).
  *
- * Weeks are computed from HubSpot and cached in KV (key teamperf:v1:week:<monday>), so
+ * Weeks are computed from HubSpot and cached in KV (key teamperf:v2:week:<monday>), so
  * a 6-month view doesn't page through ~20,000 leads every time an admin opens the tab.
  * A cached week is recomputed when it is older than its TTL below, when the team's
  * members changed, or when the LTO stage id changed. Outcomes are the lead's current
@@ -19,20 +19,27 @@
  */
 import {
   HISTORY_START, isDay, dayOfWeek, dayAdd, amsDay, dayStartUtc,
-  addLead, addCompletedTask,
+  addLead, addCompletedTask, outcomeUpdateTimes, timeToFirstOutcome,
 } from '../../lib/teamPerf'
-import { hubspotToken, loadTeamMembers, searchAll } from '../../lib/teamPerfServer'
+import { hubspotToken, loadTeamMembers, searchAll, readHistory } from '../../lib/teamPerfServer'
 
 // Same ids as CONFIG in lib/config.ts (which can't be imported here: it reads process.env)
 const PIPELINE_ID = '3837045967'
 const MQL = '5404393694'
 const SQL = '5404393697'
 const LOST = '5404393698'
+const CALL_OUTCOME = 'qualificationcalloutcome_lead'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
 const DAY = 24 * HOUR
-const WEEK_KEY = week => `teamperf:v1:week:${week}`
+// v2 (2026-10-08): time to process now stops at the first Call outcome update
+const WEEK_KEY = week => `teamperf:v2:week:${week}`
+// Per lead of a week: [assigned date as HubSpot sends it, time to process]. Once a lead
+// has its first Call outcome after an assignment, that time never changes, so its
+// property history is only read again when the lead is new, was reassigned, or had none yet.
+const TIMES_KEY = week => `teamperf:v2:times:${week}`
+const KEEP = { expirationTtl: 220 * 24 * 60 * 60 } // long after a week drops out of the 6-month window
 
 export async function onRequestGet(ctx) {
   const { env, request } = ctx
@@ -71,10 +78,9 @@ export async function onRequestGet(ctx) {
       }
     }
 
-    const result = await computeWeek(token, week, ownerIds, lto)
+    const result = await computeWeek(token, week, ownerIds, lto, kv)
     if (kv) {
-      // Expires on its own long after it drops out of the 6-month window
-      await kv.put(WEEK_KEY(week), JSON.stringify(result), { expirationTtl: 220 * 24 * 60 * 60 })
+      await kv.put(WEEK_KEY(week), JSON.stringify(result), KEEP)
         .catch(e => console.error('[team-perf] cache write failed:', week, String(e)))
     }
     return json(result)
@@ -93,7 +99,7 @@ function ttl(week, today) {
   return (7 + (Number(week.slice(8, 10)) % 7)) * DAY
 }
 
-async function computeWeek(token, week, ownerIds, lto) {
+async function computeWeek(token, week, ownerIds, lto, kv) {
   const from = String(Math.max(dayStartUtc(week), dayStartUtc(HISTORY_START)))
   const to = String(dayStartUtc(dayAdd(week, 7)))
   const exited = `hs_v2_date_exited_${MQL}`
@@ -120,8 +126,28 @@ async function computeWeek(token, week, ownerIds, lto) {
     sorts: [{ propertyName: 'hs_task_completion_date', direction: 'ASCENDING' }],
   })
 
+  // Time to process stops at the first Call outcome update after assignment, from the
+  // property's history. Reuse what earlier runs found; read history only for the rest.
+  const known = (kv && await kv.get(TIMES_KEY(week), 'json').catch(() => null)) || {}
+  const times = {}
+  const todo = []
+  for (const l of leads) {
+    const id = String(l.id), assigned = l.properties?.hubspot_owner_assigneddate || ''
+    const hit = known[id]
+    if (hit && hit[0] === assigned && hit[1] !== null) times[id] = hit
+    else todo.push(l)
+  }
+  const history = await readHistory(token, 'leads', todo.map(l => String(l.id)), CALL_OUTCOME)
+  for (const l of todo) {
+    const id = String(l.id)
+    times[id] = [l.properties?.hubspot_owner_assigneddate || '', timeToFirstOutcome(l.properties || {}, stages, outcomeUpdateTimes(history.get(id)))]
+  }
+  if (kv && todo.length) {
+    await kv.put(TIMES_KEY(week), JSON.stringify(times), KEEP).catch(e => console.error('[team-perf] times cache write failed:', week, String(e)))
+  }
+
   const days = {}
-  for (const l of leads) addLead(days, l.properties || {}, stages)
+  for (const l of leads) addLead(days, l.properties || {}, stages, times[String(l.id)][1])
   for (const t of tasks) addCompletedTask(days, t.properties || {})
   return { week, computedAt: Date.now(), ownerIds, lto, days }
 }
