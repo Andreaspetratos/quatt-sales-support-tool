@@ -256,7 +256,7 @@ export async function triageFeedback(id: string, message: string): Promise<strin
   return data.triage
 }
 
-// ── Admin → Team performance (/api/team-perf, /api/activity) ──────────────────
+// ── Admin → Team performance (/api/team-perf) ─────────────────────────────────
 async function getJson<T>(url: string): Promise<T> {
   const res = await apiFetch(url)
   const data = await res.json().catch(() => ({}))
@@ -270,8 +270,4 @@ export function fetchTeamOverview(force = false): Promise<import('./teamPerf').T
 
 export function fetchTeamWeek(week: string, force = false): Promise<import('./teamPerf').TeamPerfWeek> {
   return getJson(`/api/team-perf?week=${week}` + (force ? '&force=1' : ''))
-}
-
-export function fetchTeamActivity(from: string, to: string): Promise<import('./teamPerf').ActivityData> {
-  return getJson(`/api/activity?from=${from}&to=${to}`)
 }

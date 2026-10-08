@@ -1,15 +1,29 @@
-// Server-only helpers for Team performance — used by the Pages Functions
-// functions/api/team-perf.js and functions/api/activity.js. Not imported by the
-// frontend. Talks to HubSpot directly with the portal's token (never sent to the
+// Server-only helpers for Team performance — used by the Pages Function
+// functions/api/team-perf.js. Not imported by the frontend. Talks to HubSpot directly with the portal's token (never sent to the
 // browser), the same way the auth middleware's admin check does.
 
 import { TEAM_PERF_TEAM_IDS, type TeamMember } from './teamPerf'
 
 const HS = 'https://api.hubapi.com'
 
+// HubSpot's search endpoints allow only a few requests per second for the whole
+// portal, shared with the reps' boards (several of which don't retry on a 429).
+// A cold 6-month view needs ~160 searches, so they're spaced out here instead of
+// fired as fast as possible.
+const SEARCH_GAP_MS = 300
+let nextSearchAt = 0
+
+async function searchSlot(): Promise<void> {
+  const now = Date.now()
+  const at = Math.max(now, nextSearchAt)
+  nextSearchAt = at + SEARCH_GAP_MS
+  if (at > now) await new Promise(r => setTimeout(r, at - now))
+}
+
 /** One HubSpot call. Retries a 429 (shared search rate limit) a few times before giving up. */
 export async function hubspot(token: string, method: string, path: string, body?: unknown): Promise<any> {
   for (let attempt = 0; ; attempt++) {
+    if (path.endsWith('/search')) await searchSlot()
     const res = await fetch(HS + path, {
       method,
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -42,8 +56,8 @@ export async function searchAll(token: string, objectType: string, body: Record<
 
 // ── Team members ──────────────────────────────────────────────────────────────
 // Members of TEAM_PERF_TEAM_IDS (primary or secondary team), as HubSpot owners.
-// Cached in KV for an hour and in memory for 5 minutes: every heartbeat to
-// /api/activity checks membership, and the lookup costs several HubSpot calls.
+// Cached in KV for an hour and in memory for 5 minutes: every week request needs
+// the list, and the lookup costs several HubSpot calls.
 
 const MEMBERS_KEY = 'teamperf:members:v1'
 const MEMBERS_KV_TTL_MS = 60 * 60 * 1000

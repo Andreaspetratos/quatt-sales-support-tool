@@ -12,7 +12,7 @@
  * A cached week is recomputed when it is older than its TTL below, when the team's
  * members changed, or when the LTO stage id changed. Outcomes are the lead's current
  * stage, so an older week can still move a little (an LTO lead that later turns SQL);
- * the TTLs keep that drift to hours for recent weeks and a week for old ones.
+ * the TTLs keep that drift to hours for recent weeks and 1–2 weeks for old ones.
  *
  * Definitions: lib/teamPerf.ts. The browser can't run these searches through
  * /api/hs-write in one go: HubSpot's search rate limit is shared with the reps' boards.
@@ -88,7 +88,9 @@ export async function onRequestGet(ctx) {
 function ttl(week, today) {
   if (today < dayAdd(week, 7)) return 5 * MIN               // this week: near live
   if (today < dayAdd(week, 7 + 28)) return 6 * HOUR         // last 4 weeks: outcomes still move
-  return 7 * DAY
+  // Older: 7–13 days, spread by date so a 6-month view never has to recompute all
+  // ~27 weeks on the same day
+  return (7 + (Number(week.slice(8, 10)) % 7)) * DAY
 }
 
 async function computeWeek(token, week, ownerIds, lto) {

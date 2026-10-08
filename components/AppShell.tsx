@@ -6,8 +6,6 @@ import { seedBuiltinPlaybooks } from '@/lib/playbooks'
 import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
 import { fetchSharedPbs, fetchSharedScheds, fetchFeedbacks } from '@/lib/storage'
 import { onAuthExpired } from '@/lib/auth'
-import { startActivityTracker } from '@/lib/activity'
-import { isDemo } from '@/lib/config'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
@@ -53,13 +51,6 @@ function Shell() {
       .then(data => setState({ perfData: data, perfLoading: false }))
       .catch(() => setState({ perfLoading: false }))
   }, [currentRep?.hubspotOwnerId])
-
-  // Active time in the tool, for Admin → Team performance. Runs for everyone signed
-  // in; the server keeps it only for members of the team and tells the rest to stop.
-  useEffect(() => {
-    if (!currentRep?.email || isDemo()) return
-    return startActivityTracker()
-  }, [currentRep?.email])
 
   // The server rejected our token (expired, or signed out elsewhere): back to login.
   // Unsaved input in an open modal is lost, but every write after this would fail anyway.

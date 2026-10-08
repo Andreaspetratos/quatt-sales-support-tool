@@ -1,6 +1,6 @@
 // Team performance (Admin → Team performance): shared definitions and pure logic.
 //
-// Imported by the Pages Functions (functions/api/team-perf.js, activity.js via
+// Imported by the Pages Function functions/api/team-perf.js (also via
 // lib/teamPerfServer.ts) AND by the admin tab, so it must stay dependency-free:
 // no imports, no window, no process.env.
 //
@@ -14,8 +14,6 @@
 //     recent assignment; when that is after the lead left MQL (reassigned later),
 //     the clock starts when the lead entered MQL instead. The clock never starts
 //     before the lead entered MQL: reps only see MQL leads on their board.
-//   - Active time: minutes the tool was the visible tab and the rep clicked, typed,
-//     scrolled or moved the mouse in the last 5 minutes (lib/activity.ts).
 
 /** HubSpot teams whose members show up in Team performance: production portal, sandbox portal. */
 export const TEAM_PERF_TEAM_IDS: string[] = [
@@ -281,40 +279,4 @@ export function median(xs: number[]): number | null {
   const s = [...xs].sort((a, b) => a - b)
   const mid = s.length >> 1
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
-}
-
-// ── Active-time minute masks (D1 table activity_minutes) ──────────────────────
-// One row per user, Amsterdam day and hour. `lo` has a bit per minute 0–29, `hi`
-// per minute 30–59. Storing bits instead of a counter makes the upsert an OR, so
-// two open tabs or devices never count the same minute twice.
-
-export interface MinuteMaskRow { day: string; hour: number; lo: number; hi: number }
-
-export function minutesToRows(epochMinutes: number[]): MinuteMaskRow[] {
-  const rows = new Map<string, MinuteMaskRow>()
-  for (const em of epochMinutes) {
-    const p = amsParts(em * 60000)
-    const day = `${p.y}-${pad(p.m)}-${pad(p.d)}`
-    const key = `${day}|${p.h}`
-    const row = rows.get(key) || { day, hour: p.h, lo: 0, hi: 0 }
-    if (p.min < 30) row.lo |= 1 << p.min
-    else row.hi |= 1 << (p.min - 30)
-    rows.set(key, row)
-  }
-  return Array.from(rows.values())
-}
-
-export function popcount(n: number): number {
-  n = n >>> 0
-  n = n - ((n >>> 1) & 0x55555555)
-  n = (n & 0x33333333) + ((n >>> 2) & 0x33333333)
-  return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24
-}
-
-/** /api/activity GET: active minutes per day per email (lowercase). */
-export interface ActivityData {
-  configured: boolean
-  /** First day with any tracked activity, or null. */
-  since: string | null
-  days: Record<string, Record<string, number>>
 }

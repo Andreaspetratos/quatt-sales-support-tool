@@ -20,7 +20,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',system-ui,sans-serif;backg
   --cs:#6B9088;
   --ch:#162921;
   /* Team performance charts — validated with the dataviz palette checker on --c1 */
-  --tp-sql:#1A8F75;--tp-lto:#C98500;--tp-lost:#D63A3A;--tp-other:#4D6460;--tp-act:#3987E5;
+  --tp-sql:#1A8F75;--tp-lto:#C98500;--tp-lost:#D63A3A;--tp-other:#4D6460;
 }
 
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -279,7 +279,6 @@ tbody td{padding:9px 13px;vertical-align:middle}
 .tp-kpi-v{font-size:26px;font-weight:700;color:var(--ct);line-height:1.15;margin-top:4px}
 .tp-kpi-s{font-size:11px;color:var(--cs);margin-top:3px;line-height:1.4}
 .tp-sw{display:inline-block;width:10px;height:10px;border-radius:2px;flex-shrink:0}
-.tp-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:10px}
 .tp-card{background:var(--c1);border:1px solid var(--cb);border-radius:12px;padding:14px 16px;min-width:0}
 .tp-card-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .tp-card-t{font-size:13px;font-weight:700;color:var(--ct)}
@@ -339,7 +338,7 @@ tbody td{padding:9px 13px;vertical-align:middle}
 /* ── LIGHT THEME OVERRIDES ── */
 [data-theme="light"]{
   --bg:#F5F6F4;--c1:#FFFFFF;--c2:#F8F9F8;--cb:#EDEDED;--ct:#081412;--cs:#999999;--ch:#E8EEEE;
-  --tp-sql:#1A8F75;--tp-lto:#EDA100;--tp-lost:#D63A3A;--tp-other:#BDBDBD;--tp-act:#2A78D6;
+  --tp-sql:#1A8F75;--tp-lto:#EDA100;--tp-lost:#D63A3A;--tp-other:#BDBDBD;
 }
 [data-theme="light"] .sb{background:var(--bl);color:var(--bk)}
 [data-theme="light"] .wb{background:#FEF9C3;border-color:#FCD34D;color:#92400E}

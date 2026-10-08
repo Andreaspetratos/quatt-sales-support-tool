@@ -1,16 +1,16 @@
 'use client'
 
 // Admin → Team performance: the reps' own Performance numbers, for the whole
-// "Sales Support Team (Dennis)" and per member, plus time to process, open tasks
-// and active time. Admin-only (the API enforces it too). Definitions: lib/teamPerf.ts.
+// "Sales Support Team (Dennis)" and per member, plus time to process and open
+// tasks. Admin-only (the API enforces it too). Definitions: lib/teamPerf.ts.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { translate } from '@/lib/i18n'
-import { fetchTeamOverview, fetchTeamWeek, fetchTeamActivity } from '@/lib/storage'
+import { fetchTeamOverview, fetchTeamWeek } from '@/lib/storage'
 import {
   HISTORY_START, MAX_MONTHS_BACK, amsDay, dayAdd, weekStartOf, monthAdd, weeksCovering, daysBetween,
   sumRange, mean, median,
-  type TeamOverview, type TeamPerfWeek, type ActivityData, type PerfTotals,
+  type TeamOverview, type TeamPerfWeek, type PerfTotals,
 } from '@/lib/teamPerf'
 
 type Lang = 'nl' | 'en'
@@ -30,7 +30,7 @@ const REFRESH_DAYS = 35
 /** Ranges up to this many days chart per day; longer ranges per week. */
 const DAILY_MAX = 35
 
-type SortKey = 'name' | 'p' | 'sql' | 'lto' | 'lost' | 'time' | 'open' | 'done' | 'active'
+type SortKey = 'name' | 'p' | 'sql' | 'lto' | 'lost' | 'time' | 'open' | 'done'
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 const locale = (lang: Lang) => (lang === 'nl' ? 'nl-NL' : 'en-GB')
@@ -70,27 +70,6 @@ function periodRange(p: Period, today: string, custom: { from: string; to: strin
   }
 }
 
-interface ActSums { minutes: number; personDays: number; byOwner: Record<string, { minutes: number; days: number }>; byDay: Record<string, { minutes: number; people: number }> }
-
-function sumActivity(activity: ActivityData | null, emailToOwner: Map<string, string>, owners: Set<string>, from: string, to: string): ActSums {
-  const out: ActSums = { minutes: 0, personDays: 0, byOwner: {}, byDay: {} }
-  if (!activity) return out
-  for (const [day, perEmail] of Object.entries(activity.days)) {
-    if (day < from || day > to) continue
-    for (const [email, minutes] of Object.entries(perEmail)) {
-      const ownerId = emailToOwner.get(email.toLowerCase())
-      if (!ownerId || !owners.has(ownerId) || !(minutes > 0)) continue
-      out.minutes += minutes
-      out.personDays++
-      const o = out.byOwner[ownerId] || (out.byOwner[ownerId] = { minutes: 0, days: 0 })
-      o.minutes += minutes; o.days++
-      const d = out.byDay[day] || (out.byDay[day] = { minutes: 0, people: 0 })
-      d.minutes += minutes; d.people++
-    }
-  }
-  return out
-}
-
 // ── Main tab ──────────────────────────────────────────────────────────────────
 export default function TeamPerformance({ lang }: { lang: Lang }) {
   const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
@@ -104,14 +83,11 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
   const [overviewErr, setOverviewErr] = useState<string | null>(null)
   const [weeks, setWeeks] = useState<Record<string, TeamPerfWeek>>({})
   const [failedWeeks, setFailedWeeks] = useState<Record<string, string>>({})
-  const [activity, setActivity] = useState<ActivityData | null>(null)
-  const [activityErr, setActivityErr] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'p', dir: -1 })
   const weeksRef = useRef(weeks)
   weeksRef.current = weeks
   const inflight = useRef(new Set<string>())
-  const activityReq = useRef(0)
 
   const range = periodRange(period, today, custom)
   const dataFrom = range.from < HISTORY_START ? HISTORY_START : range.from
@@ -132,7 +108,8 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
     todo.forEach(w => inflight.current.add(w))
     setFailedWeeks(prev => { const n = { ...prev }; todo.forEach(w => delete n[w]); return n })
     const queue = [...todo]
-    // Two at a time: HubSpot's search rate limit is shared with the reps' boards
+    // One at a time: HubSpot's search rate limit is shared with the reps' boards
+    // (the server also spaces its searches, see lib/teamPerfServer.ts)
     const worker = async () => {
       for (let w = queue.shift(); w; w = queue.shift()) {
         const week = w
@@ -146,18 +123,7 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
         }
       }
     }
-    await Promise.all([worker(), worker()])
-  }
-
-  async function loadActivity(from: string, to: string) {
-    const id = ++activityReq.current
-    setActivityErr(null)
-    try {
-      const a = await fetchTeamActivity(from, to)
-      if (id === activityReq.current) setActivity(a)
-    } catch (e: any) {
-      if (id === activityReq.current) { setActivity(null); setActivityErr(e?.message || String(e)) }
-    }
+    await worker()
   }
 
   async function refresh() {
@@ -167,7 +133,6 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
     await Promise.all([
       loadOverview(true),
       loadWeeks(neededWeeks.filter(w => dayAdd(w, 6) >= recent), true),
-      loadActivity(range.from, range.to),
     ])
     setRefreshing(false)
   }
@@ -179,8 +144,6 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
     if (overview) loadWeeks(neededWeeks, false)
   }, [overview !== null, neededWeeks.join()])
 
-  useEffect(() => { loadActivity(range.from, range.to) }, [range.from, range.to])
-
   const members = overview?.members ?? []
   useEffect(() => {
     if (selected && overview && !members.some(m => m.ownerId === selected)) setSelected(null)
@@ -188,18 +151,12 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
 
   // ── Derived numbers ──
   const allIds = useMemo(() => members.map(m => m.ownerId), [overview])
-  const emailToOwner = useMemo(() => new Map(members.map(m => [m.email.toLowerCase(), m.ownerId])), [overview])
   const weekList = useMemo(() => Object.values(weeks), [weeks])
   const scopeIds = selected ? [selected] : allIds
   const teamSums = useMemo(() => sumRange(weekList, range.from, range.to, allIds), [weekList, range.from, range.to, allIds])
   const scope = useMemo(
     () => (selected ? sumRange(weekList, range.from, range.to, [selected]) : teamSums),
     [selected, teamSums, weekList, range.from, range.to],
-  )
-  const teamAct = useMemo(() => sumActivity(activity, emailToOwner, new Set(allIds), range.from, range.to), [activity, emailToOwner, allIds, range.from, range.to])
-  const scopeAct = useMemo(
-    () => (selected ? sumActivity(activity, emailToOwner, new Set([selected]), range.from, range.to) : teamAct),
-    [selected, teamAct, activity, emailToOwner, range.from, range.to],
   )
 
   const pending = neededWeeks.filter(w => !weeks[w] && !failedWeeks[w])
@@ -230,7 +187,6 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
     const o = overview.openTasks[id]
     return { open: a.open + (o?.open || 0), overdue: a.overdue + (o?.overdue || 0) }
   }, { open: 0, overdue: 0 })
-  const activeAvg = scopeAct.personDays ? scopeAct.minutes / scopeAct.personDays : null
   const selectedMember = members.find(m => m.ownerId === selected) || null
 
   // ── Chart data ── (from the first day with data: no empty bars before the pipeline existed)
@@ -253,23 +209,16 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
     }
     return { key: b.key, label: b.label, title: b.title, values: OUTCOMES.map(o => v[o.key]) }
   })
-  const activeBars: BarDatum[] = buckets.map(b => {
-    let minutes = 0, people = 0
-    for (const d of b.days) { const a = scopeAct.byDay[d]; if (a) { minutes += a.minutes; people += a.people } }
-    return { key: b.key, label: b.label, title: b.title, values: [people ? minutes / people : 0] }
-  })
   const outcomeSeries = OUTCOMES.map(o => ({ label: t(o.label), color: o.color }))
 
   // ── Member table ──
   const rows = members.map(m => {
     const s: PerfTotals = teamSums.byOwner[m.ownerId]
-    const a = teamAct.byOwner[m.ownerId]
     return {
       m, s,
       time: mean(s.t),
       open: overview.openTasks[m.ownerId]?.open ?? 0,
       overdue: overview.openTasks[m.ownerId]?.overdue ?? 0,
-      active: a?.days ? a.minutes / a.days : null,
     }
   })
   const sortVal = (r: typeof rows[number]): number | string | null => {
@@ -282,7 +231,6 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
       case 'time': return r.time
       case 'open': return r.open
       case 'done': return r.s.tc
-      case 'active': return r.active
     }
   }
   rows.sort((a, b) => {
@@ -294,13 +242,6 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
   })
   const sortBy = (key: SortKey) => setSort(s => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: key === 'name' ? 1 : -1 }))
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === 1 ? ' ▲' : ' ▼') : '')
-
-  const activeSub = !activity
-    ? (activityErr ? t('tpErr', activityErr) : t('tpLoading'))
-    : !activity.configured ? t('tpActiveNotConfigured')
-    : !scopeAct.personDays ? t('tpActiveNoData')
-    : selected ? t('tpActiveDays', scopeAct.personDays) : t('tpActiveDaysTeam', scopeAct.personDays)
-  const since = activity?.since ? fmtDay(activity.since, lang, { day: 'numeric', month: 'long', year: 'numeric' }) : t('tpActiveSinceUnknown')
 
   return (
     <div className="tp">
@@ -360,34 +301,19 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
           <Kpi label={t('tpAvgTime')} value={fmtDur(mean(tot.t), lang)} sub={tot.t.length ? t('tpMedianWork', fmtDur(median(tot.t), lang)) : undefined} />
           <Kpi label={t('tpOpenTasks')} value={fmtNum(open.open, lang)} sub={t('tpOverdue', open.overdue)} />
           <Kpi label={t('tpTasksDone')} value={fmtNum(tot.tc, lang)} />
-          <Kpi label={t('tpActivePerDay')} value={fmtDur(activeAvg, lang)} sub={activeSub} />
         </div>
 
-        <div className="tp-charts">
-          <ChartCard
-            title={t(daily ? 'tpChartLeadsDay' : 'tpChartLeadsWeek')}
-            legend={outcomeSeries}
-            lang={lang}
-            table={{
-              head: [t('tpColPeriod'), ...outcomeSeries.map(s => s.label), t('tpColTotal')],
-              rows: leadBars.map(b => [b.title, ...b.values.map(v => fmtNum(v, lang)), fmtNum(b.values.reduce((a, c) => a + c, 0), lang)]),
-            }}
-          >
-            <BarChart data={leadBars} series={outcomeSeries} kind="count" fmt={v => fmtNum(v, lang)} totalLabel={t('tpColTotal')} />
-          </ChartCard>
-          <ChartCard
-            title={t(daily ? 'tpChartActiveDay' : 'tpChartActiveWeek')}
-            sub={selected ? undefined : t('tpChartActiveTeamSub')}
-            lang={lang}
-            table={{
-              head: [t('tpColPeriod'), t('tpColActive')],
-              rows: activeBars.map(b => [b.title, b.values[0] ? fmtDur(b.values[0], lang) : '–']),
-            }}
-          >
-            <BarChart data={activeBars} series={[{ label: t('tpActivePerDay'), color: 'var(--tp-act)' }]} kind="minutes" fmt={v => fmtDur(v, lang)}
-              tickFmt={v => (v % 60 === 0 && v > 0 ? `${v / 60}${lang === 'nl' ? 'u' : 'h'}` : fmtDur(v, lang))} />
-          </ChartCard>
-        </div>
+        <ChartCard
+          title={t(daily ? 'tpChartLeadsDay' : 'tpChartLeadsWeek')}
+          legend={outcomeSeries}
+          lang={lang}
+          table={{
+            head: [t('tpColPeriod'), ...outcomeSeries.map(s => s.label), t('tpColTotal')],
+            rows: leadBars.map(b => [b.title, ...b.values.map(v => fmtNum(v, lang)), fmtNum(b.values.reduce((a, c) => a + c, 0), lang)]),
+          }}
+        >
+          <BarChart data={leadBars} series={outcomeSeries} fmt={v => fmtNum(v, lang)} totalLabel={t('tpColTotal')} />
+        </ChartCard>
 
         {!selected && (
           <div className="tp-card">
@@ -401,7 +327,7 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
                   <tr>
                     {([
                       ['name', t('tpColName')], ['p', t('tpColProcessed')], ['sql', t('tpSQL')], ['lto', 'LTO'], ['lost', t('tpLost')],
-                      ['time', t('tpColTime')], ['open', t('tpColOpen')], ['done', t('tpColDone')], ['active', t('tpColActive')],
+                      ['time', t('tpColTime')], ['open', t('tpColOpen')], ['done', t('tpColDone')],
                     ] as [SortKey, string][]).map(([k, label]) => (
                       <th key={k} className="sortable" onClick={() => sortBy(k)} aria-sort={sort.key === k ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
                         {label}{arrow(k)}
@@ -422,7 +348,6 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
                       <td>{fmtDur(r.time, lang)}</td>
                       <td>{fmtNum(r.open, lang)}{r.overdue > 0 && <span className="tp-pct">({fmtNum(r.overdue, lang)})</span>}</td>
                       <td>{fmtNum(r.s.tc, lang)}</td>
-                      <td>{fmtDur(r.active, lang)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -432,7 +357,7 @@ export default function TeamPerformance({ lang }: { lang: Lang }) {
         )}
       </div>
 
-      <div className="tp-note" style={{ whiteSpace: 'pre-line' }}>{t('tpNotes', since)}</div>
+      <div className="tp-note" style={{ whiteSpace: 'pre-line' }}>{t('tpNotes')}</div>
     </div>
   )
 }
@@ -448,9 +373,8 @@ function Kpi({ label, value, sub, swatch }: { label: string; value: string; sub?
   )
 }
 
-function ChartCard({ title, sub, legend, table, lang, children }: {
+function ChartCard({ title, legend, table, lang, children }: {
   title: string
-  sub?: string
   legend?: { label: string; color: string }[]
   table: { head: string[]; rows: string[][] }
   lang: Lang
@@ -464,7 +388,6 @@ function ChartCard({ title, sub, legend, table, lang, children }: {
         <span className="tp-card-t">{title}</span>
         <button className="tp-link" onClick={() => setShowTable(v => !v)}>{t(showTable ? 'tpHideTable' : 'tpShowTable')}</button>
       </div>
-      {sub && <div className="tp-card-s" style={{ marginTop: -4, marginBottom: 6 }}>{sub}</div>}
       {legend && (
         <div className="tp-legend">
           {legend.map(l => <span key={l.label}><span className="tp-sw" style={{ background: l.color }} />{l.label}</span>)}
@@ -485,15 +408,10 @@ function ChartCard({ title, sub, legend, table, lang, children }: {
 
 interface BarDatum { key: string; label: string; title: string; values: number[] }
 
-function niceScale(maxVal: number, kind: 'count' | 'minutes'): { max: number; ticks: number[] } {
-  let step: number
-  if (kind === 'minutes') {
-    step = [5, 10, 15, 30, 60, 120, 180, 240, 300, 360, 480, 600].find(s => maxVal / s <= 4) ?? 600
-  } else {
-    const raw = Math.max(maxVal, 1) / 4
-    const mag = 10 ** Math.floor(Math.log10(raw))
-    step = Math.max(1, [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw) ?? 10 * mag)
-  }
+function niceScale(maxVal: number): { max: number; ticks: number[] } {
+  const raw = Math.max(maxVal, 1) / 4
+  const mag = 10 ** Math.floor(Math.log10(raw))
+  const step = Math.max(1, [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw) ?? 10 * mag)
   const max = Math.max(step, Math.ceil(maxVal / step) * step)
   const ticks: number[] = []
   for (let v = 0; v <= max + 1e-9; v += step) ticks.push(v)
@@ -506,12 +424,10 @@ function barPath(x: number, y: number, w: number, h: number, r: number): string 
   return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`
 }
 
-function BarChart({ data, series, kind, fmt, tickFmt = fmt, totalLabel, height = 190 }: {
+function BarChart({ data, series, fmt, totalLabel, height = 210 }: {
   data: BarDatum[]
   series: { label: string; color: string }[]
-  kind: 'count' | 'minutes'
   fmt: (v: number) => string
-  tickFmt?: (v: number) => string
   totalLabel?: string
   height?: number
 }) {
@@ -528,11 +444,11 @@ function BarChart({ data, series, kind, fmt, tickFmt = fmt, totalLabel, height =
     return () => ro.disconnect()
   }, [])
 
-  const M = { l: kind === 'minutes' ? 40 : 36, r: 4, t: 8, b: 22 }
+  const M = { l: 40, r: 4, t: 8, b: 22 }
   const plotW = Math.max(0, width - M.l - M.r)
   const plotH = height - M.t - M.b
   const totals = data.map(d => d.values.reduce((a, b) => a + b, 0))
-  const { max, ticks } = niceScale(Math.max(0, ...totals), kind)
+  const { max, ticks } = niceScale(Math.max(0, ...totals))
   const band = data.length ? plotW / data.length : 0
   const barW = Math.max(2, Math.min(24, band - Math.max(2, band * 0.3)))
   const y = (v: number) => M.t + plotH - (v / max) * plotH
@@ -549,7 +465,7 @@ function BarChart({ data, series, kind, fmt, tickFmt = fmt, totalLabel, height =
           {ticks.map(v => (
             <g key={v}>
               <line x1={M.l} x2={width - M.r} y1={y(v)} y2={y(v)} stroke="var(--cb)" strokeWidth={1} shapeRendering="crispEdges" />
-              <text x={M.l - 6} y={y(v)} dy="0.32em" textAnchor="end" fontSize={10} fill="var(--cs)" style={{ fontVariantNumeric: 'tabular-nums' }}>{tickFmt(v)}</text>
+              <text x={M.l - 6} y={y(v)} dy="0.32em" textAnchor="end" fontSize={10} fill="var(--cs)" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(v)}</text>
             </g>
           ))}
           {data.map((d, i) => {
