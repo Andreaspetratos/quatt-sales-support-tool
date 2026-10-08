@@ -20,7 +20,8 @@
  * Who may do what (lists live in lib/access.ts, shared with the frontend):
  *   - any signed-in @quatt.io user: everything not listed below
  *   - admins only: PUT playbooks/schedulers, GET/PATCH/DELETE feedback,
- *     POST triage-feedback, POST sync-from-prod
+ *     POST triage-feedback, POST sync-from-prod, GET team-perf, GET activity
+ *     (POST activity — the reps' own active-time heartbeat — is open to everyone)
  *   Admin = in ADMINS, or a member (primary or secondary team) of one of
  *   ADMIN_TEAM_IDS in HubSpot, looked up with the portal's own token and
  *   cached for ADMIN_CACHE_MS. If HubSpot can't be reached, only ADMINS pass.
@@ -46,6 +47,8 @@ const ADMIN_ONLY = [
   ['DELETE', '/api/feedback'],
   ['*', '/api/triage-feedback'],
   ['POST', '/api/sync-from-prod'],
+  ['GET', '/api/team-perf'],
+  ['GET', '/api/activity'],
 ]
 
 export async function onRequest(ctx) {

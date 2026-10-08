@@ -255,3 +255,23 @@ export async function triageFeedback(id: string, message: string): Promise<strin
   const data = await res.json()
   return data.triage
 }
+
+// ── Admin → Team performance (/api/team-perf, /api/activity) ──────────────────
+async function getJson<T>(url: string): Promise<T> {
+  const res = await apiFetch(url)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status)
+  return data as T
+}
+
+export function fetchTeamOverview(force = false): Promise<import('./teamPerf').TeamOverview> {
+  return getJson('/api/team-perf' + (force ? '?force=1' : ''))
+}
+
+export function fetchTeamWeek(week: string, force = false): Promise<import('./teamPerf').TeamPerfWeek> {
+  return getJson(`/api/team-perf?week=${week}` + (force ? '&force=1' : ''))
+}
+
+export function fetchTeamActivity(from: string, to: string): Promise<import('./teamPerf').ActivityData> {
+  return getJson(`/api/activity?from=${from}&to=${to}`)
+}

@@ -10,8 +10,9 @@ import { ADMIN_TEAM_IDS } from '@/lib/access'
 import { showToast } from './Toast'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus, Rep } from '@/lib/types'
 import { apiFetch } from '@/lib/auth'
+import TeamPerformance from './TeamPerformance'
 
-type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'diagnostics'
+type AdminTab = 'playbooks' | 'schedulers' | 'feedback' | 'team' | 'diagnostics'
 
 // ── Deep clone helper ─────────────────────────────────────────────────────────
 function clone<T>(x: T): T { return JSON.parse(JSON.stringify(x)) }
@@ -1190,6 +1191,7 @@ export default function AdminPanel() {
         <button className={`adm-tab ${tab === 'playbooks' ? 'on' : ''}`} onClick={() => setTab('playbooks')}>{t('adPb')}</button>
         <button className={`adm-tab ${tab === 'schedulers' ? 'on' : ''}`} onClick={() => setTab('schedulers')}>{t('adSch')}</button>
         <button className={`adm-tab ${tab === 'feedback' ? 'on' : ''}`} onClick={() => setTab('feedback')}>💬 Feedback</button>
+        <button className={`adm-tab ${tab === 'team' ? 'on' : ''}`} onClick={() => setTab('team')}>{t('tpTab')}</button>
         <button className={`adm-tab ${tab === 'diagnostics' ? 'on' : ''}`} onClick={() => setTab('diagnostics')}>🔧 Diagnostics</button>
       </div>
 
@@ -1273,6 +1275,11 @@ export default function AdminPanel() {
         {tab === 'feedback' && (
           <div className="adm-scroll">
             <FeedbackTab lang={lang} />
+          </div>
+        )}
+        {tab === 'team' && (
+          <div className="adm-scroll">
+            <TeamPerformance lang={lang} />
           </div>
         )}
         {tab === 'diagnostics' && (
