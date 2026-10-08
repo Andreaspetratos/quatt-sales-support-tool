@@ -1784,11 +1784,8 @@ export default function DealModal() {
               <PillIcon name="plus" />{t('taskAddFromDeal')}
               {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
             </button>
-            {/* Lost sits apart on the far right, away from the buttons that
-                move the lead forward, so it is not hit by accident. */}
             <button
               className="btn btn-dn btn-sm"
-              style={{ marginLeft: 'auto' }}
               onClick={openLost}
               disabled={isSQL}
               title={isSQL ? t('sqlLockedNote') : undefined}
