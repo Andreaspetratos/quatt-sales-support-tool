@@ -4,12 +4,12 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
-import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails, ContactSummary } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchLeadTasks, completeHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
+import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails, ContactSummary, HsTask } from '@/lib/hubspot'
 import { PHONE_COUNTRIES_TOP, phoneCountryOf, detectPhoneCountry, loadPhoneCountries, normalizePhone } from '@/lib/phone'
 import type { PhoneCountry, PhoneCountryOption } from '@/lib/phone'
 import { getPlaybookDefs } from '@/lib/playbooks'
-import { dealOpenTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
+import { dealOpenTasks, loadTasks, saveTasks, loadCollapsedActivity, saveCollapsedActivity } from '@/lib/storage'
 import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
@@ -1129,6 +1129,79 @@ function ContactConflictModal({ email, other, portalId, lang, onLink, onClose }:
   )
 }
 
+// ── Lead tasks ────────────────────────────────────────────────────────────────
+
+/** Local calendar day (YYYY-MM-DD) of an ISO timestamp. */
+function localDay(iso: string): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/**
+ * The task the Long Term flow created when the lead was parked (see LtoModal):
+ * the Long Term reason as its notes, the follow-up date as its deadline. Shown
+ * inside the Long Term box rather than repeating the reason in the task list.
+ * Matched on the reason first, then on the date, because a rep may have edited
+ * one of the two since.
+ */
+function findLtoTask(tasks: HsTask[], reason: string, followUp: string): HsTask | undefined {
+  const r = reason.trim()
+  return (r ? tasks.find(task => task.notes.trim() === r) : undefined)
+    ?? (followUp ? tasks.find(task => !!task.dueAt && localDay(task.dueAt) === followUp) : undefined)
+}
+
+/**
+ * Deadline label and colour, same classes as the Tasks tab, so overdue is red
+ * in both places. The time is left out when it is midnight: tasks created with
+ * only a date (every Long Term follow-up) sit at 00:00, and that is noise.
+ */
+function taskDue(dueAt: string | undefined, lang: 'nl' | 'en'): { label: string; cls: string } {
+  const t = (k: string) => translate(lang, k)
+  if (!dueAt) return { label: t('taskNoDate'), cls: '' }
+  const d = new Date(dueAt), now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diff = Math.round((day.getTime() - today.getTime()) / 86400000)
+  const time = d.getHours() || d.getMinutes()
+    ? ' ' + d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    : ''
+  if (diff < 0) return { label: `${t('taskOverdue')} · ${d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' })}${time}`, cls: 'task-due-over' }
+  if (diff === 0) return { label: t('taskToday') + time, cls: 'task-due-today' }
+  if (diff === 1) return { label: t('taskTomorrow') + time, cls: 'task-due-ok' }
+  return { label: d.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: 'short' }) + time, cls: 'task-due-ok' }
+}
+
+/** translate() echoes unknown keys back, so a status HubSpot adds later shows raw. */
+function taskStatusLabel(status: string | undefined, lang: 'nl' | 'en'): string {
+  if (!status) return '--'
+  const label = translate(lang, 'taskStatus_' + status)
+  return label === 'taskStatus_' + status ? status : label
+}
+
+function LeadTaskRow({ task, lang, busy, onComplete, showNotes = true }: {
+  task: HsTask; lang: 'nl' | 'en'; busy: boolean; onComplete: () => void; showNotes?: boolean
+}) {
+  const due = taskDue(task.dueAt, lang)
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ct)' }}>{task.title || '--'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, color: 'var(--cs)' }}>
+          <span className={`task-card-due ${due.cls}`}>{due.label}</span>
+          <span>{taskStatusLabel(task.status, lang)}</span>
+        </div>
+        {showNotes && task.notes && (
+          <div style={{ fontSize: 12, color: 'var(--ct)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{task.notes}</div>
+        )}
+      </div>
+      <button className="btn btn-gn btn-xs" style={{ flexShrink: 0 }} disabled={busy} onClick={onComplete}>
+        {busy ? '…' : translate(lang, 'taskDone')}
+      </button>
+    </div>
+  )
+}
+
 // ── DealModal ─────────────────────────────────────────────────────────────────
 export default function DealModal() {
   const { state, setState, selectLead, patchLeadLocal, getPbState } = useApp()
@@ -1232,6 +1305,34 @@ export default function DealModal() {
       })
     return () => { stale = true }
   }, [checkContactId])
+
+  // The rep's own open tasks on this lead, read live from HubSpot (the same
+  // source as the Tasks tab). Tagged with the lead id so a reload never shows
+  // the previous lead's tasks, and the box stays put while it refreshes.
+  const myOwnerId = state.currentRep?.hubspotOwnerId || ''
+  const [leadTasks, setLeadTasks] = useState<{ leadId: string; tasks: HsTask[] } | null>(null)
+  const [taskBusy, setTaskBusy] = useState<string | null>(null)
+  const [tasksReload, setTasksReload] = useState(0)
+  useEffect(() => {
+    const leadId = state.selectedId
+    if (!leadId || !myOwnerId) { setLeadTasks(null); return }
+    let stale = false
+    fetchLeadTasks(myOwnerId).then(all => {
+      if (!stale) setLeadTasks({ leadId, tasks: all.filter(task => task.leadId === leadId) })
+    })
+    return () => { stale = true }
+  }, [state.selectedId, myOwnerId, tasksReload])
+  // "+ Task" closes its popup at once and creates the HubSpot task in the
+  // background, and HubSpot's search takes a few seconds to see a new task.
+  // Reload twice after the popup closes so the new task appears.
+  const prevTaskModal = useRef(state.taskModal)
+  useEffect(() => {
+    const closed = prevTaskModal.current && !state.taskModal
+    prevTaskModal.current = state.taskModal
+    if (!closed) return
+    const timers = [5000, 12000].map(ms => setTimeout(() => setTasksReload(n => n + 1), ms))
+    return () => timers.forEach(clearTimeout)
+  }, [state.taskModal])
 
   // ── Deal-specific setup (after hooks) ──────────────────────────────────────
   const deal = selLead
@@ -1424,6 +1525,34 @@ export default function DealModal() {
   const schedLabel = stripLeadingSymbol(sched?.buttonLabel || t('schedVC'))
   const openTasks = dealOpenTasks(deal.id)
 
+  // Long Term leads: their follow-up task joins the Long Term box; every other
+  // open task of the rep's gets the task box below it.
+  const hasLtoCtx = !!(p['long_term_opportunity_reason_lead'] || p['long_term_opportunity_followup_date_lead'])
+  const tasksHere = leadTasks && leadTasks.leadId === deal.id ? leadTasks.tasks : null
+  const ltoTask = hasLtoCtx && tasksHere
+    ? findLtoTask(tasksHere, p['long_term_opportunity_reason_lead'] || '', p['long_term_opportunity_followup_date_lead'] || '')
+    : undefined
+  const otherTasks = tasksHere ? tasksHere.filter(task => task !== ltoTask) : []
+  // Once the live list is in, the Task button counts what the rep can see here.
+  const taskCount = tasksHere ? tasksHere.length : openTasks.length
+
+  async function completeTask(task: HsTask) {
+    setTaskBusy(task.hsId)
+    try {
+      await completeHsTask(task.hsId)
+      setLeadTasks(prev => prev && { ...prev, tasks: prev.tasks.filter(x => x.hsId !== task.hsId) })
+      // Keep the board's badge cache and the Tasks tab count in step.
+      saveTasks(loadTasks().map(c => c.hsTaskId === task.hsId
+        ? { ...c, completed: true, completedAt: new Date().toISOString() } : c))
+      if (state.hsTaskCount > 0) setState({ hsTaskCount: state.hsTaskCount - 1 })
+      showToast(t('toastTaskDone'), 'success')
+    } catch (e: unknown) {
+      showToast('⚠ HubSpot: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
+    } finally {
+      setTaskBusy(null)
+    }
+  }
+
   // Chill-only leads don't get a home visit — Chill is a self-install product.
   // Exact match on the whole property value (not a substring/includes check):
   // multi-checkbox values like "Chill;Hybrid Single" must NOT match here, only
@@ -1609,7 +1738,7 @@ export default function DealModal() {
                     the workflow clears the owner so a colleague can pick it up.
                     Without this the lead arrives on their board with no trace of
                     where it has been or why. */}
-                {(p['long_term_opportunity_reason_lead'] || p['long_term_opportunity_followup_date_lead']) && (
+                {hasLtoCtx && (
                   <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 4 }}>
                       {t('ltoCtxTitle')}
@@ -1629,6 +1758,44 @@ export default function DealModal() {
                           </span>
                         </div>
                       )}
+                      {/* The follow-up task, without its notes: they are the
+                          reason shown just above. */}
+                      {ltoTask && (
+                        <div className="kv" style={{ alignItems: 'flex-start' }}>
+                          <span className="kk">{t('ltoCtxTask')}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <LeadTaskRow
+                              task={ltoTask}
+                              lang={lang}
+                              busy={taskBusy === ltoTask.hsId}
+                              onComplete={() => completeTask(ltoTask)}
+                              showNotes={false}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* The rep's own open tasks on this lead, so the reason for the
+                    call is in front of them without opening the Tasks tab. */}
+                {otherTasks.length > 0 && (
+                  <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 6 }}>
+                      {t('leadTasksTitle', otherTasks.length)}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {otherTasks.map((task, i) => (
+                        <div key={task.hsId} style={i > 0 ? { borderTop: '1px solid var(--cb)', paddingTop: 8 } : undefined}>
+                          <LeadTaskRow
+                            task={task}
+                            lang={lang}
+                            busy={taskBusy === task.hsId}
+                            onComplete={() => completeTask(task)}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1782,7 +1949,7 @@ export default function DealModal() {
             )}
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
               <PillIcon name="plus" />{t('taskAddFromDeal')}
-              {openTasks.length > 0 && <span className="task-badge">{openTasks.length}</span>}
+              {taskCount > 0 && <span className="task-badge">{taskCount}</span>}
             </button>
             <button
               className="btn btn-dn btn-sm"
