@@ -413,6 +413,36 @@ export async function patchLead(
   })
 }
 
+// Appends a block to a free-text lead property and returns the full new value.
+// The current value is read from HubSpot inside the lead's write queue, never
+// taken from local state: other systems write to these properties too (the
+// configurator and the self-service quote put the customer's quote in
+// personal_info__notes_lead), and the leads list doesn't load them. If the read
+// fails nothing is written, so an existing value can never be overwritten.
+export async function appendLeadText(
+  id: string,
+  prop: string,
+  block: string,
+  localCurrent = '',
+): Promise<string> {
+  const join = (current: string) => {
+    const c = current.trim()
+    return c ? `${c}\n\n${block}` : block
+  }
+  if (isDemo()) return join(localCurrent)
+  let updated = ''
+  await queueForLead(id, async () => {
+    const read = await retryProxy('GET', '/crm/v3/objects/leads/' + id + '?properties=' + prop)
+    if (!read.ok) throw new Error('appendLeadText read HTTP ' + read.status)
+    const current = String((await read.json())?.properties?.[prop] || '')
+    updated = join(current)
+    const res = await retryProxy('PATCH', '/crm/v3/objects/leads/' + id, { properties: { [prop]: updated } })
+    if (!res.ok) throw new Error('appendLeadText HTTP ' + res.status)
+    _notifyWrite(id)
+  })
+  return updated
+}
+
 export async function requestLeads(rep: { hubspotUserId: string; name: string }): Promise<void> {
   if (isDemo()) { await new Promise(r => setTimeout(r, 700)); return }
   const res = await retryProxy('PATCH', '/crm/v3/objects/users/' + rep.hubspotUserId, {

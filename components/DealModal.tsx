@@ -4,7 +4,7 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead as patchLeadApi, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchLeadTasks, completeHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, appendLeadText, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchLeadTasks, completeHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails, ContactSummary, HsTask } from '@/lib/hubspot'
 import { PHONE_COUNTRIES_TOP, phoneCountryOf, detectPhoneCountry, loadPhoneCountries, normalizePhone } from '@/lib/phone'
 import type { PhoneCountry, PhoneCountryOption } from '@/lib/phone'
@@ -597,24 +597,33 @@ function PhoneField({ label, value, onSave, disabled = false, lang }: {
 // ── Notepad flush helper ─────────────────────────────────────────────────────
 // Collects all notepad values stored in pbState.notes (keyed `q.id + '_np'`)
 // across every phase of every playbook, formats them as a timestamped block,
-// and appends the block to personal_info__notes_lead in HubSpot.
+// and appends the block to personal_info__notes_lead in HubSpot. The existing
+// value is always kept (see appendLeadText).
 // Called from every path that finalises a call (outcome dropdown, Book
-// Appointment, Move to LTO, Move to Lost).
+// Appointment, Move to LTO, Move to Lost). Several of those can run for the
+// same call, and the notepads keep their text after a save, so a notepad is
+// only appended again once its text has changed.
+const savedNotepads = new Map<string, Record<string, string>>()
+
 async function collectAndSaveNotepads(
   dealId: string,
   deal: Deal,
   playbooks: Playbook[],
   pbState: PlaybookState,
-  leads: Deal[],
   patchLeadLocal: (id: string, props: Record<string, string>) => void,
 ): Promise<void> {
   const pbDefs = getPlaybookDefs(deal, playbooks.length > 0 ? playbooks : undefined)
+  const saved = savedNotepads.get(dealId) || {}
   const lines: string[] = []
+  const nowSaving: Record<string, string> = {}
   for (const { def } of pbDefs) {
     for (const phase of def.phases) {
       for (const q of phase.questions) {
-        const val = (pbState.notes[q.id + '_np'] || '').trim()
-        if (val) lines.push(`${q.label || q.id}: ${val}`)
+        const key = q.id + '_np'
+        const val = (pbState.notes[key] || '').trim()
+        if (!val || saved[key] === val || key in nowSaving) continue
+        nowSaving[key] = val
+        lines.push(`${q.label || q.id}: ${val}`)
       }
     }
   }
@@ -625,12 +634,24 @@ async function collectAndSaveNotepads(
   const ts = `${p(now.getDate())}-${p(now.getMonth() + 1)}-${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}`
   const block = `--- ${ts} ---\n${lines.join('\n')}`
 
-  const current = (deal?.properties?.['personal_info__notes_lead'] || '').trim()
-  const updated = current ? `${current}\n\n${block}` : block
-
-  await patchLeadApi(dealId, { personal_info__notes_lead: updated }, leads, () => {
-    patchLeadLocal(dealId, { personal_info__notes_lead: updated })
-  })
+  // Marked as saved before the request so a second flush started right after
+  // (outcome dropdown, then Plan HV) doesn't append the same lines again.
+  savedNotepads.set(dealId, { ...saved, ...nowSaving })
+  let updated: string
+  try {
+    updated = await appendLeadText(dealId, 'personal_info__notes_lead', block,
+      deal?.properties?.['personal_info__notes_lead'] || '')
+  } catch (e) {
+    // Undo only this flush's marks, so the lines are tried again next time
+    const marks = { ...(savedNotepads.get(dealId) || {}) }
+    for (const [key, val] of Object.entries(nowSaving)) {
+      if (marks[key] !== val) continue
+      if (key in saved) marks[key] = saved[key]
+      else delete marks[key]
+    }
+    savedNotepads.set(dealId, marks)
+    throw e
+  }
   patchLeadLocal(dealId, { personal_info__notes_lead: updated })
 }
 
@@ -712,8 +733,8 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
         }, state.leads, leads => setState({ leads }))
         // Flush notepads to personal_info__notes_lead before the lead disappears
         const pbState = getPbState(deal.id)
-        await collectAndSaveNotepads(deal.id, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
-          .catch(() => { /* best effort */ })
+        await collectAndSaveNotepads(deal.id, deal, state.playbooks, pbState, patchLeadLocal)
+          .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
       } catch (patchErr) {
         // The task was created first so the lead is never parked without a
         // follow-up. If the patch then fails, that task is an orphan — remove
@@ -834,8 +855,8 @@ function LostModal({ dealId, lang, directCheck }: { dealId: string; lang: 'nl' |
       const deal = state.leads.find(l => l.id === dealId)
       if (deal) {
         const pbState = getPbState(dealId)
-        await collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
-          .catch(() => { /* best effort */ })
+        await collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, patchLeadLocal)
+          .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
       }
       setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastLost'), 'success')
@@ -1031,11 +1052,11 @@ function CallOutcomeSection({ dealId, lang, disabled = false }: { dealId: string
       patchLeadLocal(dealId, { [CONFIG.PROPS.callOutcome]: value })
       showToast(t('toastSaved'), 'success')
       // Flush all notepad values to personal_info__notes_lead now that the
-      // call has an outcome — silently, the rep already got a toast above.
+      // call has an outcome. Only a failure gets its own toast.
       if (deal) {
         const pbState = getPbState(dealId)
-        collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
-          .catch(() => { /* best effort — notepad flush should not block the outcome save */ })
+        collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, patchLeadLocal)
+          .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
       }
     } catch (e: any) {
       showToast(t('errLoad', e.message), 'error')
@@ -1455,8 +1476,8 @@ export default function DealModal() {
       // Flush notepad notes to personal_info__notes_lead now that the call is finalized
       if (deal) {
         const pbState = getPbState(dealId)
-        collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, state.leads, patchLeadLocal)
-          .catch(() => { /* best effort */ })
+        collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, patchLeadLocal)
+          .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
       }
       if (needsDeal) {
         // Poll for associated deal — HubSpot creates it ~30s after lead moves to SQL
