@@ -419,15 +419,18 @@ export async function patchLead(
 // configurator and the self-service quote put the customer's quote in
 // personal_info__notes_lead), and the leads list doesn't load them. If the read
 // fails nothing is written, so an existing value can never be overwritten.
+// `sep` goes between the existing value and the block: a blank line by default,
+// '\n' for one-line entries such as playbook answers.
 export async function appendLeadText(
   id: string,
   prop: string,
   block: string,
   localCurrent = '',
+  sep = '\n\n',
 ): Promise<string> {
   const join = (current: string) => {
     const c = current.trim()
-    return c ? `${c}\n\n${block}` : block
+    return c ? `${c}${sep}${block}` : block
   }
   if (isDemo()) return join(localCurrent)
   let updated = ''

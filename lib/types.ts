@@ -32,9 +32,11 @@ export type QuestionType =
   | 'outcome'
   | 'tech_check'
   // Agent-facing question types (used in custom playbooks):
-  | 'open_text'        // free-text note → appended to personal_info___notes
-  | 'list_options'     // pick ONE from list → appended to personal_info___notes
-  | 'multi_select'     // pick MULTIPLE from list → appended to personal_info___notes
+  // open_text / list_options / multi_select append one line to the lead's
+  // personal_info__notes_lead, keeping its value (saveNoteAnswer, PlaybookView).
+  | 'open_text'        // free-text note → appended to personal_info__notes_lead
+  | 'list_options'     // pick ONE from list → appended to personal_info__notes_lead
+  | 'multi_select'     // pick MULTIPLE from list → appended to personal_info__notes_lead
   | 'update_property'  // update a HubSpot deal property directly
 
 export interface Question {

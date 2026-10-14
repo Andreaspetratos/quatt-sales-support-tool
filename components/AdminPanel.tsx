@@ -180,7 +180,7 @@ function QCard({
               onBlur={e => onUpdateField(pi, qi, 'label', e.target.value)} />
           </div>
           <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
-            ✎ Agent typt vrije tekst → toegevoegd aan <code>personal_info___notes</code>
+            ✎ Agent typt vrije tekst → als regel toegevoegd aan <code>personal_info__notes_lead</code> als &quot;Vraag: tekst&quot; (bestaande tekst blijft staan)
           </div>
         </>
       )}
@@ -206,7 +206,7 @@ function QCard({
             </div>
           </div>
           <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
-            ☑ Geselecteerde optie → toegevoegd aan <code>personal_info___notes</code> als "Vraag - Optie"
+            ☑ Geselecteerde optie → als regel toegevoegd aan <code>personal_info__notes_lead</code> als &quot;Vraag - Optie&quot; (bestaande tekst blijft staan)
           </div>
         </>
       )}
@@ -232,7 +232,7 @@ function QCard({
             </div>
           </div>
           <div style={{ fontSize: 11, color: 'var(--gm)', padding: '2px 0' }}>
-            ☑ Meerdere opties mogelijk. Agent klikt &quot;Opslaan&quot; → toegevoegd aan <code>personal_info___notes</code> als &quot;Vraag - Optie A, Optie B&quot;
+            ☑ Meerdere opties mogelijk. Agent klikt &quot;Opslaan&quot; → als regel toegevoegd aan <code>personal_info__notes_lead</code> als &quot;Vraag - Optie A, Optie B&quot; (bestaande tekst blijft staan)
           </div>
         </>
       )}
@@ -867,7 +867,9 @@ function HsDiagnostics({ rep }: { rep: Rep | null }) {
       const lp = await hsCall('GET', '/crm/v3/properties/leads?limit=500')
       if (lp.ok) {
         const names = new Set<string>((parseJson(lp.text).results || []).map((p: any) => p.name))
-        const needed = Array.from(new Set([...LEAD_PROPS, ...Object.values(CONFIG.PROPS), 'personal_info___notes']))
+        // personal_info__notes_lead isn't loaded with the leads (not in LEAD_PROPS) but
+        // gets the playbook notepads and answers
+        const needed = Array.from(new Set([...LEAD_PROPS, ...Object.values(CONFIG.PROPS), 'personal_info__notes_lead']))
         const missing = needed.filter(n => !names.has(n))
         add('Lead properties the tool uses', missing.length === 0,
           missing.length ? `Missing in HubSpot (renamed or deleted?): ${missing.join(', ')}` : `All ${needed.length} properties exist`)

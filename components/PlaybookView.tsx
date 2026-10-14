@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { Playbook, Phase, Question, PlaybookState, TechCheckOutcome } from '@/lib/types'
+import type { Playbook, Phase, Question, PlaybookState, TechCheckOutcome, Lead } from '@/lib/types'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG } from '@/lib/config'
-import { patchLead, fetchLeadPropertyOptions } from '@/lib/hubspot'
+import { patchLead, appendLeadText, fetchLeadPropertyOptions } from '@/lib/hubspot'
 import { showToast } from './Toast'
 
 // ── Plain-text → HTML converter ──────────────────────────────────────────────
@@ -456,22 +456,51 @@ function IntentQuestion({
 }
 
 
-// ── Append text to the personal_info___notes property ────────────────────────
-async function appendToNotes(
+// ── Save the answer to an open text / list / multi-select question ───────────
+// Not linked to a lead property: the answer is appended as one line to
+// personal_info__notes_lead, the property the call's notepads go to.
+// appendLeadText reads the current value from HubSpot first, so what's already
+// there (e.g. the configurator's quote) is always kept. A line is appended once
+// per lead and question until the answer changes, so leaving the text box or
+// clicking the same option again doesn't repeat it.
+// Linked (q.hsProperty, which these types keep when an admin switches a
+// question's type): written to that property, like the other linked question
+// types, and not to the notes.
+const NOTES_PROP = 'personal_info__notes_lead'
+const savedAnswerLines = new Map<string, string>()
+
+async function saveNoteAnswer(
   dealId: string,
-  leads: import('@/lib/types').Lead[],
+  q: Question,
+  value: string,
+  line: string,
+  leads: Lead[],
   patchLeadLocal: (id: string, props: Record<string, string>) => void,
-  entry: string,
 ) {
-  const deal = leads.find(l => l.id === dealId)
-  const current = deal?.properties?.['personal_info___notes'] || ''
-  const updated = current ? `${current}\n${entry}` : entry
-  await patchLead(dealId, { personal_info___notes: updated }, leads, () =>
-    patchLeadLocal(dealId, { personal_info___notes: updated })
-  )
+  if (q.hsProperty) {
+    const prop = q.hsProperty
+    await patchLead(dealId, { [prop]: value }, leads, () => patchLeadLocal(dealId, { [prop]: value }))
+    return
+  }
+  const key = dealId + '|' + q.id
+  const prev = savedAnswerLines.get(key)
+  if (prev === line) return
+  // Marked before the request so a quick second click doesn't append it again
+  savedAnswerLines.set(key, line)
+  try {
+    const local = leads.find(l => l.id === dealId)?.properties?.[NOTES_PROP] || ''
+    const updated = await appendLeadText(dealId, NOTES_PROP, line, local, '\n')
+    patchLeadLocal(dealId, { [NOTES_PROP]: updated })
+  } catch (e) {
+    if (savedAnswerLines.get(key) === line) {
+      if (prev === undefined) savedAnswerLines.delete(key)
+      else savedAnswerLines.set(key, prev)
+    }
+    throw e
+  }
 }
 
-// ── Open text → appended as "Label: value" to personal_info___notes ──────────
+// ── Open text → appended as "Label: value" to personal_info__notes_lead ──────
 function OpenTextQuestion({
   q, dealId, pbState, setPbNote,
 }: {
@@ -486,7 +515,7 @@ function OpenTextQuestion({
     setPbNote(q.id, value)
     setSaving(true)
     try {
-      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label}: ${value}`)
+      await saveNoteAnswer(dealId, q, value, `${q.label}: ${value}`, state.leads, patchLeadLocal)
       setSaved(true)
       showToast('✓ Notitie opgeslagen in HubSpot', 'success')
       setTimeout(() => setSaved(false), 2000)
@@ -511,7 +540,7 @@ function OpenTextQuestion({
         onBlur={e => handleBlur(e.target.value)}
       />
       <div className="hs-badge">
-        → personal_info___notes
+        → {q.hsProperty || NOTES_PROP}
         {saving && <span style={{ marginLeft: 4 }}>…</span>}
         {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
       </div>
@@ -519,11 +548,10 @@ function OpenTextQuestion({
   )
 }
 
-// ── List of options → appended as "Label - Option" to personal_info___notes ──
 // ── Multi-select: pick several options, save once ────────────────────────────
 // Unlike list_options (single answer, saves on click), this lets the rep toggle
 // freely and commit once — otherwise every toggle would append another line to
-// the contact's notes.
+// the lead's notes.
 function MultiSelectQuestion({
   q, dealId, pbState, setPbAnswer,
 }: {
@@ -552,7 +580,8 @@ function MultiSelectQuestion({
       return
     }
     try {
-      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label} - ${selected.join(', ')}`)
+      // A linked property gets HubSpot's multi-checkbox format, "a;b"
+      await saveNoteAnswer(dealId, q, selected.join(';'), `${q.label} - ${selected.join(', ')}`, state.leads, patchLeadLocal)
       setSaved(true)
       showToast('✓ Notitie opgeslagen in HubSpot', 'success')
       setTimeout(() => setSaved(false), 2000)
@@ -587,6 +616,7 @@ function MultiSelectQuestion({
   )
 }
 
+// ── List of options → appended as "Label - Option" to personal_info__notes_lead
 function ListOptionsQuestion({
   q, dealId, pbState, setPbAnswer,
 }: {
@@ -599,7 +629,7 @@ function ListOptionsQuestion({
   async function handleSelect(opt: string) {
     setPbAnswer(q.id, opt)
     try {
-      await appendToNotes(dealId, state.leads, patchLeadLocal, `${q.label} - ${opt}`)
+      await saveNoteAnswer(dealId, q, opt, `${q.label} - ${opt}`, state.leads, patchLeadLocal)
       setSaved(true)
       showToast('✓ Notitie opgeslagen in HubSpot', 'success')
       setTimeout(() => setSaved(false), 2000)
@@ -626,7 +656,7 @@ function ListOptionsQuestion({
         ))}
       </div>
       <div className="hs-badge" style={{ marginTop: 4 }}>
-        → personal_info___notes
+        → {q.hsProperty || NOTES_PROP}
         {saved && <span style={{ color: 'var(--gr)', marginLeft: 4 }}>✓</span>}
       </div>
     </div>
