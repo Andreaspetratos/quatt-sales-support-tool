@@ -14,3 +14,6 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Written at build time by next.config.mjs
+public/version.json

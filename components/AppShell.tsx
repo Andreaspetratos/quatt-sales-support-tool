@@ -14,6 +14,7 @@ import LoginPage from './LoginPage'
 import PipelineBoard from './PipelineBoard'
 import AdminPanel from './AdminPanel'
 import OtherLeadsModal from './OtherLeads'
+import UpdateBanner from './UpdateBanner'
 
 // ── Inner shell (inside AppProvider so it can use useApp) ─────────────────────
 function Shell() {
@@ -88,6 +89,9 @@ function Shell() {
 
       {/* Help modal — available from any screen */}
       <HelpModal />
+
+      {/* "New version available" — on every screen, above the top bar */}
+      <UpdateBanner />
 
       {/* Top navigation bar — hidden on login screen */}
       {screen !== 'login' && currentRep && (

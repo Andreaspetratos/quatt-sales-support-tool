@@ -355,6 +355,7 @@ tbody td{padding:9px 13px;vertical-align:middle}
 [data-theme="light"] .dm-card{box-shadow:0 28px 56px rgba(0,0,0,.18)}
 [data-theme="light"] .dm-overlay{background:rgba(8,20,18,.55)}
 [data-theme="light"] .cfg-banner{background:#FEF9C3;border-color:#FCD34D;color:#92400E}
+.upd-banner{justify-content:center;font-weight:600;text-align:center}
 [data-theme="light"] .perf-tot-n{color:var(--gr)}
 [data-theme="light"] .iot{color:var(--bk)}
 [data-theme="light"] .task-card{background:var(--wh);border-color:var(--gl)}
