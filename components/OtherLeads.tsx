@@ -9,10 +9,11 @@
 //     Claim (assign to me + move to MQL) to work on one of them instead.
 //   - OtherLeadsModal: after a lead is booked, Lost or Long Term, a popup asks
 //     what to do with the rest, one call result per lead.
-// Decisions (Andreas, 2026-10-15): every call result can be picked, including
-// Plan HV / Plan Call; Lost needs a reason per lead; Long Term gets a date and
-// reason but no task; colleagues' leads can be claimed (after a confirm) and
-// are in the popup; Eneco leads are shown only.
+// Decisions (Andreas, 2026-10-15): the popup offers only Lost, Long Term and
+// Send Configurator Link (after testing with the team; booking another lead
+// is done by claiming it); Lost needs a reason per lead; Long Term gets a date
+// and reason but no task; colleagues' leads can be claimed (after a confirm)
+// and are in the popup; Eneco leads are shown only.
 
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
@@ -25,8 +26,11 @@ import { showToast } from './Toast'
 type Opt = { label: string; value: string }
 type T = (k: string, ...a: any[]) => string
 
-/** HubSpot's call results, used only if the property can't be read. */
-const FALLBACK_RESULTS = ['Plan HV', 'Plan Call', 'Lost', 'Long Term Opportunity']
+/**
+ * The call results the popup offers, in this order, besides "Leave open"
+ * (Andreas and the team, 2026-10-15). Labels come from HubSpot.
+ */
+const POPUP_RESULTS = ['Lost', 'Long Term Opportunity', 'Send Configurator Link']
 /** Prefilled as the Lost reason when the processed lead was booked. */
 const DUPLICATE_REASON = 'Ordered via other channel / Duplicate'
 
@@ -291,24 +295,17 @@ function propsFor(c: Choice): Record<string, string> {
       long_term_opportunity_reason_lead: c.ltoReason.trim(),
     }
   }
-  // Plan HV / Plan Call and the rest: only the call result, as the lead modal
-  // does. HubSpot's workflows take it from there (Plan HV / Call → SQL + deal).
+  // Send Configurator Link: only the call result; HubSpot's workflows take it from there.
   return { [P.callResult]: c.result }
 }
 
 /** Why a choice can't be saved yet, or null. */
-function problemWith(o: OtherLead, c: Choice, t: T): string | null {
+function problemWith(c: Choice, t: T): string | null {
   if (c.result === 'Lost' && !c.lostReason) return t('orlNeedLostReason')
   if (c.result === 'Long Term Opportunity') {
     if (!c.ltoDate) return t('ltoNeedDate')
     if (c.ltoDate < ymd(new Date())) return t('ltoDatePast')
     if (c.ltoReason.trim().length < LTO_REASON_MIN) return t('ltoReasonShort', LTO_REASON_MIN)
-  }
-  if (c.result === 'Plan HV') {
-    // Same guards as the lead modal's Plan HV button
-    const p = o.lead.properties
-    if (String(p[CONFIG.PROPS.product] || '').trim().toLowerCase() === 'chill') return t('homeVisitChillDisabled')
-    if (!String(p.postal_code || '').trim() || !String(p.house_number || '').trim()) return t('orlHvAddress')
   }
   return null
 }
@@ -346,8 +343,8 @@ export default function OtherLeadsModal() {
   const owners = useOwnerNames((prompt?.leads || []).map(o => o.ownerId))
 
   useEffect(() => {
-    fetchLeadPropertyOptions(CONFIG.PROPS.callResult).then(opts =>
-      setResultOpts(opts.length ? opts : FALLBACK_RESULTS.map(v => ({ label: v, value: v }))))
+    fetchLeadPropertyOptions(CONFIG.PROPS.callResult).then(opts => setResultOpts(
+      POPUP_RESULTS.map(v => opts.find(o => o.value === v) || { label: v, value: v })))
     fetchLeadPropertyOptions(CONFIG.PROPS.lostReasons).then(all => {
       // Long Term has its own result, so it's not offered as a Lost reason (as in the Lost popup)
       const opts = all.filter(o => o.label.trim().toLowerCase() !== 'long term opportunity')
@@ -378,7 +375,7 @@ export default function OtherLeadsModal() {
     const todo = prompt.leads.filter(o => !saved[o.id] && choices[o.id]?.result)
     if (!todo.length) { close(); return }
     setChecked(true)
-    if (todo.some(o => problemWith(o, choices[o.id], t))) return
+    if (todo.some(o => problemWith(choices[o.id], t))) return
 
     setSaving(true)
     const results = await Promise.allSettled(todo.map(o =>
@@ -430,7 +427,7 @@ export default function OtherLeadsModal() {
           {prompt.leads.map(o => {
             const c = choices[o.id]
             const done = !!saved[o.id]
-            const problem = checked && !done && c.result ? problemWith(o, c, t) : null
+            const problem = checked && !done && c.result ? problemWith(c, t) : null
             return (
               <div key={o.id} style={{ border: '1px solid var(--cb)', borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -485,9 +482,6 @@ export default function OtherLeadsModal() {
                     </div>
                   )}
 
-                  {(c.result === 'Plan HV' || c.result === 'Plan Call') && !done && (
-                    <div style={{ fontSize: 11, color: 'var(--or)' }}>⚠ {t('orlDealHint')}</div>
-                  )}
                   {problem && <div style={{ fontSize: 11, color: 'var(--rd)' }}>{problem}</div>}
                   {errors[o.id] && <div style={{ fontSize: 11, color: 'var(--rd)' }}>{t('orlFailed', errors[o.id])}</div>}
                   {done && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gr)' }}>✓ {t('orlSaved')}</div>}
