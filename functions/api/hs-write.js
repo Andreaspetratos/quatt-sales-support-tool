@@ -10,6 +10,46 @@
  * All requests and errors are logged here (visible in Cloudflare dashboard → Functions → Logs).
  * The browser-side hsProxy() in lib/hubspot.ts also logs all non-2xx responses to the console.
  */
+
+// Lead properties other systems write too, which the tool may only add to: the
+// configurator and the self-service quote put the customer's quote in
+// personal_info__notes_lead. The browser appends to the current value
+// (appendLeadText), but a tab still running a build from before that fix sends
+// only the new notes and wipes the quote. Every tab's request passes through
+// this proxy, so the rule is enforced here as well.
+const APPEND_ONLY_LEAD_PROPS = ['personal_info__notes_lead']
+const LEAD_PATCH_RE = /^\/crm\/v3\/objects\/leads\/(\d+)$/
+
+// What to write so that nothing already in HubSpot is lost.
+export function keepExisting(current, next) {
+  const cur = String(current || '').trim()
+  const nxt = String(next || '').trim()
+  if (!cur || nxt.startsWith(cur)) return next
+  if (cur.includes(nxt)) return cur // nothing new
+  // An older tab appends to its own copy, which may hold only the tool's earlier
+  // notes from this session: keep HubSpot's value and add the part it lacks.
+  for (let k = Math.min(cur.length, nxt.length - 1); k > 0; k--) {
+    if (nxt[k] === '\n' && cur.endsWith(nxt.slice(0, k))) return cur + nxt.slice(k)
+  }
+  return `${cur}\n\n${nxt}`
+}
+
+async function protectAppendOnly(path, props, headers, who) {
+  const m = LEAD_PATCH_RE.exec(path.split('?')[0])
+  if (!m || !props || typeof props !== 'object') return props
+  const names = APPEND_ONLY_LEAD_PROPS.filter(p => typeof props[p] === 'string')
+  if (names.length === 0) return props
+  const res = await fetch(`https://api.hubapi.com/crm/v3/objects/leads/${m[1]}?properties=${names.join(',')}`, { headers })
+  if (!res.ok) throw new Error(`could not read ${names.join(',')} before writing (HTTP ${res.status})`)
+  const current = (await res.json())?.properties || {}
+  const out = { ...props }
+  for (const p of names) {
+    out[p] = keepExisting(current[p], props[p])
+    if (out[p] !== props[p]) console.warn(`[proxy] kept existing ${p} on lead ${m[1]} (${who})`)
+  }
+  return out
+}
+
 export async function onRequestPost(context) {
   try {
     const req = await context.request.json()
@@ -38,7 +78,17 @@ export async function onRequestPost(context) {
       },
     }
     if (req.body !== undefined && method !== 'GET' && method !== 'DELETE') {
-      fetchOpts.body = JSON.stringify(req.body)
+      let body = req.body
+      if (method === 'PATCH' && body?.properties) {
+        try {
+          body = { ...body, properties: await protectAppendOnly(req.path, body.properties, fetchOpts.headers, who) }
+        } catch (e) {
+          // Refuse rather than risk overwriting what other systems wrote
+          console.error(`[proxy] ✗ ${method} ${req.path}: ${e.message}`)
+          return new Response(JSON.stringify({ error: e.message }), { status: 502, headers: { 'Content-Type': 'application/json' } })
+        }
+      }
+      fetchOpts.body = JSON.stringify(body)
     }
 
     console.log(`[proxy] → ${method} ${req.path} (${who})`)
