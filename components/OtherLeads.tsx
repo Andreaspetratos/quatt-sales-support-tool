@@ -15,7 +15,7 @@
 // and reason but no task; colleagues' leads can be claimed (after a confirm)
 // and are in the popup; Eneco leads are shown only.
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, LTO_REASON_MIN } from '@/lib/config'
@@ -199,12 +199,22 @@ export function OtherLeadsSection({ contactId, leadId, lang }: { contactId: stri
                   >{o.name}</div>
                   <StageChip label={o.stage} />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
-                  <div className="kv"><span className="kk">{t('olCreated')}</span><span className="vv">{olDate(o.createdAt, true)}</span></div>
-                  <div className="kv"><span className="kk">{t('olProduct')}</span><span className="vv">{showProduct(o.product, labels)}</span></div>
-                  <div className="kv"><span className="kk">{t('olOrigin')}</span><span className="vv">{o.origin || '--'}</span></div>
-                  <div className="kv"><span className="kk">{t('olSsq')}</span><span className="vv">{olDate(o.ssqAcceptedAt)}</span></div>
-                  <div className="kv"><span className="kk">{t('olOwner')}</span><span className="vv">{ownerText(o.ownerId, myId, owners, t)}</span></div>
+                {/* A grid, so every value lines up after the longest label
+                    ("Self Service Quote accepted") instead of each row
+                    pushing its own value along. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', columnGap: 10, rowGap: 3, marginTop: 6, fontSize: 12 }}>
+                  {([
+                    [t('olCreated'), olDate(o.createdAt, true)],
+                    [t('olProduct'), showProduct(o.product, labels)],
+                    [t('olOrigin'), o.origin || '--'],
+                    [t('olSsq'), olDate(o.ssqAcceptedAt)],
+                    [t('olOwner'), ownerText(o.ownerId, myId, owners, t)],
+                  ] as Array<[string, string]>).map(([label, value]) => (
+                    <Fragment key={label}>
+                      <span className="kk">{label}</span>
+                      <span className="vv">{value}</span>
+                    </Fragment>
+                  ))}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                   {o.readOnly ? (
