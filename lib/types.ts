@@ -15,6 +15,41 @@ export interface Deal {
 // Lead = same shape, used for HubSpot Leads object
 export type Lead = Deal
 
+/**
+ * Another active lead of the same contact (see fetchContactActiveLeads).
+ * One contact can have several leads open at once since the new lead intake.
+ */
+export interface OtherLead {
+  id: string
+  name: string
+  stageId: string
+  /** Stage label from the lead pipeline, or the tool's short label when it couldn't be read. */
+  stage: string
+  createdAt: string            // hs_createdate
+  product: string              // selected_product_lead_all_time, raw ("a;b")
+  origin: string               // lead_origin
+  ssqAcceptedAt: string        // self_service_quote_accepted_date
+  ownerId: string
+  /** Eneco leads are shown for information only: no Claim, not in the popup. */
+  readOnly: boolean
+  /** The full lead, so a claimed lead can go on the board and open in the modal. */
+  lead: Lead
+}
+
+/** How the processed lead was closed: the moments that ask about the other leads. */
+export type ProcessedOutcome = 'Plan HV' | 'Plan Call' | 'Lost' | 'Long Term Opportunity'
+
+/** "What do you want to do with the rest of the leads?" — open when set. */
+export interface OtherLeadsPrompt {
+  processedId: string
+  processedName: string
+  outcome: ProcessedOutcome
+  /** The processed lead's Long Term date and reason, copied to other leads set to LTO. */
+  ltoDate?: string
+  ltoReason?: string
+  leads: OtherLead[]
+}
+
 export interface TechCheckOutcome {
   condition: string
   result: string
@@ -194,6 +229,8 @@ export interface AppState {
   hubspotPortalId: string | null
   dealLoading: boolean
   dealNotif: { id: string; name: string; hvSchedulerUrl: string | null; hvSchedulerLoading?: boolean } | null
+  // after a lead is booked / Lost / Long Term: the customer's other active leads
+  otherLeadsPrompt: OtherLeadsPrompt | null
   perfPeriod: PerfPeriod
   perfData: PerfData | null
   perfLoading: boolean

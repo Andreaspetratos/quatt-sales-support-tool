@@ -13,6 +13,7 @@ import HelpModal from './HelpModal'
 import LoginPage from './LoginPage'
 import PipelineBoard from './PipelineBoard'
 import AdminPanel from './AdminPanel'
+import OtherLeadsModal from './OtherLeads'
 
 // ── Inner shell (inside AppProvider so it can use useApp) ─────────────────────
 function Shell() {
@@ -186,6 +187,14 @@ function Shell() {
             >✕</button>
           </div>
         </div>
+      )}
+
+      {/* "What to do with the rest of the customer's leads?" after a lead is
+          booked, Lost or Long Term. Waits for the booking overlay, then sits
+          above the lead modal and the deal banner. Keyed so each processed
+          lead starts with fresh choices. */}
+      {state.otherLeadsPrompt && !state.dealLoading && (
+        <OtherLeadsModal key={state.otherLeadsPrompt.processedId} />
       )}
     </div>
   )

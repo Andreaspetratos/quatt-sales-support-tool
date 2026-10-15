@@ -1,5 +1,5 @@
-import type { Lead, PerfData, PerfPeriodData } from './types'
-import { CONFIG, isDemo } from './config'
+import type { Lead, OtherLead, PerfData, PerfPeriodData } from './types'
+import { CONFIG, isDemo, stageLabel } from './config'
 import { apiFetch } from './auth'
 import { ADMIN_TEAM_IDS } from './access'
 
@@ -863,9 +863,14 @@ const ACTIVITY_TYPES: ActivityCfg[] = [
  * Paginated: /crm/v3/owners caps at 100 per page and this portal has several
  * hundred, so a single page silently misses most of them.
  */
-let _ownerNames: Map<string, string> | null = null
-async function _ownerNameMap(): Promise<Map<string, string>> {
-  if (_ownerNames) return _ownerNames
+// The pending read is shared: Recent activity and the customer's other leads
+// both ask for it as the lead modal opens.
+let _ownerNames: Promise<Map<string, string>> | null = null
+function _ownerNameMap(): Promise<Map<string, string>> {
+  if (!_ownerNames) _ownerNames = _readOwnerNames()
+  return _ownerNames
+}
+async function _readOwnerNames(): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   try {
     // Archived owners included on purpose. Activity is history: the person who
@@ -893,7 +898,6 @@ async function _ownerNameMap(): Promise<Map<string, string>> {
   }
   // Cached even when empty: a failed lookup should not be retried on every
   // lead the rep opens. A reload clears it.
-  _ownerNames = map
   return map
 }
 
@@ -1333,6 +1337,114 @@ export async function fetchDirectAppointmentDeals(leadId: string, contactId?: st
   // Most recent appointment first; deals without a date last
   deals.sort((a, b) => (b.appointmentAt || '').localeCompare(a.appointmentAt || ''))
   return deals
+}
+
+// ── The contact's other active leads ─────────────────────────────────────────
+// Since the new lead intake one contact can have several leads open at once,
+// and a rep only sees the one they were assigned. These feed the "customer's
+// other leads" block in the lead modal and the popup after a lead is processed.
+
+/** Eneco's stage in production. Sandbox has its own id, found by label. */
+const ENECO_STAGE_FALLBACK = '6166608100'
+
+/** Consumer Orders lead stages, id -> label. Fetched once per page load. */
+let _leadStages: Promise<Map<string, string>> | null = null
+function _leadPipelineStages(): Promise<Map<string, string>> {
+  if (!_leadStages) {
+    _leadStages = (async () => {
+      const map = new Map<string, string>()
+      try {
+        const res = await retryProxy('GET', `/crm/v3/pipelines/leads/${CONFIG.PIPELINE_ID}`)
+        if (res.ok) {
+          for (const s of (await res.json()).stages || []) map.set(String(s.id), String(s.label || ''))
+        }
+      } catch (e) {
+        console.error('[hs] _leadPipelineStages error:', e)
+      }
+      // Not cached when empty: the next lead opened tries again
+      if (!map.size) _leadStages = null
+      return map
+    })()
+  }
+  return _leadStages
+}
+
+/** Read on top of LEAD_PROPS: the block's columns that the board doesn't need. */
+const OTHER_LEAD_EXTRA_PROPS = ['hs_createdate', 'lead_origin', 'self_service_quote_accepted_date']
+
+/**
+ * The contact's leads in an active stage (Duplicate Check, UQL, MQL, Long Term,
+ * Eneco), newest first, without `excludeLeadId`. Eneco leads come back
+ * `readOnly`: reps see them but don't claim or change them (Andreas,
+ * 2026-10-15). Throws when HubSpot can't be read, so the caller can tell
+ * "no other leads" apart from "could not check".
+ */
+export async function fetchContactActiveLeads(contactId: string, excludeLeadId?: string): Promise<OtherLead[]> {
+  if (isDemo() || !contactId) return []
+
+  const ids: string[] = []
+  let after = ''
+  for (let page = 0; page < 5; page++) {
+    const res = await retryProxy('GET', `/crm/v4/objects/contacts/${contactId}/associations/leads?limit=100`
+      + (after ? `&after=${encodeURIComponent(after)}` : ''))
+    if (!res.ok) throw new Error(`contact → leads HTTP ${res.status}`)
+    const data = await res.json()
+    for (const r of (data.results || []) as Array<{ toObjectId: string | number }>) {
+      const id = String(r.toObjectId || '')
+      if (id && id !== excludeLeadId && !ids.includes(id)) ids.push(id)
+    }
+    after = data.paging?.next?.after || ''
+    if (!after) break
+  }
+  if (!ids.length) return []
+
+  const readLeads = async (): Promise<Lead[]> => {
+    const out: Lead[] = []
+    for (let i = 0; i < ids.length; i += 100) {
+      const res = await retryProxy('POST', '/crm/v3/objects/leads/batch/read', {
+        properties: [...LEAD_PROPS, ...OTHER_LEAD_EXTRA_PROPS],
+        inputs: ids.slice(i, i + 100).map(id => ({ id })),
+      })
+      if (!res.ok) throw new Error(`leads batch read HTTP ${res.status}`)
+      out.push(...(((await res.json()).results || []) as Lead[]))
+    }
+    return out
+  }
+  const [leads, labels] = await Promise.all([readLeads(), _leadPipelineStages()])
+
+  const eneco = new Set<string>()
+  labels.forEach((label, id) => { if (/eneco/i.test(label)) eneco.add(id) })
+  if (!labels.size) eneco.add(ENECO_STAGE_FALLBACK)
+  const S = CONFIG.STAGES
+  const active = new Set([S.DUPLICATE_CHECK, S.UQL, S.MQL, S.LTO, ...Array.from(eneco)])
+
+  const out: OtherLead[] = []
+  for (const l of leads) {
+    const p = l.properties || {}
+    const stageId = String(p.hs_pipeline_stage || '')
+    if (p.hs_pipeline !== CONFIG.PIPELINE_ID || !active.has(stageId)) continue
+    out.push({
+      id: String(l.id),
+      name: p.hs_lead_name || 'Lead',
+      stageId,
+      stage: labels.get(stageId) || stageLabel(stageId),
+      createdAt: p.hs_createdate || '',
+      product: p.selected_product_lead_all_time || '',
+      origin: p.lead_origin || '',
+      ssqAcceptedAt: p.self_service_quote_accepted_date || '',
+      ownerId: p.hubspot_owner_id || '',
+      readOnly: eneco.has(stageId),
+      lead: { id: String(l.id), properties: p },
+    })
+  }
+  out.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return out
+}
+
+/** An owner's display name, or '' when HubSpot doesn't know them. */
+export async function fetchOwnerName(ownerId: string): Promise<string> {
+  if (isDemo() || !ownerId) return ''
+  return (await _ownerNameMap()).get(ownerId) || ''
 }
 
 // ── Fetch HubSpot portal ID (for constructing deal URLs) ─────────────────────

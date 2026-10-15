@@ -150,11 +150,12 @@ const HS_ALLOW = {
   GET: [
     `/crm/v3/owners`,
     `/crm/v3/objects/(leads|contacts|deals|users|tasks)/${ID}`,
-    `/crm/v4/objects/(leads|contacts)/${ID}/associations/(contacts|deals|emails|calls|notes|meetings|tasks)`,
+    `/crm/v4/objects/(leads|contacts)/${ID}/associations/(contacts|deals|emails|calls|notes|meetings|tasks|leads)`,
     `/crm/v4/associations/(tasks|leads)/(leads|contacts)/labels`,
     `/crm/v3/properties/(leads|tasks)`,
     `/crm/v3/properties/leads/[A-Za-z0-9_]+`,
     `/crm/v3/pipelines/deals/(default|${ID})`,
+    `/crm/v3/pipelines/leads/${ID}`,                              // lead stage labels (finds Eneco's id)
     `/email/public/v1/campaigns/${ID}`,
     `/email/public/v1/events`,
     `/integrations/v1/me`,

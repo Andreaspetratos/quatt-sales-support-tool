@@ -113,6 +113,9 @@ export const CONFIG: AppConfig = {
   CUSTOM_SCHEDULERS: [],
 }
 
+// HubSpot enforces a 10-character minimum on long_term_opportunity_reason_lead.
+export const LTO_REASON_MIN = 10
+
 export const isDemo = (): boolean => CONFIG.DEMO_MODE
 
 export const isGoogleConfigured = (): boolean =>

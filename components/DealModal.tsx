@@ -3,7 +3,7 @@
 import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
-import { CONFIG } from '@/lib/config'
+import { CONFIG, LTO_REASON_MIN } from '@/lib/config'
 import { patchLead as patchLeadApi, appendLeadText, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchLeadTasks, completeHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails, ContactSummary, HsTask } from '@/lib/hubspot'
 import { PHONE_COUNTRIES_TOP, phoneCountryOf, detectPhoneCountry, loadPhoneCountries, normalizePhone } from '@/lib/phone'
@@ -13,6 +13,7 @@ import { dealOpenTasks, loadTasks, saveTasks, loadCollapsedActivity, saveCollaps
 import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
+import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
 import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
 
 function initials(name: string) {
@@ -660,8 +661,7 @@ async function collectAndSaveNotepads(
 // captured no follow-up date and left nothing to bring the lead back. This sets
 // the date and reason the reactivation workflow needs, and forces a task so the
 // rep has something in their own list — a Lost lead is invisible to them.
-// HubSpot enforces a 10-character minimum on long_term_opportunity_reason_lead.
-const LTO_REASON_MIN = 10
+// HubSpot enforces a 10-character minimum on the reason (LTO_REASON_MIN).
 
 function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
   const { state, setState, getPbState, patchLeadLocal } = useApp()
@@ -735,6 +735,8 @@ function LtoModal({ deal, lang }: { deal: Deal; lang: 'nl' | 'en' }) {
         const pbState = getPbState(deal.id)
         await collectAndSaveNotepads(deal.id, deal, state.playbooks, pbState, patchLeadLocal)
           .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
+        // The customer's other active leads: ask what to do with them
+        promptOtherLeads(deal, 'Long Term Opportunity', setState, lang, { date, reason: reason.trim() })
       } catch (patchErr) {
         // The task was created first so the lead is never parked without a
         // follow-up. If the patch then fails, that task is an orphan — remove
@@ -857,6 +859,8 @@ function LostModal({ dealId, lang, directCheck }: { dealId: string; lang: 'nl' |
         const pbState = getPbState(dealId)
         await collectAndSaveNotepads(dealId, deal, state.playbooks, pbState, patchLeadLocal)
           .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
+        // The customer's other active leads: ask what to do with them
+        promptOtherLeads(deal, 'Lost', setState, lang)
       }
       setState({ leads: state.leads.filter(l => l.id !== dealId), selectedId: null, modal: null })
       showToast(t('toastLost'), 'success')
@@ -1480,6 +1484,9 @@ export default function DealModal() {
           .catch(() => showToast(t('notesSaveFailed'), 'error', 9000))
       }
       if (needsDeal) {
+        // The customer's other active leads: ask what to do with them. The
+        // popup waits for the booking overlay to finish (see AppShell).
+        if (deal) promptOtherLeads(deal, value === 'Plan HV' ? 'Plan HV' : 'Plan Call', setState, lang)
         // Poll for associated deal — HubSpot creates it ~30s after lead moves to SQL
         const capturedLang = lang
         const MAX_ATTEMPTS = 24   // 24 × 5s = 120s total
@@ -1915,6 +1922,20 @@ export default function DealModal() {
                         contactEmail={p['contact_email'] || ''}
                         lang={lang}
                       />
+                    </ErrorBoundary>
+                  </>
+                )}
+
+                {/* The customer's other active leads: one contact can have
+                    several at once, and the rep should know before deciding
+                    the outcome of this one. */}
+                {p['hs_primary_contact_id'] && (
+                  <>
+                    <div className="dv" />
+                    <ErrorBoundary fallback={
+                      <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('olFailed')}</div>
+                    }>
+                      <OtherLeadsSection contactId={p['hs_primary_contact_id']} leadId={deal.id} lang={lang} />
                     </ErrorBoundary>
                   </>
                 )}
