@@ -46,7 +46,7 @@ function olDate(iso: string, withTime = false): string {
 // Product values ("All-E Duo") have friendlier labels ("All-E Full System Duo").
 // Read once per page load; not cached when empty, so a failed read retries.
 let _productLabels: Promise<Record<string, string>> | null = null
-function productLabels(): Promise<Record<string, string>> {
+export function productLabels(): Promise<Record<string, string>> {
   if (!_productLabels) {
     _productLabels = fetchLeadPropertyOptions('selected_product_lead_all_time').then(opts => {
       if (!opts.length) _productLabels = null
@@ -56,11 +56,11 @@ function productLabels(): Promise<Record<string, string>> {
   return _productLabels
 }
 
-function showProduct(raw: string, labels: Record<string, string>): string {
+export function showProduct(raw: string, labels: Record<string, string>): string {
   return raw.split(';').map(v => v.trim()).filter(Boolean).map(v => labels[v] || v).join(', ') || '--'
 }
 
-function useOwnerNames(ownerIds: string[]): Record<string, string> {
+export function useOwnerNames(ownerIds: string[]): Record<string, string> {
   const [names, setNames] = useState<Record<string, string>>({})
   const key = Array.from(new Set(ownerIds.filter(Boolean))).sort().join(',')
   useEffect(() => {

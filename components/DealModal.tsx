@@ -14,6 +14,7 @@ import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
 import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
+import { ActiveTamDealsBanner, confirmActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
 import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
 
 function initials(name: string) {
@@ -1307,6 +1308,11 @@ export default function DealModal() {
     return () => { stale = true }
   }, [state.selectedId, checkPartner, checkContactId])
 
+  // Deals a TAM is already working on for this customer: banner below, and a
+  // confirm before Plan HV / Plan Call. Not for SQL leads, which are booked.
+  const activeTam = useActiveTamDeals(state.selectedId, checkContactId,
+    !!selLead && selLead.properties.hs_pipeline_stage !== CONFIG.STAGES.SQL)
+
   // The contact's own email and phone, editable under Lead info. Read live
   // because the lead's synced copies can lag behind. emailTaken holds the id of another
   // contact that already has the email the rep tried to save.
@@ -1419,6 +1425,7 @@ export default function DealModal() {
       showToast(t('sqlLockedNote'), 'error')
       return
     }
+    if (!confirmActiveTamDeals(activeTam, lang)) return
     setState({ modal: 'sched', modalDealId: dealId })
   }
 
@@ -1593,6 +1600,9 @@ export default function DealModal() {
   // itself is done, so property edits and the booking actions below are
   // locked. Re-derived from `p` on every render like `isChillOnly` above.
   const isSQL = p.hs_pipeline_stage === CONFIG.STAGES.SQL
+  // VEH banner: deals the TAM banner above already lists aren't repeated
+  const tamDealIds = new Set(activeTam.check.status === 'done' ? activeTam.check.deals.map(d => d.id) : [])
+  const vehOnlyDeals = directCheck.status === 'done' ? directCheck.deals.filter(d => !tamDealIds.has(d.id)) : []
 
   // Until the contact has loaded (or when it can't be), show the lead's copies
   // read-only. The header and Call button follow the contact once it's in.
@@ -1718,6 +1728,9 @@ export default function DealModal() {
               </div>
             )}
 
+            {/* Customer already has a deal with a TAM: book with the same one */}
+            <ActiveTamDealsBanner tam={activeTam} portalId={state.hubspotPortalId} lang={lang} />
+
             {/* Partner lead whose customer already booked directly. Reps used
                 to move these to Lost ("I already have an appointment"), which
                 left the customer without the partner deal they need to see the
@@ -1727,8 +1740,8 @@ export default function DealModal() {
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--or)', marginBottom: 6 }}>
                   ⚠ {t('directDealTitle')}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
-                  {directCheck.deals.map(d => (
+                {vehOnlyDeals.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+                  {vehOnlyDeals.map(d => (
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ct)' }}>{d.name}</div>
@@ -1750,7 +1763,7 @@ export default function DealModal() {
                       )}
                     </div>
                   ))}
-                </div>
+                </div>}
                 <div style={{ fontSize: 12, color: 'var(--ct)' }}>
                   {t('directDealBody', directCheck.partner)}
                 </div>
@@ -1970,7 +1983,7 @@ export default function DealModal() {
           <div className="dm-foot" style={{ position: 'relative' }}>
             <button
               className="btn btn-gn btn-sm"
-              onClick={() => handleCallResult('Plan HV')}
+              onClick={() => { if (confirmActiveTamDeals(activeTam, lang)) handleCallResult('Plan HV') }}
               disabled={isChillOnly || isSQL}
               title={isSQL ? t('sqlLockedNote') : (isChillOnly ? t('homeVisitChillDisabled') : undefined)}
             ><PillIcon name="home" />{t('homeVisit')}</button>

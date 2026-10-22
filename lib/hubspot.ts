@@ -1232,10 +1232,64 @@ export interface DirectDeal {
   appointmentAt: string | null
 }
 
-const DIRECT_DEAL_PROPS = [
+/**
+ * Read for the contact's deals. One list for both checks below (VEH direct
+ * appointment, active TAM deal), so a VEH lead reads the deals only once.
+ */
+const CONTACT_DEAL_PROPS = [
   'dealname', 'pipeline', 'dealstage', 'deal_origin', 'partner_name',
-  'hs_is_closed_lost', 'date_of_first_appointment_static',
+  'hs_is_closed', 'hs_is_closed_lost', 'date_of_first_appointment_static',
+  'hubspot_owner_id', 'converted', 'selected_product', 'createdate',
 ]
+
+type RawDeal = { id: string; properties: Record<string, string | null> }
+
+/**
+ * The contact's deals (all pipelines, up to 100), plus the Consumer Orders
+ * stages. Shared for a few seconds per contact: the lead modal starts both
+ * checks at the same time. Throws when the deals cannot be read.
+ */
+const _contactDeals = new Map<string, { at: number; p: Promise<RawDeal[]> }>()
+const CONTACT_DEALS_SHARE_MS = 15_000
+
+async function _readContactDeals(leadId: string, contactId?: string): Promise<{
+  deals: RawDeal[]
+  stages: Map<string, { label: string; order: number }>
+}> {
+  let cid = contactId || ''
+  if (!cid) {
+    const ca = await retryProxy('GET', `/crm/v4/objects/leads/${leadId}/associations/contacts?limit=1`)
+    if (!ca.ok) throw new Error(`lead → contact HTTP ${ca.status}`)
+    cid = String((await ca.json()).results?.[0]?.toObjectId || '')
+    if (!cid) return { deals: [], stages: new Map() }
+  }
+
+  let shared = _contactDeals.get(cid)
+  if (!shared || Date.now() - shared.at > CONTACT_DEALS_SHARE_MS) {
+    const p = (async (): Promise<RawDeal[]> => {
+      const assocRes = await retryProxy('GET', `/crm/v4/objects/contacts/${cid}/associations/deals?limit=100`)
+      if (!assocRes.ok) throw new Error(`contact → deals HTTP ${assocRes.status}`)
+      const ids: string[] = ((await assocRes.json()).results || [])
+        .map((r: { toObjectId: string | number }) => String(r.toObjectId))
+        .filter(Boolean)
+      if (!ids.length) return []
+      const readRes = await retryProxy('POST', '/crm/v3/objects/deals/batch/read', {
+        properties: CONTACT_DEAL_PROPS,
+        inputs: ids.slice(0, 100).map(id => ({ id })),
+      })
+      if (!readRes.ok) throw new Error(`deals batch read HTTP ${readRes.status}`)
+      return (((await readRes.json()).results || []) as Array<{ id: string; properties?: Record<string, string | null> }>)
+        .map(r => ({ id: String(r.id), properties: r.properties || {} }))
+    })()
+    // A failed read isn't shared: the next check tries again
+    p.catch(() => { if (_contactDeals.get(cid)?.p === p) _contactDeals.delete(cid) })
+    shared = { at: Date.now(), p }
+    _contactDeals.set(cid, shared)
+  }
+
+  const [deals, stages] = await Promise.all([shared.p, _consumerOrderStages()])
+  return { deals, stages }
+}
 
 /** Consumer Orders stages, id -> label + position. Fetched once per page load. */
 let _dealStages: Promise<Map<string, { label: string; order: number }>> | null = null
@@ -1278,29 +1332,8 @@ function _consumerOrderStages(): Promise<Map<string, { label: string; order: num
 export async function fetchDirectAppointmentDeals(leadId: string, contactId?: string): Promise<DirectDeal[]> {
   if (isDemo() || !leadId) return []
 
-  let cid = contactId || ''
-  if (!cid) {
-    const ca = await retryProxy('GET', `/crm/v4/objects/leads/${leadId}/associations/contacts?limit=1`)
-    if (!ca.ok) throw new Error(`lead → contact HTTP ${ca.status}`)
-    cid = String((await ca.json()).results?.[0]?.toObjectId || '')
-    if (!cid) return []
-  }
-
-  const assocRes = await retryProxy('GET', `/crm/v4/objects/contacts/${cid}/associations/deals?limit=100`)
-  if (!assocRes.ok) throw new Error(`contact → deals HTTP ${assocRes.status}`)
-  const ids: string[] = ((await assocRes.json()).results || [])
-    .map((r: { toObjectId: string | number }) => String(r.toObjectId))
-    .filter(Boolean)
-  if (!ids.length) return []
-
-  const [readRes, stages] = await Promise.all([
-    retryProxy('POST', '/crm/v3/objects/deals/batch/read', {
-      properties: DIRECT_DEAL_PROPS,
-      inputs: ids.slice(0, 100).map(id => ({ id })),
-    }),
-    _consumerOrderStages(),
-  ])
-  if (!readRes.ok) throw new Error(`deals batch read HTTP ${readRes.status}`)
+  const { deals: raw, stages } = await _readContactDeals(leadId, contactId)
+  if (!raw.length) return []
 
   // Position of the first "appointment booked" stage. Undefined when the
   // pipeline could not be read; then only the appointment date counts.
@@ -1310,8 +1343,8 @@ export async function fetchDirectAppointmentDeals(leadId: string, contactId?: st
   const firstBooked = bookedOrders.length ? Math.min(...bookedOrders) : undefined
 
   const deals: DirectDeal[] = []
-  for (const r of ((await readRes.json()).results || []) as Array<{ id: string; properties?: Record<string, string | null> }>) {
-    const p = r.properties || {}
+  for (const r of raw) {
+    const p = r.properties
     if (p.pipeline !== CONFIG.DEAL_PIPELINE_ID) continue
 
     // Direct = deal_origin "Direct". Old deals without an origin count too,
@@ -1336,6 +1369,71 @@ export async function fetchDirectAppointmentDeals(leadId: string, contactId?: st
   }
   // Most recent appointment first; deals without a date last
   deals.sort((a, b) => (b.appointmentAt || '').localeCompare(a.appointmentAt || ''))
+  return deals
+}
+
+// ── Deals a TAM is already working on for this customer ──────────────────────
+// A rep booked a new lead with one TAM while the customer already had a deal
+// with another one, and the customer wants one person for all products. The
+// lead modal lists these deals and asks before Plan HV / Plan Call.
+
+export interface ActiveTamDeal {
+  id: string
+  name: string
+  ownerId: string
+  /** Raw `selected_product` value, ';'-separated. */
+  product: string
+  /** Stage label, or the raw stage ID when the pipeline could not be read. */
+  stage: string
+  createdAt: string
+}
+
+/** Deals created longer ago than this are treated as stale (Andreas, 2026-10-22). */
+export const ACTIVE_DEAL_MAX_AGE_MONTHS = 6
+
+/**
+ * The contact's Consumer Orders deals with a deal owner that aren't converted
+ * yet, newest first. Rules (Andreas, 2026-10-22):
+ * - `converted` is anything but "Yes". It's empty on about half of the recent
+ *   open deals, including ones with a quote sent, so "No" alone misses them.
+ * - Not closed (lost, or won: an installed deal is done) and not in a
+ *   "Cancelled" stage.
+ * - Created in the last ACTIVE_DEAL_MAX_AGE_MONTHS months. HubSpot keeps
+ *   thousands of 2022–2025 deals open in early stages.
+ * Throws when the deals cannot be read, so the caller can tell "none" apart
+ * from "could not check".
+ */
+export async function fetchActiveTamDeals(leadId: string, contactId?: string, now = new Date()): Promise<ActiveTamDeal[]> {
+  if (isDemo() || !leadId) return []
+
+  const { deals: raw, stages } = await _readContactDeals(leadId, contactId)
+  const since = new Date(now)
+  since.setMonth(since.getMonth() - ACTIVE_DEAL_MAX_AGE_MONTHS)
+  const sinceIso = since.toISOString()
+
+  const deals: ActiveTamDeal[] = []
+  for (const r of raw) {
+    const p = r.properties
+    if (p.pipeline !== CONFIG.DEAL_PIPELINE_ID) continue
+    const ownerId = String(p.hubspot_owner_id || '').trim()
+    if (!ownerId) continue
+    if (String(p.converted || '').trim() === 'Yes') continue
+    if (p.hs_is_closed === 'true' || p.hs_is_closed_lost === 'true') continue
+    const stage = stages.get(String(p.dealstage || ''))
+    if (stage && /cancel/i.test(stage.label)) continue // "WPS7C - Meeting Cancelled"
+    const createdAt = String(p.createdate || '')
+    if (!createdAt || createdAt < sinceIso) continue
+
+    deals.push({
+      id: r.id,
+      name: p.dealname || 'Deal',
+      ownerId,
+      product: String(p.selected_product || ''),
+      stage: stage?.label || String(p.dealstage || ''),
+      createdAt,
+    })
+  }
+  deals.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   return deals
 }
 
