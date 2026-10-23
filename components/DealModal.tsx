@@ -15,6 +15,7 @@ import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
 import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
 import { ActiveTamConfirmModal, ActiveTamDealsBanner, hasActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
+import ConfirmModal from './ConfirmModal'
 import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
 
 function initials(name: string) {
@@ -1314,7 +1315,9 @@ export default function DealModal() {
     !!selLead && selLead.properties.hs_pipeline_stage !== CONFIG.STAGES.SQL)
   // The booking the rep asked for while that popup is open
   const [tamAsk, setTamAsk] = useState<'hv' | 'call' | null>(null)
-  useEffect(() => { setTamAsk(null) }, [state.selectedId])
+  // Admin clicked Restore from Lost: asked in a popup first
+  const [restoreAsk, setRestoreAsk] = useState(false)
+  useEffect(() => { setTamAsk(null); setRestoreAsk(false) }, [state.selectedId])
 
   // The contact's own email and phone, editable under Lead info. Read live
   // because the lead's synced copies can lag behind. emailTaken holds the id of another
@@ -1405,8 +1408,8 @@ export default function DealModal() {
   // Admin-only recovery for leads accidentally moved to Lost. Clears the
   // properties the Lost flow sets so the lead re-enters MQL exactly as if it
   // had never been closed, rather than carrying stale call-result/outcome data.
+  // Runs after the admin confirms in the restoreAsk popup.
   async function restoreFromLost() {
-    if (!confirm(t('restoreFromLostConfirm'))) return
     try {
       await patchLeadApi(dealId, {
         hs_pipeline_stage: CONFIG.STAGES.MQL,
@@ -2003,7 +2006,7 @@ export default function DealModal() {
               title={isSQL ? t('sqlLockedNote') : undefined}
             ><PillIcon name="calendar" />{t('ltoBtn')}</button>
             {state.isAdmin && p.hs_pipeline_stage === CONFIG.STAGES.LOST && (
-              <button className="btn btn-sc btn-sm" onClick={restoreFromLost}><PillIcon name="restore" />{t('restoreFromLost')}</button>
+              <button className="btn btn-sc btn-sm" onClick={() => setRestoreAsk(true)}><PillIcon name="restore" />{t('restoreFromLost')}</button>
             )}
             <button className="btn btn-sc btn-sm" onMouseDown={e => e.stopPropagation()} onClick={openCreateTask}>
               <PillIcon name="plus" />{t('taskAddFromDeal')}
@@ -2046,6 +2049,18 @@ export default function DealModal() {
             else setState({ modal: 'sched', modalDealId: deal.id })
           }}
         />
+      )}
+
+      {restoreAsk && (
+        <ConfirmModal
+          title={t('restoreFromLost')}
+          cancelLabel={t('cancel')}
+          confirmLabel={t('restoreFromLostGo')}
+          onCancel={() => setRestoreAsk(false)}
+          onConfirm={() => { setRestoreAsk(false); restoreFromLost() }}
+        >
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>{t('restoreFromLostConfirm')}</div>
+        </ConfirmModal>
       )}
 
       {state.modal === 'sched' && state.modalDealId === deal.id && (

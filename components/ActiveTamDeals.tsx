@@ -12,6 +12,7 @@ import { translate } from '@/lib/i18n'
 import { fetchActiveTamDeals } from '@/lib/hubspot'
 import type { ActiveTamDeal } from '@/lib/hubspot'
 import type { Lang } from '@/lib/types'
+import ConfirmModal from './ConfirmModal'
 import { productLabels, showProduct, useOwnerNames } from './OtherLeads'
 
 type T = (k: string, ...a: any[]) => string
@@ -128,8 +129,7 @@ export function ActiveTamDealsBanner({ tam, portalId, lang }: { tam: ActiveTam; 
 
 /**
  * Asked before Plan HV / Plan Call when the customer has an active TAM deal.
- * Same popup style as Lost and Long Term (.mb / .mo); it sits above the lead
- * modal. Closing it any way (✕, Cancel, a click outside) books nothing.
+ * Closing it any way (✕, Cancel, a click outside) books nothing.
  */
 export function ActiveTamConfirmModal({ tam, portalId, lang, onCancel, onContinue }: {
   tam: ActiveTam
@@ -143,28 +143,22 @@ export function ActiveTamConfirmModal({ tam, portalId, lang, onCancel, onContinu
   if (check.status !== 'done' || !check.deals.length) return null
 
   return (
-    <div className="mb" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
-      <div className="mo" style={{ maxWidth: 460 }}>
-        <div className="moh">
-          <div className="mot">{t('atdConfirmTitle')}</div>
-          <button className="xb" onClick={onCancel}>✕</button>
-        </div>
-        <div className="mob">
-          <div style={{ fontSize: 13, color: 'var(--ct)' }}>
-            {t('atdConfirmIntro', tamNames(check.deals, owners))}
-          </div>
-          <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', background: 'rgba(247,102,34,0.10)' }}>
-            <DealRows tam={tam} portalId={portalId} t={t} />
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ct)' }}>
-            {t('atdConfirmQ')}
-          </div>
-        </div>
-        <div className="mof">
-          <button className="btn btn-sc btn-sm" onClick={onCancel}>{t('cancel')}</button>
-          <button className="btn btn-pr btn-sm" onClick={onContinue}>{t('atdContinue')}</button>
-        </div>
+    <ConfirmModal
+      title={t('atdConfirmTitle')}
+      cancelLabel={t('cancel')}
+      confirmLabel={t('atdContinue')}
+      onCancel={onCancel}
+      onConfirm={onContinue}
+    >
+      <div style={{ fontSize: 13, color: 'var(--ct)' }}>
+        {t('atdConfirmIntro', tamNames(check.deals, owners))}
       </div>
-    </div>
+      <div style={{ border: '1px solid var(--or)', borderRadius: 6, padding: '8px 10px', background: 'rgba(247,102,34,0.10)' }}>
+        <DealRows tam={tam} portalId={portalId} t={t} />
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ct)' }}>
+        {t('atdConfirmQ')}
+      </div>
+    </ConfirmModal>
   )
 }

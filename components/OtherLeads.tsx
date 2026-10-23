@@ -12,7 +12,7 @@
 // Decisions (Andreas, 2026-10-15): the popup offers only Lost, Long Term and
 // Send Configurator Link (after testing with the team; booking another lead
 // is done by claiming it); Lost needs a reason per lead; Long Term gets a date
-// and reason but no task; colleagues' leads can be claimed (after a confirm)
+// and reason but no task; colleagues' leads can be claimed (after a popup)
 // and are in the popup; Eneco leads are shown only.
 
 import { Fragment, useEffect, useRef, useState } from 'react'
@@ -21,6 +21,7 @@ import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, LTO_REASON_MIN } from '@/lib/config'
 import { fetchContactActiveLeads, fetchLeadPropertyOptions, fetchOwnerName, onLeadWrite, patchLead } from '@/lib/hubspot'
 import type { AppState, Lang, Lead, OtherLead, ProcessedOutcome } from '@/lib/types'
+import ConfirmModal from './ConfirmModal'
 import { showToast } from './Toast'
 
 type Opt = { label: string; value: string }
@@ -133,9 +134,18 @@ export function OtherLeadsSection({ contactId, leadId, lang }: { contactId: stri
   useEffect(() => { if (open) productLabels().then(setLabels) }, [open])
   const owners = useOwnerNames((shown || []).map(o => o.ownerId))
 
+  // A colleague's lead the rep clicked Claim on: asked in a popup first
+  const [takeOver, setTakeOver] = useState<OtherLead | null>(null)
+  useEffect(() => { setTakeOver(null) }, [leadId])
+
+  function askClaim(o: OtherLead) {
+    if (!myId) return
+    if (o.ownerId && o.ownerId !== myId) setTakeOver(o)
+    else claim(o)
+  }
+
   async function claim(o: OtherLead) {
     if (!myId) return
-    if (o.ownerId && o.ownerId !== myId && !window.confirm(t('olTakeOver', ownerText(o.ownerId, myId, owners, t)))) return
     // Moved to MQL so it lands on the board like any assigned lead, and counts
     // as processed in Team performance (which counts leads leaving MQL).
     const props: Record<string, string> = { hubspot_owner_id: myId }
@@ -222,7 +232,7 @@ export function OtherLeadsSection({ contactId, leadId, lang }: { contactId: stri
                   ) : mineInMql ? (
                     <button className="btn btn-sc btn-xs" onClick={() => openLead(o)}>{t('olOpen')}</button>
                   ) : (
-                    <button className="btn btn-pr btn-xs" disabled={busy !== null || !myId} onClick={() => claim(o)}>
+                    <button className="btn btn-pr btn-xs" disabled={busy !== null || !myId} onClick={() => askClaim(o)}>
                       {busy === o.id ? '…' : t('olClaim')}
                     </button>
                   )}
@@ -236,6 +246,27 @@ export function OtherLeadsSection({ contactId, leadId, lang }: { contactId: stri
             )
           })}
         </div>
+      )}
+
+      {takeOver && (
+        <ConfirmModal
+          title={t('olTakeOverTitle')}
+          cancelLabel={t('cancel')}
+          confirmLabel={t('olTakeOverBtn')}
+          onCancel={() => setTakeOver(null)}
+          onConfirm={() => { const o = takeOver; setTakeOver(null); claim(o) }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div
+              style={{ fontSize: 13, fontWeight: 700, color: 'var(--ct)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              title={takeOver.name}
+            >{takeOver.name}</div>
+            <StageChip label={takeOver.stage} />
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>
+            {t('olTakeOver', ownerText(takeOver.ownerId, myId, owners, t))}
+          </div>
+        </ConfirmModal>
       )}
     </div>
   )
