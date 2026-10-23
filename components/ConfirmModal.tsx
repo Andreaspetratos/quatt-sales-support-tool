@@ -13,11 +13,13 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 /** Closing it any way (✕, Cancel, a click outside) only calls onCancel. */
-export default function ConfirmModal({ title, children, cancelLabel, confirmLabel, onCancel, onConfirm }: {
+export default function ConfirmModal({ title, children, cancelLabel, confirmLabel, danger = false, onCancel, onConfirm }: {
   title: string
   children: ReactNode
   cancelLabel: string
   confirmLabel: string
+  /** Red confirm button (.btn-dn), for deletes and overwrites. */
+  danger?: boolean
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -32,7 +34,7 @@ export default function ConfirmModal({ title, children, cancelLabel, confirmLabe
         <div className="mob">{children}</div>
         <div className="mof">
           <button className="btn btn-sc btn-sm" onClick={onCancel}>{cancelLabel}</button>
-          <button className="btn btn-pr btn-sm" onClick={onConfirm}>{confirmLabel}</button>
+          <button className={`btn ${danger ? 'btn-dn' : 'btn-pr'} btn-sm`} onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>,

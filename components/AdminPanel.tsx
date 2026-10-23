@@ -8,6 +8,7 @@ import { fetchAllLeadProperties, fetchLeadPropertyOptions, LEAD_PROPS } from '@/
 import { CONFIG } from '@/lib/config'
 import { ADMIN_TEAM_IDS } from '@/lib/access'
 import { showToast } from './Toast'
+import ConfirmModal from './ConfirmModal'
 import type { Playbook, Phase, Question, Scheduler, TechCheckOutcome, Feedback, FeedbackStatus, Rep } from '@/lib/types'
 import { apiFetch } from '@/lib/auth'
 import TeamPerformance from './TeamPerformance'
@@ -406,6 +407,7 @@ function PlaybookEditor({
   const [ep, setEp] = useState<Playbook>(clone(pb))
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
   const [showExport, setShowExport] = useState(false)
+  const [askDelete, setAskDelete] = useState(false)
   const matchInputRef = useRef<HTMLInputElement>(null)
   const [productOptions, setProductOptions] = useState<Array<{ label: string; value: string }>>([])
 
@@ -571,9 +573,23 @@ function PlaybookEditor({
         <div style={{ display: 'flex', gap: 7, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <button className="btn btn-pr btn-sm" onClick={() => onSave(ep)}>{t('adSavePb')}</button>
           <button className="btn btn-sc btn-sm" onClick={() => setShowExport(true)}>{t('adExport')}</button>
-          <button className="btn btn-dn btn-sm" onClick={() => { if (confirm(t('adDelConfirm') as string)) onDelete(ep.id) }}>{t('adDelPb')}</button>
+          <button className="btn btn-dn btn-sm" onClick={() => setAskDelete(true)}>{t('adDelPb')}</button>
         </div>
       </div>
+
+      {askDelete && (
+        <ConfirmModal
+          title={t('adDelPbTitle')}
+          cancelLabel={t('cancel')}
+          confirmLabel={t('adDelPb')}
+          danger
+          onCancel={() => setAskDelete(false)}
+          onConfirm={() => { setAskDelete(false); onDelete(ep.id) }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ct)' }}>{ep.name || t('adNameless')}</div>
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>{t('adDelConfirm')}</div>
+        </ConfirmModal>
+      )}
 
       {/* Product match tags */}
       <div className="iw">
@@ -1118,6 +1134,8 @@ export default function AdminPanel() {
   const [selectedPbId, setSelectedPbId] = useState<string | null>(null)
   const [editingSched, setEditingSched] = useState<Scheduler | null>(null)
   const [isNewSched, setIsNewSched] = useState(false)
+  // The scheduler whose ✕ was clicked: asked in a popup first
+  const [schedToDelete, setSchedToDelete] = useState<Scheduler | null>(null)
 
   const pbs = state.playbooks
   const scheds = state.schedulers
@@ -1171,7 +1189,6 @@ export default function AdminPanel() {
   }
 
   function deleteSched(id: string) {
-    if (!confirm(t('adDelConfirm') as string)) return
     const filtered = state.schedulers.filter(s => s.id !== id)
     setState({ schedulers: filtered })
     storeSharedScheds(filtered)
@@ -1254,7 +1271,7 @@ export default function AdminPanel() {
                   </div>
                   <div style={{ display: 'flex', gap: 7, marginTop: 'auto' }}>
                     <button className="btn btn-sc btn-sm" onClick={() => editSched(s.id)}>{t('edit')}</button>
-                    <button className="btn btn-dn btn-xs" onClick={() => deleteSched(s.id)}>✕</button>
+                    <button className="btn btn-dn btn-xs" onClick={() => setSchedToDelete(s)}>✕</button>
                   </div>
                 </div>
               ))}
@@ -1271,6 +1288,22 @@ export default function AdminPanel() {
                 onCancel={() => setEditingSched(null)}
                 lang={lang}
               />
+            )}
+            {schedToDelete && (
+              <ConfirmModal
+                title={t('adDelSchTitle')}
+                cancelLabel={t('cancel')}
+                confirmLabel={t('adDelSch')}
+                danger
+                onCancel={() => setSchedToDelete(null)}
+                onConfirm={() => { const id = schedToDelete.id; setSchedToDelete(null); deleteSched(id) }}
+              >
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ct)' }}>{schedToDelete.name || t('adNameless')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--cs)', marginTop: 2, wordBreak: 'break-all' }}>{schedToDelete.url || t('adNoUrl')}</div>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--ct)' }}>{t('adDelConfirm')}</div>
+              </ConfirmModal>
             )}
           </div>
         )}
@@ -1352,15 +1385,13 @@ function SchedProductPicker({ value, onChange }: { value: string[]; onChange: (v
 function SandboxSyncBanner({ lang }: { lang: 'nl' | 'en' }) {
   const [available, setAvailable] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  // Asked in a popup before copying
+  const [ask, setAsk] = useState(false)
 
   useEffect(() => { isProdSyncAvailable().then(setAvailable) }, [])
   if (!available) return null
 
   async function sync() {
-    const msg = lang === 'nl'
-      ? 'Productiedata (playbooks, schedulers, feedback) naar sandbox kopiëren? Alle sandbox-data wordt overschreven. Productie verandert niet.'
-      : 'Copy production data (playbooks, schedulers, feedback) into sandbox? All sandbox data will be overwritten. Production is not changed.'
-    if (!confirm(msg)) return
     setSyncing(true)
     try {
       const counts = await syncFromProd()
@@ -1380,9 +1411,25 @@ function SandboxSyncBanner({ lang }: { lang: 'nl' | 'en' }) {
     }}>
       <strong style={{ color: 'var(--or)' }}>SANDBOX</strong>
       <span>{lang === 'nl' ? 'Aparte opslag — wijzigingen hier bereiken productie niet.' : 'Separate storage — changes here never reach production.'}</span>
-      <button className="btn btn-xs btn-sc" onClick={sync} disabled={syncing} style={{ marginLeft: 'auto' }}>
+      <button className="btn btn-xs btn-sc" onClick={() => setAsk(true)} disabled={syncing} style={{ marginLeft: 'auto' }}>
         {syncing ? '⏳…' : (lang === 'nl' ? '⬇ Productiedata kopiëren' : '⬇ Copy production data')}
       </button>
+      {ask && (
+        <ConfirmModal
+          title={lang === 'nl' ? 'Productiedata kopiëren' : 'Copy production data'}
+          cancelLabel={lang === 'nl' ? 'Annuleren' : 'Cancel'}
+          confirmLabel={lang === 'nl' ? 'Kopiëren' : 'Copy'}
+          danger
+          onCancel={() => setAsk(false)}
+          onConfirm={() => { setAsk(false); sync() }}
+        >
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>
+            {lang === 'nl'
+              ? 'Productiedata (playbooks, schedulers, feedback) naar sandbox kopiëren? Alle sandbox-data wordt overschreven. Productie verandert niet.'
+              : 'Copy production data (playbooks, schedulers, feedback) into sandbox? All sandbox data will be overwritten. Production is not changed.'}
+          </div>
+        </ConfirmModal>
+      )}
     </div>
   )
 }
@@ -1405,6 +1452,8 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
   const [copied, setCopied] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | FeedbackStatus>('all')
   const [savingId, setSavingId] = useState<string | null>(null)
+  // The feedback whose Delete was clicked: asked in a popup first
+  const [toDelete, setToDelete] = useState<Feedback | null>(null)
   const labels = FEEDBACK_STATUS_LABEL[lang]
 
   useEffect(() => {
@@ -1442,12 +1491,9 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
     }
   }
 
+  // Runs after the admin confirms in the toDelete popup
   async function remove(f: Feedback) {
-    const preview = f.message.length > 80 ? f.message.slice(0, 80) + '…' : f.message
-    const msg = lang === 'nl'
-      ? `Deze feedback definitief verwijderen?\n\n"${preview}"`
-      : `Permanently delete this feedback?\n\n"${preview}"`
-    if (savingId || !confirm(msg)) return
+    if (savingId) return
     setSavingId(f.id)
     try {
       await deleteFeedback(f.id)
@@ -1608,7 +1654,7 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
                 <button
                   className="btn btn-dn btn-xs"
                   disabled={savingId === f.id}
-                  onClick={() => remove(f)}
+                  onClick={() => setToDelete(f)}
                   style={{ marginLeft: 'auto', fontSize: 11 }}
                   title={lang === 'nl' ? 'Verwijderen' : 'Delete'}
                 >
@@ -1619,6 +1665,30 @@ function FeedbackTab({ lang }: { lang: 'nl' | 'en' }) {
           </div>
         )
       })}
+
+      {/* Outside the cards: a click in the popup must not toggle a card's selection */}
+      {toDelete && (
+        <ConfirmModal
+          title={lang === 'nl' ? 'Feedback verwijderen' : 'Delete feedback'}
+          cancelLabel={lang === 'nl' ? 'Annuleren' : 'Cancel'}
+          confirmLabel={lang === 'nl' ? 'Verwijderen' : 'Delete'}
+          danger
+          onCancel={() => setToDelete(null)}
+          onConfirm={() => { const f = toDelete; setToDelete(null); remove(f) }}
+        >
+          <div style={{ fontSize: 13, color: 'var(--ct)' }}>
+            {lang === 'nl' ? 'Deze feedback definitief verwijderen?' : 'Permanently delete this feedback?'}
+          </div>
+          <div style={{ border: '1px solid var(--cb)', borderRadius: 8, padding: '8px 10px' }}>
+            <div style={{ fontSize: 11, color: 'var(--cs)', marginBottom: 4 }}>
+              {toDelete.submittedBy} · {new Date(toDelete.submittedAt).toLocaleString(lang === 'nl' ? 'nl-NL' : 'en-GB')}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ct)', whiteSpace: 'pre-wrap' }}>
+              {toDelete.message.length > 80 ? toDelete.message.slice(0, 80) + '…' : toDelete.message}
+            </div>
+          </div>
+        </ConfirmModal>
+      )}
     </div>
   )
 }
