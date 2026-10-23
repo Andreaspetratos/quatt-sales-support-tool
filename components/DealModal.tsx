@@ -14,7 +14,7 @@ import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
 import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
-import { ActiveTamDealsBanner, confirmActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
+import { ActiveTamConfirmModal, ActiveTamDealsBanner, hasActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
 import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
 
 function initials(name: string) {
@@ -1312,6 +1312,9 @@ export default function DealModal() {
   // confirm before Plan HV / Plan Call. Not for SQL leads, which are booked.
   const activeTam = useActiveTamDeals(state.selectedId, checkContactId,
     !!selLead && selLead.properties.hs_pipeline_stage !== CONFIG.STAGES.SQL)
+  // The booking the rep asked for while that popup is open
+  const [tamAsk, setTamAsk] = useState<'hv' | 'call' | null>(null)
+  useEffect(() => { setTamAsk(null) }, [state.selectedId])
 
   // The contact's own email and phone, editable under Lead info. Read live
   // because the lead's synced copies can lag behind. emailTaken holds the id of another
@@ -1425,7 +1428,7 @@ export default function DealModal() {
       showToast(t('sqlLockedNote'), 'error')
       return
     }
-    if (!confirmActiveTamDeals(activeTam, lang)) return
+    if (hasActiveTamDeals(activeTam)) { setTamAsk('call'); return }
     setState({ modal: 'sched', modalDealId: dealId })
   }
 
@@ -1983,7 +1986,7 @@ export default function DealModal() {
           <div className="dm-foot" style={{ position: 'relative' }}>
             <button
               className="btn btn-gn btn-sm"
-              onClick={() => { if (confirmActiveTamDeals(activeTam, lang)) handleCallResult('Plan HV') }}
+              onClick={() => { if (hasActiveTamDeals(activeTam)) setTamAsk('hv'); else handleCallResult('Plan HV') }}
               disabled={isChillOnly || isSQL}
               title={isSQL ? t('sqlLockedNote') : (isChillOnly ? t('homeVisitChillDisabled') : undefined)}
             ><PillIcon name="home" />{t('homeVisit')}</button>
@@ -2028,6 +2031,21 @@ export default function DealModal() {
       )}
       {state.modal === 'lto' && state.modalDealId === deal.id && (
         <LtoModal deal={deal} lang={lang} />
+      )}
+
+      {tamAsk && (
+        <ActiveTamConfirmModal
+          tam={activeTam}
+          portalId={state.hubspotPortalId}
+          lang={lang}
+          onCancel={() => setTamAsk(null)}
+          onContinue={() => {
+            const kind = tamAsk
+            setTamAsk(null)
+            if (kind === 'hv') handleCallResult('Plan HV')
+            else setState({ modal: 'sched', modalDealId: deal.id })
+          }}
+        />
       )}
 
       {state.modal === 'sched' && state.modalDealId === deal.id && (
