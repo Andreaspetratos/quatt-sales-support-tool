@@ -2,49 +2,24 @@
 
 import { useState } from 'react'
 import { useApp } from '@/context/AppContext'
-import { submitFeedback } from '@/lib/storage'
+import { translate } from '@/lib/i18n'
+import { submitFeedback, resetOnboarding } from '@/lib/storage'
+import { HELP_GROUPS, HELP_TOPICS, QUICK_START_STEPS, clipSrc, clipPoster, type HelpTopic } from '@/lib/helpContent'
+import type { Lang } from '@/lib/types'
 import { showToast } from './Toast'
-
-interface Section {
-  title: string
-  steps: string[]
-  adminOnly?: boolean
-}
-
-const SECTIONS_NL: Section[] = [
-  { title: '📥 Hoe werkt leads aanvragen?', steps: ['Klik op de "Vraag leads aan" knop bovenaan het dashboard.','Er is een wachttijd van 60 seconden tussen aanvragen.','Leads worden toegewezen op basis van beschikbaarheid in de MQL-fase.','Na ontvangst zie je de nieuwe leads direct in de tabel.','Als je na de aftelling geen leads ziet, klik dan op vernieuwen en check of je een Slack-bericht van HubSpot hebt ontvangen.'] },
-  { title: '📞 Hoe stel je de beluitkomst in?', steps: ['Open een lead door erop te klikken in de tabel.','In de linkerkolom, onder de leadinformatie en recente activiteit, zie je de call outcome dropdown — selecteer de uitkomst die past.','De uitkomst wordt direct opgeslagen in HubSpot.'] },
-  { title: '✉️ Hoe pas je het e-mailadres of telefoonnummer aan?', steps: ['Open de lead. Klik onder Lead informatie op E-mail of Telefoon.','Bij telefoon kies je eerst het land (standaard NL; alle landen staan in de lijst, typ de eerste letters om ernaartoe te springen) en typ je het nummer zoals de klant het zegt, bijvoorbeeld 06 12345678. Het wordt opgeslagen als +31612345678.','Druk op Enter of klik ernaast om op te slaan, Esc annuleert. De wijziging gaat direct naar het contact in HubSpot.','Wijzig het e-mailadres nooit in de planner: dan maakt HubSpot een dubbel contact aan dat niet aan de lead of deal hangt.','Hoort het e-mailadres al bij een ander contact? Dan zie je dat contact in een pop-up. Is het dezelfde klant, kies dan "Ja, koppel de lead aan dit contact": de lead hangt daarna aan dat contact, het oude contact blijft in HubSpot staan.'] },
-  { title: '📝 Hoe vul je het playbook in?', steps: ['Open een lead — het playbook staat in de rechterkolom als er een product geselecteerd is.','Doorloop de fases stap voor stap (pijlen links/rechts).','Beantwoord de vragen en vul aantekeningen in per stap.','Antwoorden worden automatisch opgeslagen per lead.'] },
-  { title: '📊 Hoe lees je de prestatiemetrics?', steps: ['Klik op het 📊 icoon rechtsboven om de prestatielade te openen.','Kies de periode: Vandaag, Deze week of Deze maand.','Verwerkt = leads die jouw MQL-fase hebben verlaten.','SQL = leads die doorstroomden naar Sales Qualified Lead.','Lost = leads die zijn gecategoriseerd als verloren.'] },
-  { title: '➕ Hoe maak je een nieuwe lead aan?', steps: ['Klik op de "+ Nieuwe lead" knop rechtsboven op het dashboard.','Zoek een bestaand contact op telefoonnummer of e-mail, of vul de contactgegevens in voor een nieuw contact.','Vul het adres en het product in en klik op Opslaan.','De lead wordt direct aangemaakt en geopend in HubSpot.'] },
-  { title: '🔍 Hoe zoek je naar alle leads?', steps: ['Klik op het tabblad "Alle leads" links in de tabbalk.','Zoek op naam — gedeeltelijke namen werken ook.','De resultaten tonen de eigenaar en de fase van elke lead.','Klik op "Overnemen" om een lead aan jezelf toe te wijzen.','Klik op "Openen" om de lead direct te bekijken.'] },
-  { title: '✅ Hoe werk je met taken?', steps: ['Klik op het tabblad "Taken" in de tabbalk.','Taken worden direct uit HubSpot geladen — alleen openstaande taken.','Gebruik de filters Alle / MQL / Long Term om te sorteren.','Klik op "+ Nieuwe taak" om een taak aan te maken voor een lead.','Je kunt een taak toewijzen aan een collega via het keuzeveld.','Een collega ziet de taak in zijn/haar lijst en kan de lead overnemen via de knop "Overnemen".','Stel een lead in op Long Term via de "Long Term" knop in het lead-scherm — vul een datum, reden en taakomschrijving in.'] },
-  { title: '🛠 Hoe maak je een playbook? (Admin)', adminOnly: true, steps: ['Ga naar Admin via de knop rechtsboven.','Klik op "Nieuw playbook" en geef het een naam.','Voeg fases toe met de "+ Fase" knop.','Voeg per fase vragen toe en sla op — wijzigingen zijn direct zichtbaar.'] },
-  { title: '🗓 Hoe koppel je een planner? (Admin)', adminOnly: true, steps: ['Ga naar Admin via de knop rechtsboven.','Klik op het tabblad "Planners".','Voeg een nieuwe planner toe en koppel je HubSpot-planner.','Kies welke producten deze planner activeren.'] },
-]
-
-const SECTIONS_EN: Section[] = [
-  { title: '📥 How does requesting leads work?', steps: ['Click the "Request leads" button at the top of the dashboard.','There is a 60-second cooldown between requests.','Leads are assigned based on availability in the MQL stage.','New leads appear in the table immediately after requesting.'] },
-  { title: '📞 How do you set the call outcome?', steps: ['Open a lead by clicking it in the table.','Use the call outcome dropdown in the left column, below the lead info and recent activity, to select the result.','The outcome is saved to HubSpot immediately.'] },
-  { title: '✉️ How do you change the email or phone number?', steps: ['Open the lead. Under Lead info, click Email or Phone.','For the phone, pick the country first (NL by default; every country is in the list, type the first letters to jump to it) and type the number the way the customer says it, e.g. 06 12345678. It is saved as +31612345678.','Press Enter or click elsewhere to save, Esc cancels. The change goes straight to the contact in HubSpot.','Never change the email in the scheduler: HubSpot then creates a duplicate contact that is not linked to the lead or deal.','Does the email already belong to another contact? A popup shows that contact. If it is the same customer, choose "Yes, link the lead to this contact": the lead then belongs to that contact, and the old contact stays in HubSpot.'] },
-  { title: '📝 How do you fill in the playbook?', steps: ['Open a lead — the playbook appears in the right column if a product is selected.','Navigate through phases using the left/right arrows.','Answer questions and add notes per step.','Answers are saved automatically per lead.'] },
-  { title: '📊 How do you read the performance metrics?', steps: ['Click the 📊 icon in the top right to open the performance drawer.','Select a period: Today, This week, or This month.','Processed = leads that exited your MQL stage.','SQL = leads that progressed to Sales Qualified Lead.','Lost = leads categorised as lost.'] },
-  { title: '➕ How do you create a new lead?', steps: ['Click the "+ New lead" button in the top right of the dashboard.','Search for an existing contact by phone or email, or fill in contact details to create a new one.','Fill in the address and product, then click Save.','The lead is created immediately and opens in the detail view.'] },
-  { title: '🔍 How do you search all leads?', steps: ['Click the "All leads" tab in the tab bar.','Search by name — partial matches work too.','Results show the owner and stage of each lead.','Click "Accept" to assign a lead to yourself.','Click "Open" to view the lead immediately.'] },
-  { title: '✅ How do you work with tasks?', steps: ['Click the "Tasks" tab in the tab bar.','Tasks are loaded live from HubSpot — open tasks only.','Use the All / MQL / Long Term filter pills to narrow the list.','Click "+ New task" to create a task linked to a lead.','You can assign a task to a colleague using the assignee picker.','Your colleague sees the task in their list and can claim the lead using the "Accept" button.','To park a lead as Long Term Opportunity, use the "Long Term" button in the lead screen — enter a follow-up date, reason, and task title.'] },
-  { title: '🛠 How do you create a playbook? (Admin)', adminOnly: true, steps: ['Go to Admin via the button in the top right.','Click "New playbook" and give it a name.','Add phases and questions, then save — changes are immediately visible.'] },
-  { title: '🗓 How do you connect a scheduler? (Admin)', adminOnly: true, steps: ['Go to Admin and click the "Schedulers" tab.','Add a scheduler and connect your HubSpot meeting link.','Select which products activate this scheduler.'] },
-]
 
 export default function HelpModal() {
   const { state, setState } = useApp()
   const lang = state.lang
-  const sections = lang === 'nl' ? SECTIONS_NL : SECTIONS_EN
+  const t = (k: string, ...a: any[]) => translate(lang, k, ...a)
   const isAdmin = state.isAdmin
   const [activeTab, setActiveTab] = useState<'instructions' | 'feedback'>('instructions')
   const [feedbackText, setFeedbackText] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [query, setQuery] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
+  // Clips that failed to load (not recorded yet, or offline): the topic shows its text only
+  const [broken, setBroken] = useState<Record<string, boolean>>({})
 
   if (!state.helpOpen) return null
 
@@ -63,13 +38,27 @@ export default function HelpModal() {
     }
   }
 
+  async function handleResetQuickStart() {
+    try {
+      await resetOnboarding()
+      showToast(t('helpQsResetDone'), 'success')
+    } catch {
+      showToast(t('helpQsResetFailed'), 'error')
+    }
+  }
+
+  const q = query.trim().toLowerCase()
+  const topics = HELP_TOPICS
+    .filter(tp => !tp.adminOnly || isAdmin)
+    .filter(tp => !q || [tp.title[lang], ...tp.steps[lang]].some(s => s.toLowerCase().includes(q)))
+
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={() => setState({ helpOpen: false })}
     >
       <div
-        style={{ background: 'var(--bg)', borderRadius: 16, width: 560, maxWidth: '95vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,.3)' }}
+        style={{ background: 'var(--bg)', borderRadius: 16, width: 760, maxWidth: '95vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,.3)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -92,7 +81,7 @@ export default function HelpModal() {
                 fontSize: 13, marginBottom: -1,
               }}
             >
-              {tab === 'instructions' ? (lang === 'nl' ? '📖 Handleiding' : '📖 Instructions') : (lang === 'nl' ? '💬 Feedback' : '💬 Feedback')}
+              {tab === 'instructions' ? t('helpManual') : t('helpFeedback')}
             </button>
           ))}
         </div>
@@ -100,17 +89,60 @@ export default function HelpModal() {
         {/* Body */}
         <div style={{ overflowY: 'auto', padding: '16px 20px 20px', flex: 1 }}>
           {activeTab === 'instructions' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {sections.filter(s => !s.adminOnly || isAdmin).map((s, i) => (
-                <div key={i}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--tx)', marginBottom: 8 }}>{s.title}</div>
-                  <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {s.steps.map((step, j) => (
-                      <li key={j} style={{ fontSize: 13, color: 'var(--cs)', lineHeight: 1.5 }}>{step}</li>
-                    ))}
-                  </ol>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Quick start guide — the same one new users get on their first login */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, border: '1px solid var(--or)', background: 'rgba(247,102,34,0.08)' }}>
+                <span style={{ fontSize: 26 }} aria-hidden>🚀</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ct)' }}>{t('helpQsTitle')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('helpQsSub', QUICK_START_STEPS.length)}</div>
                 </div>
-              ))}
+                <button className="btn btn-pr btn-sm" onClick={() => setState({ helpOpen: false, quickStartOpen: true })}>{t('helpQsOpen')}</button>
+              </div>
+
+              <input
+                className="inp"
+                type="search"
+                placeholder={t('helpSearch')}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
+
+              {topics.length === 0 && (
+                <div style={{ fontSize: 13, color: 'var(--cs)', padding: '8px 0' }}>{t('helpNoResults')}</div>
+              )}
+
+              {HELP_GROUPS.map(g => {
+                const inGroup = topics.filter(tp => tp.group === g.id)
+                if (inGroup.length === 0) return null
+                return (
+                  <div key={g.id}>
+                    <div className="sl2" style={{ marginBottom: 6 }}>{g.title[lang]}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--cb)', borderRadius: 10, overflow: 'hidden', background: 'var(--c1)' }}>
+                      {inGroup.map((tp, i) => (
+                        <TopicRow
+                          key={tp.id}
+                          topic={tp}
+                          lang={lang}
+                          first={i === 0}
+                          open={openId === tp.id}
+                          onToggle={() => setOpenId(id => id === tp.id ? null : tp.id)}
+                          clipOk={!!tp.clip && !broken[tp.clip]}
+                          onClipError={() => tp.clip && setBroken(b => ({ ...b, [tp.clip!]: true }))}
+                          videoLabel={t('helpVideo')}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Admins test the first-login guide on themselves */}
+              {isAdmin && (
+                <button className="btn btn-xs" onClick={handleResetQuickStart} style={{ alignSelf: 'flex-start', color: 'var(--gm)' }}>
+                  {t('helpQsReset')}
+                </button>
+              )}
             </div>
           )}
           {activeTab === 'feedback' && (
@@ -140,6 +172,54 @@ export default function HelpModal() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// One collapsible topic: title row, and when open its clip (if any) and steps.
+// The clip only loads once the topic is opened.
+function TopicRow({ topic, lang, first, open, onToggle, clipOk, onClipError, videoLabel }: {
+  topic: HelpTopic
+  lang: Lang
+  first: boolean
+  open: boolean
+  onToggle: () => void
+  clipOk: boolean
+  onClipError: () => void
+  videoLabel: string
+}) {
+  return (
+    <div style={{ borderTop: first ? 'none' : '1px solid var(--cb)' }}>
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', background: open ? 'var(--c2)' : 'transparent', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ct)', flex: 1 }}>{topic.title[lang]}</span>
+        {clipOk && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--or)', border: '1px solid var(--or)', borderRadius: 10, padding: '1px 7px', whiteSpace: 'nowrap' }}>▶ {videoLabel}</span>
+        )}
+        <span style={{ fontSize: 11, color: 'var(--cs)' }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '4px 12px 14px', background: 'var(--c2)' }}>
+          {clipOk && topic.clip && (
+            <video
+              src={clipSrc(topic.clip)}
+              poster={clipPoster(topic.clip)}
+              controls autoPlay muted loop playsInline
+              preload="metadata"
+              onError={onClipError}
+              style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 8, border: '1px solid var(--cb)', background: 'var(--c1)', display: 'block', marginBottom: 10 }}
+            />
+          )}
+          <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {topic.steps[lang].map((step, j) => (
+              <li key={j} style={{ fontSize: 13, color: 'var(--ct)', lineHeight: 1.5 }}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   )
 }

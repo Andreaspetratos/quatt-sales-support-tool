@@ -4,12 +4,13 @@ import { useEffect } from 'react'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { seedBuiltinPlaybooks } from '@/lib/playbooks'
 import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
-import { fetchSharedPbs, fetchSharedScheds, fetchFeedbacks } from '@/lib/storage'
+import { fetchSharedPbs, fetchSharedScheds, fetchFeedbacks, fetchOnboardingSeen } from '@/lib/storage'
 import { onAuthExpired } from '@/lib/auth'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
 import HelpModal from './HelpModal'
+import QuickStart from './QuickStart'
 import LoginPage from './LoginPage'
 import PipelineBoard from './PipelineBoard'
 import AdminPanel from './AdminPanel'
@@ -74,6 +75,17 @@ function Shell() {
     fetchFeedbacks().then(feedbacks => setState({ feedbacks }))
   }, [currentRep?.email])
 
+  // Quick start guide on the first login of this email address (stored server-side,
+  // so a new browser doesn't bring it back). Closed first, so it never carries over
+  // from someone who signed out on this tab.
+  useEffect(() => {
+    setState({ quickStartOpen: false })
+    if (!currentRep) return
+    let stale = false
+    fetchOnboardingSeen().then(seen => { if (!stale && !seen) setState({ quickStartOpen: true }) })
+    return () => { stale = true }
+  }, [currentRep?.email])
+
   return (
     <div
       style={{
@@ -89,6 +101,9 @@ function Shell() {
 
       {/* Help modal — available from any screen */}
       <HelpModal />
+
+      {/* Quick start guide — first login, or from Help */}
+      <QuickStart />
 
       {/* "New version available" — on every screen, above the top bar */}
       <UpdateBanner />

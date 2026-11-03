@@ -280,6 +280,7 @@ const nl: Dict = {
   stageMql: 'MQL',
   stageLto: 'Long Term',
   stageUnknown: 'Onbekend',
+  taskAccept: 'Overnemen',
   taskHandedOver: 'Overgedragen',
   taskHandedOverHint: 'Deze lead staat niet meer op jouw naam — een collega heeft hem opgepakt. Je taak kan dicht.',
   taskLeadOffBoard: 'Deze lead staat niet op je bord, dus kan hier niet geopend worden.',
@@ -460,6 +461,24 @@ const nl: Dict = {
   alOpen: 'Openen',
   alLoadMore: 'Meer laden',
   alSearching: 'Zoeken…',
+  // ── Help modal + quick start guide (HelpModal, QuickStart; content in lib/helpContent.ts) ──
+  helpManual: '📖 Handleiding',
+  helpFeedback: '💬 Feedback',
+  helpSearch: 'Zoek in de handleiding…',
+  helpNoResults: 'Niets gevonden. Probeer een ander woord.',
+  helpVideo: 'Video',
+  helpQsTitle: 'Snelstartgids',
+  helpQsSub: (n: number) => `De basis van de tool in ${n} korte stappen.`,
+  helpQsOpen: '▶ Bekijken',
+  helpQsReset: 'Snelstartgids bij mijn volgende login opnieuw tonen (test)',
+  helpQsResetDone: 'De snelstartgids opent bij je volgende login.',
+  helpQsResetFailed: 'Niet gelukt, probeer opnieuw.',
+  qsTitle: 'Snelstartgids',
+  qsStepOf: (i: number, n: number) => `stap ${i} van ${n}`,
+  qsSkip: 'Overslaan',
+  qsBack: '← Vorige',
+  qsNext: 'Volgende →',
+  qsDone: 'Aan de slag!',
 }
 
 const en: Dict = {
@@ -915,6 +934,24 @@ const en: Dict = {
   alOpen: 'Open',
   alLoadMore: 'Load more',
   alSearching: 'Searching…',
+  // ── Help modal + quick start guide (HelpModal, QuickStart; content in lib/helpContent.ts) ──
+  helpManual: '📖 Instructions',
+  helpFeedback: '💬 Feedback',
+  helpSearch: 'Search the instructions…',
+  helpNoResults: 'Nothing found. Try another word.',
+  helpVideo: 'Video',
+  helpQsTitle: 'Quick start guide',
+  helpQsSub: (n: number) => `The basics of the tool in ${n} short steps.`,
+  helpQsOpen: '▶ Watch',
+  helpQsReset: 'Show the quick start guide again at my next login (test)',
+  helpQsResetDone: 'The quick start guide opens at your next login.',
+  helpQsResetFailed: 'That didn\'t work, please try again.',
+  qsTitle: 'Quick start guide',
+  qsStepOf: (i: number, n: number) => `step ${i} of ${n}`,
+  qsSkip: 'Skip',
+  qsBack: '← Back',
+  qsNext: 'Next →',
+  qsDone: 'Get started!',
 }
 
 const dicts: Record<Lang, Dict> = { nl, en }

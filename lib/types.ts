@@ -226,6 +226,8 @@ export interface AppState {
   // performance drawer
   perfOpen: boolean
   helpOpen: boolean
+  // quick start guide: opens by itself on a user's first login, and from Help
+  quickStartOpen: boolean
   hubspotPortalId: string | null
   dealLoading: boolean
   dealNotif: { id: string; name: string; hvSchedulerUrl: string | null; hvSchedulerLoading?: boolean } | null

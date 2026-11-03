@@ -227,6 +227,34 @@ export async function deleteFeedback(id: string): Promise<void> {
   if (!res.ok) throw new Error('HTTP ' + res.status)
 }
 
+// ── Quick start guide: seen once per email (/api/onboarding) ───────────────────
+/** false only when the server says this user hasn't seen it; any error keeps it closed. */
+export async function fetchOnboardingSeen(): Promise<boolean> {
+  try {
+    const res = await apiFetch('/api/onboarding')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return (await res.json()).seen !== false
+  } catch (e) {
+    console.error('[storage] fetchOnboardingSeen error:', e)
+    return true
+  }
+}
+
+export async function markOnboardingSeen(): Promise<void> {
+  try {
+    const res = await apiFetch('/api/onboarding', { method: 'POST' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+  } catch (e) {
+    console.error('[storage] markOnboardingSeen error:', e)
+  }
+}
+
+/** Shows the guide again at this user's next login. */
+export async function resetOnboarding(): Promise<void> {
+  const res = await apiFetch('/api/onboarding', { method: 'DELETE' })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+}
+
 // ── Sandbox-only: copy production KV data into sandbox (/api/sync-from-prod) ───
 export async function isProdSyncAvailable(): Promise<boolean> {
   try {
