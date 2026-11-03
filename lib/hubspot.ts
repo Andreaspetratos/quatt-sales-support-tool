@@ -413,6 +413,43 @@ export async function patchLead(
   })
 }
 
+// Booking a Long Term lead. HubSpot only turns an MQL lead into SQL + a deal
+// when it gets Plan HV / Plan Call, so the lead goes back to MQL first. That
+// move starts HubSpot's reactivation workflow, which sets
+// mql_reactivated_date_lead and clears qualification_call_result_lead about
+// 5–30 s later (production, 2026-11-03). A call result written before that
+// gets wiped, so this waits until the reactivation date has changed and the
+// call result is empty. After maxMs it returns anyway and the caller books
+// regardless.
+const REACTIVATED_PROP = 'mql_reactivated_date_lead'
+
+export async function moveLtoLeadToMql(
+  id: string,
+  currentLeads: Lead[],
+  updateLeads: (leads: Lead[]) => void,
+  maxMs = 60000,
+): Promise<void> {
+  const toMql = { hs_pipeline_stage: CONFIG.STAGES.MQL }
+  if (isDemo()) return patchLead(id, toMql, currentLeads, updateLeads)
+  const read = async (): Promise<Record<string, string | null>> => {
+    const res = await retryProxy('GET',
+      `/crm/v3/objects/leads/${id}?properties=${REACTIVATED_PROP},${CONFIG.PROPS.callResult}`)
+    if (!res.ok) throw new Error('moveLtoLeadToMql HTTP ' + res.status) // detail logged by hsProxy
+    return (await res.json()).properties || {}
+  }
+  // Read before moving: an older reactivation date must not count as this one
+  const before = (await read())[REACTIVATED_PROP] || ''
+  await patchLead(id, toMql, currentLeads, updateLeads)
+  const until = Date.now() + maxMs
+  while (Date.now() < until) {
+    await new Promise(r => setTimeout(r, 3000))
+    const now = await read().catch(() => null)
+    const date = now?.[REACTIVATED_PROP] || ''
+    if (date && date !== before && !now?.[CONFIG.PROPS.callResult]) return
+  }
+  console.warn('[hs] reactivation workflow not seen in time, booking anyway:', id)
+}
+
 // Appends a block to a free-text lead property and returns the full new value.
 // The current value is read from HubSpot inside the lead's write queue, never
 // taken from local state: other systems write to these properties too (the

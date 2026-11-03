@@ -4,7 +4,7 @@ import { Fragment, useRef, useCallback, useState, useEffect } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, LTO_REASON_MIN } from '@/lib/config'
-import { patchLead as patchLeadApi, appendLeadText, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchLeadTasks, completeHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
+import { patchLead as patchLeadApi, moveLtoLeadToMql, appendLeadText, fetchLeadPropertyOptions, fetchAssociatedDeal, fetchLeadContact, buildSchedulerUrl, fetchContactActivity, ACTIVITY_CAP, createHsTask, deleteHsTask, fetchLeadTasks, completeHsTask, fetchDirectAppointmentDeals, fetchContactDetails, patchContact, ContactEmailTakenError, findContactByEmail, fetchContactSummary, relinkLeadContact } from '@/lib/hubspot'
 import type { Activity, ActivityKind, ActivityGroups, DirectDeal, ContactDetails, ContactSummary, HsTask } from '@/lib/hubspot'
 import { PHONE_COUNTRIES_TOP, phoneCountryOf, detectPhoneCountry, loadPhoneCountries, normalizePhone } from '@/lib/phone'
 import type { PhoneCountry, PhoneCountryOption } from '@/lib/phone'
@@ -1488,9 +1488,15 @@ export default function DealModal() {
       // Show loading overlay immediately — global state so it survives DealModal unmounting
       setState({ dealLoading: true, dealNotif: null })
     }
+    // A Long Term lead the customer now wants to book: HubSpot only converts
+    // MQL leads, so it goes back to MQL first (see moveLtoLeadToMql).
+    const fromLto = needsDeal && p.hs_pipeline_stage === CONFIG.STAGES.LTO
     try {
+      if (fromLto) await moveLtoLeadToMql(dealId, state.leads, leads => setState({ leads }))
       await patchLeadApi(dealId, { [CONFIG.PROPS.callResult]: value }, state.leads, leads => setState({ leads }))
-      patchLeadLocal(dealId, { [CONFIG.PROPS.callResult]: value })
+      patchLeadLocal(dealId, fromLto
+        ? { hs_pipeline_stage: CONFIG.STAGES.MQL, [CONFIG.PROPS.callResult]: value }
+        : { [CONFIG.PROPS.callResult]: value })
       // Flush notepad notes to personal_info__notes_lead now that the call is finalized
       if (deal) {
         const pbState = getPbState(dealId)
