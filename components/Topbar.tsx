@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate } from '@/lib/i18n'
 import { saveTheme, saveLang } from '@/lib/storage'
@@ -21,6 +22,12 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
   const { state, setState } = useApp()
   const t = (key: string, ...args: any[]) => translate(state.lang, key, ...args)
   const demo = isDemo()
+  // In state, not read from <html> while rendering: toggling alone doesn't re-render,
+  // so the 🌙/☀️ icon used to stay put. app/layout.tsx sets data-theme before React loads.
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  useEffect(() => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
+  }, [])
 
   function setLang(l: 'nl' | 'en') {
     saveLang(l)
@@ -28,8 +35,9 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
   }
 
   function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme')
-    saveTheme(current === 'light' ? 'dark' : 'light')
+    const next = theme === 'light' ? 'dark' : 'light'
+    saveTheme(next)
+    setTheme(next)
   }
 
   function handleLogout() {
@@ -47,9 +55,6 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
   }
 
   const isAdmin = state.isAdmin
-  const currentTheme = typeof document !== 'undefined'
-    ? document.documentElement.getAttribute('data-theme')
-    : 'light'
 
   return (
     <>
@@ -71,15 +76,15 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
             <button className={`ltb ${state.lang === 'en' ? 'on' : ''}`} onClick={() => setLang('en')}>EN</button>
           </div>
 
-          {/* Labelled pills (.tb-pill in globals.css): same text in NL and EN, as Andreas named them */}
-          {/* Theme toggle */}
+          {/* Labelled pills (.tb-pill in globals.css): same text in NL and EN, as Andreas named them.
+              Neutral like the other top bar buttons; orange only while their panel is open. */}
+          {/* Theme toggle: 🌙 switches to dark, ☀️ back to light */}
           <button className="btn tb-pill tb-shrink" title="Appearance" onClick={toggleTheme}>
-            <span className="tb-ic" aria-hidden>{currentTheme === 'light' ? '🌙' : '☀️'}</span>
+            <span className="tb-ic" aria-hidden>{theme === 'light' ? '🌙' : '☀️'}</span>
             <span className="tb-tx">Appearance</span>
           </button>
 
-          {/* Help — orange edge, so reps find it */}
-          <button className="btn tb-pill help" title="Help/Feedback" onClick={() => setState({ helpOpen: true })}>
+          <button className={`btn tb-pill${state.helpOpen ? ' on' : ''}`} title="Help/Feedback" onClick={() => setState({ helpOpen: true })}>
             <span className="tb-ic" aria-hidden>💬</span>
             <span className="tb-tx">Help/Feedback</span>
           </button>
