@@ -391,11 +391,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: { nl: '💬 Feedback geven', en: '💬 Giving feedback' },
     steps: {
       nl: [
-        'Klik op 💬 rechtsboven en kies het tabblad "Feedback".',
+        'Klik op "💬 Help/Feedback" rechtsboven en kies het tabblad "Feedback".',
         'Beschrijf de bug of het idee zo precies mogelijk (welke lead, wat je deed, wat er gebeurde) en klik op "Verstuur feedback".',
       ],
       en: [
-        'Click 💬 at the top right and pick the "Feedback" tab.',
+        'Click "💬 Help/Feedback" at the top right and pick the "Feedback" tab.',
         'Describe the bug or idea as precisely as you can (which lead, what you did, what happened) and click "Submit feedback".',
       ],
     },
@@ -570,8 +570,8 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     id: 'help',
     title: { nl: 'Hulp nodig?', en: 'Need help?' },
     body: {
-      nl: 'Klik op 💬 rechtsboven. Daar vind je de handleiding met korte video\'s per onderdeel, kun je feedback geven en deze snelstartgids opnieuw bekijken.',
-      en: 'Click 💬 at the top right. There you\'ll find the manual with a short video for each feature, you can send feedback, and you can view this quick start guide again.',
+      nl: 'Klik op "💬 Help/Feedback" rechtsboven. Daar vind je de handleiding met korte video\'s per onderdeel, kun je feedback geven en deze snelstartgids opnieuw bekijken.',
+      en: 'Click "💬 Help/Feedback" at the top right. There you\'ll find the manual with a short video for each feature, you can send feedback, and you can view this quick start guide again.',
     },
   },
 ]

@@ -81,13 +81,13 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
             {currentTheme === 'light' ? '🌙' : '☀️'}
           </button>
 
-          {/* Help button */}
+          {/* Help button — a labelled orange-edged pill so reps actually find it (Andreas, 2026-11-03) */}
           <button
             className="btn btn-xs"
-            title="Help"
-            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: 15, width: 30, height: 30, borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            title="Help/Feedback"
+            style={{ color: '#fff', border: '1px solid var(--or)', background: 'rgba(247,102,34,0.14)', fontSize: 13, fontWeight: 600, height: 32, padding: '0 14px', borderRadius: 99, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', flexShrink: 0 }}
             onClick={() => setState({ helpOpen: true })}
-          >💬</button>
+          ><span style={{ fontSize: 15, lineHeight: 1 }} aria-hidden>💬</span>Help/Feedback</button>
 
           {/* Performance button */}
           {state.screen === 'dashboard' && (
