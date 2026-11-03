@@ -446,6 +446,16 @@ export async function appendLeadText(
   return updated
 }
 
+// The lead's notes as they are in HubSpot, for the "Configurator & notes" block
+// in the lead modal. Read live, like appendLeadText: the property isn't in
+// LEAD_PROPS, and the configurator writes it without the tool knowing.
+export async function fetchLeadNotes(id: string): Promise<string> {
+  if (isDemo()) return ''
+  const res = await retryProxy('GET', '/crm/v3/objects/leads/' + id + '?properties=personal_info__notes_lead')
+  if (!res.ok) throw new Error('fetchLeadNotes HTTP ' + res.status) // detail logged by hsProxy
+  return String((await res.json())?.properties?.personal_info__notes_lead || '')
+}
+
 export async function requestLeads(rep: { hubspotUserId: string; name: string }): Promise<void> {
   if (isDemo()) { await new Promise(r => setTimeout(r, 700)); return }
   const res = await retryProxy('PATCH', '/crm/v3/objects/users/' + rep.hubspotUserId, {

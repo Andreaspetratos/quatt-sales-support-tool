@@ -14,6 +14,7 @@ import { showToast } from './Toast'
 import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
 import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
+import ConfiguratorInfo from './ConfiguratorInfo'
 import { ActiveTamConfirmModal, ActiveTamDealsBanner, hasActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
 import ConfirmModal from './ConfirmModal'
 import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
@@ -1926,6 +1927,16 @@ export default function DealModal() {
                     </div>
                   </div>
                 </div>
+
+                {/* What the customer filled in on the website (configurator,
+                    savings check, self-service quote), plus the notes saved on
+                    the lead. */}
+                <div className="dv" />
+                <ErrorBoundary fallback={
+                  <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('cfgFailed')}</div>
+                }>
+                  <ConfiguratorInfo leadId={deal.id} lang={lang} />
+                </ErrorBoundary>
 
                 {/* Recent communication, when we know which contact the lead is.
                     Activities live on the contact, so without one there is nothing

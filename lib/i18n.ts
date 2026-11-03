@@ -292,6 +292,11 @@ const nl: Dict = {
   ltoCtxTask: 'Taak',
   leadTasksTitle: (n: number) => `Jouw openstaande taken (${n})`,
   toastTaskDone: 'Taak afgerond',
+  // The lead's personal_info__notes_lead: configurator / quote + notes (block in the lead modal)
+  cfgTitle: 'Configurator & notities',
+  cfgEmpty: 'leeg',
+  cfgNone: 'Geen configurator-gegevens of notities op deze lead.',
+  cfgFailed: 'Kon de configurator-gegevens niet laden.',
   // The customer's other active leads (block in the lead modal + popup)
   olTitle: 'Andere leads van klant',
   olNone: 'Deze klant heeft geen andere actieve leads.',
@@ -738,6 +743,11 @@ const en: Dict = {
   ltoCtxTask: 'Task',
   leadTasksTitle: (n: number) => `Your open tasks (${n})`,
   toastTaskDone: 'Task completed',
+  // The lead's personal_info__notes_lead: configurator / quote + notes (block in the lead modal)
+  cfgTitle: 'Configurator & notes',
+  cfgEmpty: 'empty',
+  cfgNone: 'No configurator details or notes on this lead.',
+  cfgFailed: 'Could not load the configurator details.',
   // The customer's other active leads (block in the lead modal + popup)
   olTitle: "Customer's other leads",
   olNone: 'This customer has no other active leads.',
