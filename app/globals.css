@@ -73,6 +73,14 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',system-ui,sans-serif;backg
 .lt{display:flex;border-radius:99px;overflow:hidden;border:1px solid var(--cb)}
 .ltb{padding:4px 9px;font-size:10px;font-weight:700;cursor:pointer;background:transparent;color:var(--cs);border:none;font-family:inherit;letter-spacing:.5px;transition:all .15s}
 .ltb.on{background:var(--or);color:#fff}
+/* Top bar pills with a label: Appearance, Help/Feedback, My stats (Andreas, 2026-11-03: reps overlooked the bare icons) */
+.tb-pill{height:32px;padding:0 14px;gap:6px;font-size:13px;color:#fff;border:1px solid var(--dk);background:transparent;flex-shrink:0}
+.tb-pill:hover{border-color:var(--gm)}
+.tb-pill .tb-ic{font-size:15px;line-height:1}
+.tb-pill.help{border-color:var(--or);background:rgba(247,102,34,.14)}
+.tb-pill.on{background:var(--or);border-color:var(--or)}
+/* Narrow screens: Appearance and My stats drop their text so the top bar still fits on one line */
+@media (max-width:1100px){.tb-pill.tb-shrink{padding:0 9px}.tb-pill.tb-shrink .tb-tx{display:none}}
 .cfg-banner{background:#1A1500;border-bottom:1px solid rgba(204,248,34,.3);padding:5px 18px;font-size:12px;color:#CCF822;display:flex;align-items:center;gap:7px;flex-shrink:0}
 .dp{display:inline-flex;align-items:center;background:var(--nn);color:var(--bk);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.5px}
 

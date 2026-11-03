@@ -71,34 +71,24 @@ export default function Topbar({ perfOpen, onOpenPerf, onClosePerf }: TopbarProp
             <button className={`ltb ${state.lang === 'en' ? 'on' : ''}`} onClick={() => setLang('en')}>EN</button>
           </div>
 
+          {/* Labelled pills (.tb-pill in globals.css): same text in NL and EN, as Andreas named them */}
           {/* Theme toggle */}
-          <button
-            className="btn btn-xs"
-            title="Toggle theme"
-            style={{ color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent', fontSize: '14px', width: 30, height: 30, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-            onClick={toggleTheme}
-          >
-            {currentTheme === 'light' ? '🌙' : '☀️'}
+          <button className="btn tb-pill tb-shrink" title="Appearance" onClick={toggleTheme}>
+            <span className="tb-ic" aria-hidden>{currentTheme === 'light' ? '🌙' : '☀️'}</span>
+            <span className="tb-tx">Appearance</span>
           </button>
 
-          {/* Help button — a labelled orange-edged pill so reps actually find it (Andreas, 2026-11-03) */}
-          <button
-            className="btn btn-xs"
-            title="Help/Feedback"
-            style={{ color: '#fff', border: '1px solid var(--or)', background: 'rgba(247,102,34,0.14)', fontSize: 13, fontWeight: 600, height: 32, padding: '0 14px', borderRadius: 99, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', flexShrink: 0 }}
-            onClick={() => setState({ helpOpen: true })}
-          ><span style={{ fontSize: 15, lineHeight: 1 }} aria-hidden>💬</span>Help/Feedback</button>
+          {/* Help — orange edge, so reps find it */}
+          <button className="btn tb-pill help" title="Help/Feedback" onClick={() => setState({ helpOpen: true })}>
+            <span className="tb-ic" aria-hidden>💬</span>
+            <span className="tb-tx">Help/Feedback</span>
+          </button>
 
-          {/* Performance button */}
+          {/* Performance drawer */}
           {state.screen === 'dashboard' && (
-            <button
-              className="btn btn-xs"
-              style={perfOpen
-                ? { background: 'var(--or)', color: '#fff', borderColor: 'var(--or)' }
-                : { color: 'var(--gm)', border: '1px solid var(--dk)', background: 'transparent' }}
-              onClick={perfOpen ? onClosePerf : onOpenPerf}
-            >
-              📊
+            <button className={`btn tb-pill tb-shrink${perfOpen ? ' on' : ''}`} title="My stats" onClick={perfOpen ? onClosePerf : onOpenPerf}>
+              <span className="tb-ic" aria-hidden>📊</span>
+              <span className="tb-tx">My stats</span>
             </button>
           )}
 

@@ -115,12 +115,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: { nl: '📊 Je prestaties', en: '📊 Your performance' },
     steps: {
       nl: [
-        'Klik op 📊 rechtsboven.',
+        'Klik op "📊 My stats" rechtsboven.',
         'Kies Vandaag, Week of Maand.',
         'Verwerkte leads = leads die de MQL-fase hebben verlaten. Je ziet ook hoeveel er SQL zijn geworden en hoeveel Lost.',
       ],
       en: [
-        'Click 📊 at the top right.',
+        'Click "📊 My stats" at the top right.',
         'Pick Today, Week or Month.',
         'Leads processed = leads that left the MQL stage. You also see how many became SQL and how many went Lost.',
       ],
@@ -406,11 +406,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: {
       nl: [
         'NL / EN rechtsboven wisselt de taal.',
-        '🌙 / ☀️ wisselt tussen licht en donker.',
+        '"Appearance" (🌙 / ☀️) wisselt tussen licht en donker.',
       ],
       en: [
         'NL / EN at the top right switches the language.',
-        '🌙 / ☀️ switches between light and dark.',
+        '"Appearance" (🌙 / ☀️) switches between light and dark.',
       ],
     },
   },
