@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/context/AppContext'
 import { translate, translateArr } from '@/lib/i18n'
 import { CONFIG, stageLabel, isDemo } from '@/lib/config'
-import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchLeadTasks, fetchLeadsByIds } from '@/lib/hubspot'
+import { requestLeads, fetchLeads, fetchPerformance, fetchOneLead, onLeadWrite, onTaskCreate, createHsTask, fetchHsTasks, completeHsTask, deleteHsTask, updateHsTask, fetchOwnersByTeams, fetchLeadTasks, fetchLeadsByIds } from '@/lib/hubspot'
 import type { HsTask, TeamOwner } from '@/lib/hubspot'
 import { myOpenTasks, dealOpenTasks, createTask, completeTask, deleteTask, loadTasks, saveTasks } from '@/lib/storage'
 import { showToast } from './Toast'
@@ -459,9 +459,10 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
   // Keyed on the lead ids so it reloads whenever the board's leads change.
   const leadIdsKey = state.leads.map(l => l.id).join(',')
 
-  const load = useCallback(async () => {
+  // quiet: reload without swapping the table for the spinner.
+  const load = useCallback(async (quiet = false) => {
     const ownerId = state.currentRep?.hubspotOwnerId || ''
-    setLoading(true)
+    if (!quiet) setLoading(true)
     try {
       const list = await fetchLeadTasks(ownerId)
       setTasks(list)
@@ -472,11 +473,18 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
       ))
       setExtraLeads(missing.length ? await fetchLeadsByIds(missing) : [])
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [leadIdsKey, state.currentRep?.hubspotOwnerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
+
+  // A task the rep creates for themself ("+ Nieuwe taak", or "Taak" in the
+  // lead modal) shows up without "↻ Vernieuwen". A colleague's task is not in
+  // this list, so there is nothing to reload for it.
+  useEffect(() => onTaskCreate(task => {
+    if (task.ownerId === state.currentRep?.hubspotOwnerId) load(true)
+  }), [load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAccept(lead: Lead, task: HsTask) {
     const ownerId = state.currentRep?.hubspotOwnerId
@@ -629,7 +637,7 @@ function TasksTab({ lang }: { lang: 'nl' | 'en' }) {
           className="btn btn-sc btn-sm"
           style={{ marginLeft: 'auto' }}
           disabled={loading}
-          onClick={load}
+          onClick={() => load()}
         >
           {loading ? '…' : t('refresh')}
         </button>
@@ -1094,6 +1102,15 @@ export default function PipelineBoard({ perfOpen, onOpenPerf, onClosePerf }: Pip
     return () => { unsub(); timers.forEach(t => clearTimeout(t)) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The Tasks tab count follows a task the rep creates for themself from a
+  // lead while another tab is open; on the Tasks tab the list reload sets it.
+  // Only once known: the count stays 0 until the Tasks tab first loads.
+  useEffect(() => onTaskCreate(task => {
+    if (task.ownerId !== syncOwnerId) return
+    setState(prev => prev.taskTab === 'tasks' || !prev.hsTaskCount ? {} : { hsTaskCount: prev.hsTaskCount + 1 })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [syncOwnerId])
 
   // Sync tasks from HubSpot on login
   useEffect(() => {

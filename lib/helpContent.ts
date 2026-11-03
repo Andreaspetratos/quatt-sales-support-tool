@@ -342,13 +342,13 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: {
       nl: [
         'Klik op het tabblad "Taken". Je ziet je openstaande taken uit HubSpot. Filter met Alle, MQL of Long Term.',
-        'Klik op "+ Nieuwe taak", of op "Taak" onderaan het lead-scherm. Vul de taak en een deadline in (leeg = vandaag) en kies de lead. Klik daarna op "↻ Vernieuwen" om hem in de lijst te zien.',
+        'Klik op "+ Nieuwe taak", of op "Taak" onderaan het lead-scherm. Vul de taak en een deadline in (leeg = vandaag) en kies de lead.',
         'In het lead-scherm staan je taken voor die lead onder "Jouw openstaande taken".',
         '"✓ Afgerond" sluit een taak. Met "Bewerken" pas je hem aan; "In HubSpot ↗" opent hem in HubSpot.',
       ],
       en: [
         'Click the "Tasks" tab. You see your open tasks from HubSpot. Filter with All, MQL or Long Term.',
-        'Click "+ New task", or "Task" at the bottom of the lead screen. Enter the task and a deadline (empty = today) and pick the lead. Then click "↻ Refresh" to see it in the list.',
+        'Click "+ New task", or "Task" at the bottom of the lead screen. Enter the task and a deadline (empty = today) and pick the lead.',
         'In the lead screen, your tasks for that lead are under "Your open tasks".',
         '"✓ Complete" closes a task. "Edit" changes it; "In HubSpot ↗" opens it in HubSpot.',
       ],

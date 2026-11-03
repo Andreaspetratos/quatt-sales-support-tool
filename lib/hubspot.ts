@@ -1798,6 +1798,14 @@ export async function createHsTask(
   const data = await res.json()
   const taskId = data.id ? String(data.id) : null
   if (taskId && leadId) await _linkTaskToLead(taskId, leadId)
+  if (taskId) {
+    const task: HsTask = {
+      hsId: taskId, title: props.hs_task_subject, notes, dueDate: _hsMsToDate(tsMs), dueAt: _hsMsToIso(tsMs),
+      status: 'NOT_STARTED', leadId, ownerId,
+    }
+    _justCreatedTasks.set(taskId, { task, at: Date.now() })
+    _taskCreateListeners.forEach(cb => cb(task))
+  }
   return taskId
 }
 
@@ -1806,6 +1814,30 @@ export interface HsTask {
   /** Full ISO timestamp of the due date — dueDate loses the time. */
   dueAt?: string
   status?: string
+}
+
+// Task created event — the task lists reload when the rep creates a task.
+type TaskCreateListener = (task: HsTask) => void
+const _taskCreateListeners: TaskCreateListener[] = []
+export function onTaskCreate(cb: TaskCreateListener): () => void {
+  _taskCreateListeners.push(cb)
+  return () => { const i = _taskCreateListeners.indexOf(cb); if (i >= 0) _taskCreateListeners.splice(i, 1) }
+}
+
+// HubSpot's search takes a few seconds to see a new task, so a list reloaded
+// the moment createHsTask resolves would come back without it. Tasks created
+// in this tab are kept here and added to fetchLeadTasks until search returns
+// them, or for a minute at most.
+const JUST_CREATED_MS = 60_000
+const _justCreatedTasks = new Map<string, { task: HsTask; at: number }>()
+function _withJustCreated(list: HsTask[], ownerId: string): HsTask[] {
+  const found = new Set(list.map(task => task.hsId))
+  const extra: HsTask[] = []
+  _justCreatedTasks.forEach(({ task, at }, id) => {
+    if (found.has(id) || Date.now() - at > JUST_CREATED_MS) _justCreatedTasks.delete(id)
+    else if (task.ownerId === ownerId) extra.push(task)
+  })
+  return extra.length ? [...list, ...extra] : list
 }
 
 export async function fetchHsTasks(ownerId: string): Promise<HsTask[]> {
@@ -1884,7 +1916,7 @@ export async function fetchLeadTasks(ownerId: string): Promise<HsTask[]> {
       after = json.paging?.next?.after
       if (!after || results.length < PAGE) break
     }
-    if (raw.length === 0) return []
+    if (raw.length === 0) return _withJustCreated([], ownerId)
 
     // 2 — which lead each task hangs off. Chunked at 100, the batch limit:
     // raw can now hold several pages.
@@ -1905,7 +1937,7 @@ export async function fetchLeadTasks(ownerId: string): Promise<HsTask[]> {
       }
     }
 
-    return raw
+    return _withJustCreated(raw
       .map(t => {
         // Strip first, then decode: HubSpot wraps task bodies in HTML, so the
         // [lead:xxx] marker is no longer at the start of the raw string.
@@ -1924,7 +1956,7 @@ export async function fetchLeadTasks(ownerId: string): Promise<HsTask[]> {
           leadId: leadId || null,
           ownerId: t.properties?.hubspot_owner_id || '',
         } as HsTask
-      })
+      }), ownerId)
       .sort((a, b) => {
         if (!a.dueAt && !b.dueAt) return 0
         if (!a.dueAt) return 1
@@ -1939,19 +1971,22 @@ export async function fetchLeadTasks(ownerId: string): Promise<HsTask[]> {
 
 // These three throw on failure. The list is refetched straight afterwards, so
 // swallowing an error would leave the rep looking at an unchanged row with no
-// idea why.
+// idea why. Each one drops the task from _justCreatedTasks, so a task closed
+// before search has caught up doesn't come back as it was.
 export async function completeHsTask(hsTaskId: string): Promise<void> {
   if (isDemo() || !hsTaskId) return
   const res = await retryProxy('PATCH', '/crm/v3/objects/tasks/' + hsTaskId, {
     properties: { hs_task_status: 'COMPLETED' },
   })
   if (!res.ok) throw new Error(_parseHsError(await res.text().catch(() => '')))
+  _justCreatedTasks.delete(hsTaskId)
 }
 
 export async function deleteHsTask(hsTaskId: string): Promise<void> {
   if (isDemo() || !hsTaskId) return
   const res = await retryProxy('DELETE', '/crm/v3/objects/tasks/' + hsTaskId)
   if (!res.ok) throw new Error(_parseHsError(await res.text().catch(() => '')))
+  _justCreatedTasks.delete(hsTaskId)
 }
 
 /** What a task is attached to. The contact is the lead's primary contact. */
@@ -1995,6 +2030,7 @@ export async function updateHsTask(
 
   const res = await retryProxy('PATCH', '/crm/v3/objects/tasks/' + hsTaskId, { properties: props })
   if (!res.ok) throw new Error(_parseHsError(await res.text().catch(() => '')))
+  _justCreatedTasks.delete(hsTaskId)
 
   // Associations last: if one fails the properties are already saved, and the
   // error names which link did not stick.
