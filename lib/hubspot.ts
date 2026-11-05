@@ -31,6 +31,9 @@ export const LEAD_PROPS = [
   'qualification_call_result_lead',
   'postnl_adrescheck_status',  // drives the address-check dot in the lead modal
   'selected_product_lead_all_time',  // set when creating a lead via inbound call
+  // Signed self-service quote: 📝 on the board, green block in the lead modal (components/Ssq.tsx)
+  'self_service_quote_accepted_lead',
+  'self_service_quote_accepted_date',
 ]
 
 // ── Demo data ─────────────────────────────────────────────────────────────────
@@ -1515,7 +1518,7 @@ function _leadPipelineStages(): Promise<Map<string, string>> {
 }
 
 /** Read on top of LEAD_PROPS: the block's columns that the board doesn't need. */
-const OTHER_LEAD_EXTRA_PROPS = ['hs_createdate', 'lead_origin', 'self_service_quote_accepted_date']
+const OTHER_LEAD_EXTRA_PROPS = ['hs_createdate', 'lead_origin']
 
 /**
  * The contact's leads in an active stage (Duplicate Check, UQL, MQL, Long Term,

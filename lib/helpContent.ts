@@ -149,6 +149,24 @@ export const HELP_TOPICS: HelpTopic[] = [
     },
   },
   {
+    id: 'ssq', group: 'lead', clip: 'ssq',
+    title: { nl: '📝 Getekende self-service offerte', en: '📝 Signed self-service quote' },
+    steps: {
+      nl: [
+        'Een 📝 naast de naam in "Mijn leads" of "Alle leads" betekent dat de klant de self-service offerte op de website al heeft getekend. Houd de muis op 📝 om te zien wanneer.',
+        'Open de lead: linksboven staat een groen blok "Self Service offerte geaccepteerd" met de datum en tijd van tekenen en het product.',
+        'Zo weet je al vóór het gesprek dat de klant een offerte heeft getekend, en voor welk product.',
+        'Het product is de laatste keuze van de klant: kiest de klant na het tekenen nog een ander product, dan zie je dat product. De offerte zelf staat onder "Configurator & notities".',
+      ],
+      en: [
+        'A 📝 next to the name in "My Leads" or "All leads" means the customer has already signed the self-service quote on the website. Hover over 📝 to see when.',
+        'Open the lead: at the top left is a green "Self Service Quote accepted" block with the date and time it was signed and the product.',
+        'So you know before the call that the customer signed a quote, and for which product.',
+        'The product is the customer\'s latest choice: if they pick another product after signing, you see that one. The quote itself is under "Configurator & notes".',
+      ],
+    },
+  },
+  {
     id: 'configurator', group: 'lead', clip: 'configurator',
     title: { nl: '🧾 Configurator & notities', en: '🧾 Configurator & notes' },
     steps: {

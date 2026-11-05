@@ -7,6 +7,7 @@ import { stageLabel } from '@/lib/config'
 import { searchAllLeads, fetchOwnerMap, fetchOneLead, SearchLeadsResult } from '@/lib/hubspot'
 import type { Lead } from '@/lib/types'
 import { apiFetch } from '@/lib/auth'
+import { SsqIcon, hasSignedSsq } from './Ssq'
 
 export default function AllLeadsPanel() {
   const { state, setState } = useApp()
@@ -167,6 +168,8 @@ export default function AllLeadsPanel() {
                   <tr key={lead.id} style={{ borderBottom: '1px solid var(--cb)' }}>
                     <td style={tdStyle}>
                       <span style={{ fontWeight: 600, color: 'var(--tx)' }}>{name}</span>
+                      {/* Same spacing as the city after it */}
+                      {hasSignedSsq(props) && <span style={{ marginLeft: 8 }}><SsqIcon p={props} lang={lang} /></span>}
                       {props.city && (
                         <span style={{ fontSize: 12, color: 'var(--cs)', marginLeft: 8 }}>
                           {props.city}

@@ -15,6 +15,7 @@ import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
 import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
 import ConfiguratorInfo from './ConfiguratorInfo'
+import { SsqBlock } from './Ssq'
 import { ActiveTamConfirmModal, ActiveTamDealsBanner, hasActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
 import ConfirmModal from './ConfirmModal'
 import type { Deal, Scheduler, PlaybookState, Playbook } from '@/lib/types'
@@ -1786,6 +1787,10 @@ export default function DealModal() {
             <div className={`dm-cols${pbDefs.length > 0 ? '' : ' solo'}`}>
               {/* Left: what we know about the lead, and how this call went */}
               <div className="dm-col">
+                {/* The customer already signed the self-service quote: when, and
+                    for which product. First, so the rep sees it before calling. */}
+                <SsqBlock p={p} lang={lang} />
+
                 {/* Long Term context, written when the lead was parked.
                     Read back here because whoever is looking at it is usually not
                     whoever parked it: three days after a parked lead reactivates,

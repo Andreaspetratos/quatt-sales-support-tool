@@ -11,6 +11,7 @@ import { showToast } from './Toast'
 import CreateLeadModal from './CreateLeadModal'
 import DealModal from './DealModal'
 import AllLeadsPanel from './AllLeadsPanel'
+import { SsqIcon } from './Ssq'
 import type { Lead, Task } from '@/lib/types'
 import { apiFetch } from '@/lib/auth'
 
@@ -918,6 +919,7 @@ function DealsTable({ lang }: { lang: 'nl' | 'en' }) {
                     <span className="tn" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                       {p.hs_lead_name || '--'}
                     </span>
+                    <SsqIcon p={p} lang={lang} />
                     {tasks.length > 0 && <span className="task-badge">{tasks.length}</span>}
                   </div>
                 </td>

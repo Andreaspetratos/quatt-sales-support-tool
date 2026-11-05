@@ -158,6 +158,10 @@ tbody td{padding:9px 13px;vertical-align:middle}
 .kv{display:flex;gap:7px;font-size:12px}
 .kk{color:var(--cs);font-weight:600;min-width:86px;flex-shrink:0}
 .vv{color:var(--ct);word-break:break-word}
+/* Signed self-service quote (components/Ssq.tsx): green = good news, not a warning like the orange blocks */
+.ssq-icon{font-size:14px;line-height:1;flex-shrink:0;cursor:default}
+.ssq-box{border:1px solid var(--gr);border-radius:6px;padding:8px 10px;margin-bottom:12px;background:rgba(26,122,107,.10)}
+.ssq-t{font-size:12px;font-weight:700;color:#4ABFB0;margin-bottom:4px}
 .sl2{font-size:10px;font-weight:700;color:var(--cs);text-transform:uppercase;letter-spacing:1px}
 .dv{height:1px;background:var(--cb)}
 
@@ -360,6 +364,7 @@ tbody td{padding:9px 13px;vertical-align:middle}
 [data-theme="light"] .chip{background:var(--wh);border-color:var(--gl);color:var(--bk)}
 [data-theme="light"] .chip:hover{border-color:var(--gm)}
 [data-theme="light"] .chip.on{background:var(--grc);border-color:var(--gr);color:var(--gr)}
+[data-theme="light"] .ssq-t{color:var(--gr)}
 [data-theme="light"] .dm-card{box-shadow:0 28px 56px rgba(0,0,0,.18)}
 [data-theme="light"] .dm-overlay{background:rgba(8,20,18,.55)}
 [data-theme="light"] .cfg-banner{background:#FEF9C3;border-color:#FCD34D;color:#92400E}
