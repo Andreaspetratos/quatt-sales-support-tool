@@ -487,6 +487,22 @@ export const HELP_TOPICS: HelpTopic[] = [
     },
   },
   {
+    id: 'admin-access', group: 'admin', adminOnly: true,
+    title: { nl: '🔒 Wie mag de tool gebruiken', en: '🔒 Who can use the tool' },
+    steps: {
+      nl: [
+        'Alleen wie met een @quatt.io Google-account inlogt én in HubSpot lid is van het team "Sales Support Team (Dennis)" of "Sales Support Tool Managers" (hoofdteam of extra team). Iedereen anders krijgt na het inloggen "Geen toegang" en kan geen leads zien.',
+        'Nieuwe collega: voeg die in HubSpot toe aan "Sales Support Team (Dennis)". Admin worden: voeg toe aan "Sales Support Tool Managers".',
+        'Een wijziging in de teams werkt binnen 5 minuten. Wie uit het team gaat, wordt in de tool naar het "Geen toegang"-scherm gestuurd.',
+      ],
+      en: [
+        'Only people who sign in with a @quatt.io Google account and are in the HubSpot team "Sales Support Team (Dennis)" or "Sales Support Tool Managers" (main or additional team). Everyone else gets "Access denied" after signing in and can\'t see any leads.',
+        'New colleague: add them to "Sales Support Team (Dennis)" in HubSpot. To make someone an admin: add them to "Sales Support Tool Managers".',
+        'Team changes apply within 5 minutes. Someone taken out of the team is sent to the "Access denied" screen in the tool.',
+      ],
+    },
+  },
+  {
     id: 'admin-feedback', group: 'admin', adminOnly: true,
     title: { nl: '💬 Feedback beheren', en: '💬 Managing feedback' },
     steps: {

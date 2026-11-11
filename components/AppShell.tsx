@@ -5,13 +5,14 @@ import { AppProvider, useApp } from '@/context/AppContext'
 import { seedBuiltinPlaybooks } from '@/lib/playbooks'
 import { initAircallCTI, fetchPerformance } from '@/lib/hubspot'
 import { fetchSharedPbs, fetchSharedScheds, fetchFeedbacks, fetchOnboardingSeen } from '@/lib/storage'
-import { onAuthExpired } from '@/lib/auth'
+import { onAuthExpired, onAccessDenied } from '@/lib/auth'
 import { showToast } from './Toast'
 import Toast from './Toast'
 import Topbar from './Topbar'
 import HelpModal from './HelpModal'
 import QuickStart from './QuickStart'
 import LoginPage from './LoginPage'
+import AccessDenied from './AccessDenied'
 import PipelineBoard from './PipelineBoard'
 import AdminPanel from './AdminPanel'
 import OtherLeadsModal from './OtherLeads'
@@ -61,6 +62,12 @@ function Shell() {
     showToast(state.lang === 'nl' ? 'Je sessie is verlopen. Log opnieuw in.' : 'Your session has expired. Please sign in again.', 'error')
     setState({ screen: 'login', currentRep: null, userAvatar: null, leads: [], selectedId: null, isAdmin: false, feedbacks: [], loading: false })
   }), [state.lang])
+
+  // Taken out of the Sales Support team while signed in (the server answers 403
+  // no_team_access to every call): show the "no access" screen.
+  useEffect(() => onAccessDenied(() => {
+    setState(prev => ({ screen: 'denied', deniedEmail: prev.currentRep?.email || prev.deniedEmail, currentRep: null, userAvatar: null, leads: [], selectedId: null, isAdmin: false, feedbacks: [], loading: false }))
+  }), [])
 
   // Load shared playbooks + schedulers from KV whenever a user logs in (the API needs a signed-in user)
   useEffect(() => {
@@ -116,6 +123,7 @@ function Shell() {
       {/* Main content area */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         {screen === 'login' && <LoginPage />}
+        {screen === 'denied' && <AccessDenied />}
         {screen === 'dashboard' && <PipelineBoard perfOpen={perfOpen} onOpenPerf={openPerf} onClosePerf={closePerf} />}
         {screen === 'admin' && <AdminPanel />}
       </main>

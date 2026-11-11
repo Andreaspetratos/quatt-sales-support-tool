@@ -23,3 +23,19 @@ export const ADMIN_TEAM_IDS: string[] = [
 
 // Always admin, even if the HubSpot team lookup fails. Keep this short.
 export const ADMINS: string[] = ['andreas@quatt.io']
+
+// Who may use the tool at all. A @quatt.io Google account is not enough: the
+// person must also be a member (primary or secondary team) of the Sales Support
+// team or of an admin team above, or be in ADMINS. Everyone else gets the
+// "no access" screen after signing in, and the middleware refuses all their
+// /api calls, so they can't read leads (Andreas, 2026-11-11: a @quatt.io
+// colleague outside Sales Support could open the tool and see leads).
+export const SALES_SUPPORT_TEAM_IDS: string[] = [
+  '140339728', // production portal: "Sales Support Team (Dennis)"
+  '181494519', // sandbox portal: the same team
+]
+export const ACCESS_TEAM_IDS: string[] = [...SALES_SUPPORT_TEAM_IDS, ...ADMIN_TEAM_IDS]
+
+// `code` in the middleware's 403 answer for someone outside those teams. The
+// frontend shows the "no access" screen when it sees it.
+export const NO_ACCESS_CODE = 'no_team_access'

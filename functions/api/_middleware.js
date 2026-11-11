@@ -18,21 +18,28 @@
  * environments). Nothing else accepts it.
  *
  * Who may do what (lists live in lib/access.ts, shared with the frontend):
- *   - any signed-in @quatt.io user: everything not listed below
+ *   - signed-in @quatt.io users who are also in a HubSpot team of ACCESS_TEAM_IDS
+ *     (Sales Support + the admin teams), or in ADMINS: everything not listed below.
+ *     Anyone else gets 403 with code NO_ACCESS_CODE on every call, /api/session
+ *     included, and the frontend shows the "no access" screen.
  *   - admins only: PUT playbooks/schedulers, GET/PATCH/DELETE feedback,
  *     POST triage-feedback, POST sync-from-prod, GET team-perf
- *   Admin = in ADMINS, or a member (primary or secondary team) of one of
- *   ADMIN_TEAM_IDS in HubSpot, looked up with the portal's own token and
- *   cached for ADMIN_CACHE_MS. If HubSpot can't be reached, only ADMINS pass.
+ *   Admin = in ADMINS, or a member of one of ADMIN_TEAM_IDS.
+ *   Team membership (primary or secondary team) is looked up in HubSpot with the
+ *   portal's own token and cached for ACCESS_CACHE_MS, so adding or removing
+ *   someone takes up to that long to apply. If HubSpot can't be reached: ADMINS
+ *   pass, someone looked up in the last ACCESS_STALE_MS keeps that answer, and
+ *   everyone else gets 503 (fail closed).
  * /api/hs-write is further limited to the HubSpot endpoints the tool uses.
  */
-import { ADMINS, ADMIN_TEAM_IDS, ALLOWED_DOMAIN, GOOGLE_CLIENT_ID } from '../../lib/access'
+import { ACCESS_TEAM_IDS, ADMINS, ADMIN_TEAM_IDS, ALLOWED_DOMAIN, GOOGLE_CLIENT_ID, NO_ACCESS_CODE } from '../../lib/access'
 
 const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs'
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com']
 const CLOCK_SKEW_S = 60
 export const SESSION_TTL_S = 12 * 60 * 60
-const ADMIN_CACHE_MS = 5 * 60 * 1000
+const ACCESS_CACHE_MS = 5 * 60 * 1000
+const ACCESS_STALE_MS = 60 * 60 * 1000
 
 // Requests that X-Sync-Secret may authenticate (method + exact path).
 const SYNC_READABLE = new Set(['GET /api/playbooks', 'GET /api/schedulers', 'GET /api/feedback'])
@@ -86,9 +93,21 @@ export async function onRequest(ctx) {
   // ID token. Only a Google token may start one, so a session can't renew itself forever.
   if (path === '/api/session' && user.via !== 'google') return deny(400, 'Sign in with Google to start a session')
 
-  // The HubSpot team lookup only runs for admin-only calls (and session start)
+  // Only members of the Sales Support / admin teams may use the tool, on every call
+  let access
+  try {
+    access = await teamAccess(user.email, env)
+  } catch (e) {
+    console.error(`[auth] ✗ ${method} ${path}: team lookup failed for ${user.email}: ${e.message}`)
+    return deny(503, 'Could not check your access right now, please try again', 'access_check_failed')
+  }
+  if (!access.member) {
+    console.warn(`[auth] ✗ ${user.email} is not in a Sales Support team: ${method} ${path}`)
+    return deny(403, 'No access: you are not part of the Sales Support team', NO_ACCESS_CODE)
+  }
+  user.isAdmin = access.admin
+
   const needsAdmin = ADMIN_ONLY.some(([m, p]) => p === path && (m === '*' || m === method))
-  user.isAdmin = (needsAdmin || path === '/api/session') ? await isAdmin(user.email, env) : false
   if (needsAdmin && !user.isAdmin) {
     console.warn(`[auth] ✗ ${user.email} is not an admin: ${method} ${path}`)
     return deny(403, 'Admins only')
@@ -107,37 +126,68 @@ export async function onRequest(ctx) {
   return ctx.next()
 }
 
-// ── Admin check ───────────────────────────────────────────────────────────────
-const adminCache = new Map() // email → { isAdmin, until }
+// ── Team access check ─────────────────────────────────────────────────────────
+const accessCache = new Map() // email → { member, admin, at }
 
-export async function isAdmin(email, env) {
-  if (ADMINS.includes(email)) return true
-  const hit = adminCache.get(email)
-  if (hit && hit.until > Date.now()) return hit.isAdmin
-  const token = env.HUBSPOT_TOKEN_PROD || env.HUBSPOT_TOKEN
-  if (!token) return false
+/**
+ * { member, admin } for a signed-in email: member = may use the tool at all,
+ * admin = may make the admin-only calls. Throws when HubSpot can't answer and
+ * there is no answer from the last ACCESS_STALE_MS to fall back on.
+ */
+export async function teamAccess(email, env) {
+  if (ADMINS.includes(email)) return { member: true, admin: true }
+  const hit = accessCache.get(email)
+  if (hit && Date.now() - hit.at < ACCESS_CACHE_MS) return hit
   try {
-    const res = await fetch('https://api.hubapi.com/crm/v3/objects/users/search', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
-        properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams'],
-        limit: 1,
-      }),
-    })
-    if (!res.ok) throw new Error('HubSpot users search HTTP ' + res.status)
-    const p = (await res.json()).results?.[0]?.properties || {}
-    // Primary team, plus secondary teams as a ';'-joined string — same parsing as fetchIsAdmin()
-    const teams = [p.hubspot_team_id || '', ...(p.hs_user_secondary_teams || '').split(';')].map(t => t.trim()).filter(Boolean)
-    const result = teams.some(t => ADMIN_TEAM_IDS.includes(t))
-    adminCache.set(email, { isAdmin: result, until: Date.now() + ADMIN_CACHE_MS })
+    const teams = await hubspotUserTeams(email, env)
+    const result = {
+      member: teams.some(t => ACCESS_TEAM_IDS.includes(t)),
+      admin: teams.some(t => ADMIN_TEAM_IDS.includes(t)),
+      at: Date.now(),
+    }
+    accessCache.set(email, result)
     return result
   } catch (e) {
-    // Fail closed, and don't cache: the next call tries HubSpot again
-    console.error(`[auth] admin team lookup failed for ${email}:`, String(e))
-    return false
+    // A HubSpot hiccup shouldn't throw a rep out mid-call: keep a recent answer.
+    // With nothing recent, fail closed (the caller answers 503).
+    if (hit && Date.now() - hit.at < ACCESS_STALE_MS) {
+      console.warn(`[auth] team lookup failed for ${email}, using the answer from ${Math.round((Date.now() - hit.at) / 60000)} min ago:`, String(e))
+      return hit
+    }
+    throw e
   }
+}
+
+/** The HubSpot team ids (primary + secondary) of the active HubSpot user with this email. */
+async function hubspotUserTeams(email, env) {
+  const token = env.HUBSPOT_TOKEN_PROD || env.HUBSPOT_TOKEN
+  if (!token) throw new Error('HUBSPOT_TOKEN not configured')
+  const body = JSON.stringify({
+    filterGroups: [{ filters: [{ propertyName: 'hs_email', operator: 'EQ', value: email }] }],
+    properties: ['hs_email', 'hubspot_team_id', 'hs_user_secondary_teams', 'hs_deactivated'],
+    limit: 10,
+  })
+  let res
+  for (let attempt = 0; attempt < 2; attempt++) {
+    res = await fetch('https://api.hubapi.com/crm/v3/objects/users/search', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body,
+    })
+    // The search rate limit is shared with the reps' boards: wait a moment and retry once
+    if (res.status !== 429 || attempt === 1) break
+    await new Promise(r => setTimeout(r, 1000))
+  }
+  if (!res.ok) throw new Error('HubSpot users search HTTP ' + res.status)
+  const teams = []
+  for (const u of (await res.json()).results || []) {
+    const p = u.properties || {}
+    if (String(p.hs_email || '').toLowerCase() !== email.toLowerCase()) continue
+    if (String(p.hs_deactivated) === 'true') continue // deactivated HubSpot users get no access
+    // Primary team, plus secondary teams as a ';'-joined string — same parsing as fetchIsAdmin()
+    teams.push(p.hubspot_team_id || '', ...(p.hs_user_secondary_teams || '').split(';'))
+  }
+  return teams.map(t => String(t).trim()).filter(Boolean)
 }
 
 // ── HubSpot allowlist ─────────────────────────────────────────────────────────
@@ -303,6 +353,6 @@ function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
 }
 
-function deny(status, error) {
-  return json({ error }, status)
+function deny(status, error, code) {
+  return json(code ? { error, code } : { error }, status)
 }

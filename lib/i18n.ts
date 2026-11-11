@@ -483,6 +483,14 @@ const nl: Dict = {
   qsBack: '← Vorige',
   qsNext: 'Volgende →',
   qsDone: 'Aan de slag!',
+  // Login access check + "no access" screen (components/AccessDenied.tsx)
+  accessChecking: 'Toegang controleren…',
+  accessCheckFailed: 'Kon je toegang niet controleren. Probeer het opnieuw.',
+  deniedTitle: 'Geen toegang',
+  deniedText: 'Je bent geen lid van het Sales Support team. Daarom heb je geen toegang tot de Sales Support Tool.',
+  deniedAs: 'Ingelogd als',
+  deniedHint: 'Denk je dat dit niet klopt? Vraag je manager om je toe te voegen aan het Sales Support team in HubSpot.',
+  deniedOther: 'Inloggen met een ander account',
 }
 
 const en: Dict = {
@@ -960,6 +968,14 @@ const en: Dict = {
   qsBack: '← Back',
   qsNext: 'Next →',
   qsDone: 'Get started!',
+  // Login access check + "no access" screen (components/AccessDenied.tsx)
+  accessChecking: 'Checking access…',
+  accessCheckFailed: 'We couldn\'t check your access. Please try again.',
+  deniedTitle: 'Access denied',
+  deniedText: 'You are not part of the Sales Support team, so you don\'t have access to the Sales Support Tool.',
+  deniedAs: 'Signed in as',
+  deniedHint: 'Think this is a mistake? Ask your manager to add you to the Sales Support team in HubSpot.',
+  deniedOther: 'Sign in with another account',
 }
 
 const dicts: Record<Lang, Dict> = { nl, en }

@@ -14,6 +14,7 @@ const initialState: AppState = {
   lang: 'nl',
   currentRep: null,
   userAvatar: null,
+  deniedEmail: null,
   isAdmin: false,
   playbooks: [],
   schedulers: [],

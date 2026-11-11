@@ -26,6 +26,8 @@ export default function LoginPage() {
   // actual clickable element the user sees (not a custom button + prompt()).
   const googleBtnRef = useRef<HTMLDivElement>(null)
   const [gsiReady, setGsiReady] = useState(false)
+  // Waiting for the server's access check after Google sign-in
+  const [checking, setChecking] = useState(false)
 
   credentialHandlerRef.current = (response: { credential: string }) => {
     try {
@@ -54,56 +56,71 @@ export default function LoginPage() {
         hubspotOwnerId: '',  // always resolved dynamically — NEVER seeded from config
       }
       // The server verifies this token on every /api call (the email check above is
-      // only a friendly early message). startSession() puts the Google token in place
-      // right away, so the shared-data fetches triggered by setState below are signed
-      // in, and in the background swaps it for a longer-lived session token.
-      const sessionReady = startSession(response.credential)
-
-      // Never use hardcoded owner ID — always resolve dynamically from HubSpot.
-      // Chain: email → userId (Users API) → ownerId (Owners API) → leads
-      // This is the only correct flow: owner ID and user ID are separate systems.
-      setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, loading: true })
-
-      sessionReady
-        .then(() => lookupHubspotUserId(email))
-        .then(userId => {
-          if (userId) {
-            setState(prev => ({
-              currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
-            }))
-            // Check admin team membership in parallel
-            // Same rule as the server: HubSpot admin team, or listed in ADMINS (lib/access.ts)
-            fetchIsAdmin(userId).then(isAdmin => setState({ isAdmin: isAdmin || CONFIG.ADMINS.includes(email.toLowerCase()) }))
-            fetchPortalId().then(id => { if (id) setState({ hubspotPortalId: id }) })
-          }
-          return lookupHubspotOwnerId(email)
-        })
-        .then(async ownerId => {
-          if (!ownerId) {
-            showToast('Eigenaar niet gevonden in HubSpot — zie console voor details.', 'error')
-            setState({ loading: false })
-            return
-          }
-          setState(prev => ({
-            currentRep: prev.currentRep ? { ...prev.currentRep, hubspotOwnerId: ownerId } : prev.currentRep,
-          }))
-          try {
-            const leads = await fetchLeads(ownerId)
-              setState({ leads, loading: false })
-          } catch (e: any) {
-            console.error('[login] fetchLeads error:', e)
-            showToast(t('errLoad', e.message), 'error')
-            setState({ leads: [], loading: false })
-          }
-        })
-        .catch((e: any) => {
-          console.error('[login] chain error:', e)
-          showToast(t('errLoad', e.message), 'error')
-          setState({ loading: false })
-        })
+      // only a friendly early message). startSession() signs in on the server, which
+      // first checks that this person is in a Sales Support HubSpot team. Nothing of
+      // the board is shown or loaded until it says yes.
+      setChecking(true)
+      startSession(response.credential).then(result => {
+        if (result === 'denied') {
+          setState({ screen: 'denied', deniedEmail: email, currentRep: null, userAvatar: null, isAdmin: false, leads: [], loading: false })
+          return
+        }
+        if (result !== 'ok') {
+          setChecking(false)
+          showToast(t('accessCheckFailed'), 'error')
+          return
+        }
+        openBoard(rep, picture)
+      })
     } catch {
       showToast('Inloggen mislukt, probeer opnieuw.', 'error')
     }
+  }
+
+  // Signed in and allowed: show the board and load the rep's HubSpot ids and leads
+  function openBoard(rep: { name: string; email: string; hubspotUserId: string; hubspotOwnerId: string }, picture: string) {
+    const email = rep.email
+    // Never use hardcoded owner ID — always resolve dynamically from HubSpot.
+    // Chain: email → userId (Users API) → ownerId (Owners API) → leads
+    // This is the only correct flow: owner ID and user ID are separate systems.
+    setState({ screen: 'dashboard', currentRep: rep, userAvatar: picture || null, deniedEmail: null, loading: true })
+
+    lookupHubspotUserId(email)
+      .then(userId => {
+        if (userId) {
+          setState(prev => ({
+            currentRep: prev.currentRep ? { ...prev.currentRep, hubspotUserId: userId } : prev.currentRep,
+          }))
+          // Check admin team membership in parallel
+          // Same rule as the server: HubSpot admin team, or listed in ADMINS (lib/access.ts)
+          fetchIsAdmin(userId).then(isAdmin => setState({ isAdmin: isAdmin || CONFIG.ADMINS.includes(email.toLowerCase()) }))
+          fetchPortalId().then(id => { if (id) setState({ hubspotPortalId: id }) })
+        }
+        return lookupHubspotOwnerId(email)
+      })
+      .then(async ownerId => {
+        if (!ownerId) {
+          showToast('Eigenaar niet gevonden in HubSpot — zie console voor details.', 'error')
+          setState({ loading: false })
+          return
+        }
+        setState(prev => ({
+          currentRep: prev.currentRep ? { ...prev.currentRep, hubspotOwnerId: ownerId } : prev.currentRep,
+        }))
+        try {
+          const leads = await fetchLeads(ownerId)
+          setState({ leads, loading: false })
+        } catch (e: any) {
+          console.error('[login] fetchLeads error:', e)
+          showToast(t('errLoad', e.message), 'error')
+          setState({ leads: [], loading: false })
+        }
+      })
+      .catch((e: any) => {
+        console.error('[login] chain error:', e)
+        showToast(t('errLoad', e.message), 'error')
+        setState({ loading: false })
+      })
   }
 
   // Initialize GSI once when the script is ready — NOT inside the click handler
@@ -217,6 +234,9 @@ export default function LoginPage() {
                 </button>
               )}
             </div>
+            {checking && (
+              <div className="ls2" style={{ textAlign: 'center', marginTop: -8 }}>{t('accessChecking')}</div>
+            )}
           </>
         )}
       </div>

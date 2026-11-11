@@ -191,7 +191,7 @@ export interface PerfData {
 // ─── App-level enums ──────────────────────────────────────────────────────────
 
 export type Lang = 'nl' | 'en'
-export type Screen = 'login' | 'dashboard' | 'admin'
+export type Screen = 'login' | 'dashboard' | 'admin' | 'denied'
 export type Modal = 'lost' | 'lto' | 'sched' | 'delPb' | 'delSch' | null
 export type AdminTab = 'playbooks' | 'schedulers'
 export type TaskTab = 'all-leads' | 'leads' | 'tasks'
@@ -204,6 +204,8 @@ export interface AppState {
   lang: Lang
   currentRep: Rep | null
   userAvatar: string | null
+  // Signed in with Google but not in a Sales Support team: shown on the 'denied' screen
+  deniedEmail: string | null
   isAdmin: boolean
   playbooks: Playbook[]
   schedulers: Scheduler[]
