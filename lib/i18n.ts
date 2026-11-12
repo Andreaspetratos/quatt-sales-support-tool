@@ -298,6 +298,16 @@ const nl: Dict = {
   cfgEmpty: 'leeg',
   cfgNone: 'Geen configurator-gegevens of notities op deze lead.',
   cfgFailed: 'Kon de configurator-gegevens niet laden.',
+  // All of the customer's Consumer Orders deals (read-only block in the lead modal)
+  cdTitle: 'Deals van klant',
+  cdNone: 'Deze klant heeft geen deals in Consumer Orders.',
+  cdFailed: 'Kon de deals van deze klant niet laden.',
+  // HubSpot's own deal field names, also in Dutch: "Fase" / "Eigenaar" are the
+  // lead's stage and owner in the block above (Andreas, 2026-11-12)
+  cdStage: 'Deal stage',
+  cdSince: 'sinds',
+  cdOwner: 'Deal owner',
+  cdProduct: 'Product',
   // The customer's other active leads (block in the lead modal + popup)
   olTitle: 'Andere leads van klant',
   olNone: 'Deze klant heeft geen andere actieve leads.',
@@ -779,6 +789,14 @@ const en: Dict = {
   cfgEmpty: 'empty',
   cfgNone: 'No configurator details or notes on this lead.',
   cfgFailed: 'Could not load the configurator details.',
+  // All of the customer's Consumer Orders deals (read-only block in the lead modal)
+  cdTitle: "Customer's deals",
+  cdNone: 'This customer has no deals in Consumer Orders.',
+  cdFailed: "Could not load the customer's deals.",
+  cdStage: 'Deal stage',
+  cdSince: 'since',
+  cdOwner: 'Deal owner',
+  cdProduct: 'Product',
   // The customer's other active leads (block in the lead modal + popup)
   olTitle: "Customer's other leads",
   olNone: 'This customer has no other active leads.',

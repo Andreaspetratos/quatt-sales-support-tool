@@ -133,14 +133,14 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: { nl: '🗂 Het lead-scherm', en: '🗂 The lead screen' },
     steps: {
       nl: [
-        'Links staat alles over de klant: Lead informatie, Configurator & notities, Recente activiteit, Andere leads van klant en de Call outcome. Rechts staat het playbook.',
+        'Links staat alles over de klant: Lead informatie, Configurator & notities, Recente activiteit, Andere leads van klant, Deals van klant en de Call outcome. Rechts staat het playbook.',
         'Recente activiteit toont gesprekken, e-mails, notities en afspraken van het contact. "Toon alle" laat de rest zien.',
         '"Bellen" belt de klant direct via Aircall. "Contact in HubSpot ↗" naast de naam opent het contact in HubSpot.',
         'Je kunt het venster verslepen aan de kop en groter of kleiner maken met de hoek rechtsonder.',
         'Onderaan staan de knoppen om de lead af te ronden: Home Visit, Schedule Videocall, Long Term, Taak en Lost.',
       ],
       en: [
-        'On the left is everything about the customer: Lead info, Configurator & notes, Recent activity, Customer\'s other leads and the Call outcome. The playbook is on the right.',
+        'On the left is everything about the customer: Lead info, Configurator & notes, Recent activity, Customer\'s other leads, Customer\'s deals and the Call outcome. The playbook is on the right.',
         'Recent activity shows the contact\'s calls, emails, notes and meetings. "Show all" shows the rest.',
         '"Call" calls the customer straight away through Aircall. "Contact in HubSpot ↗" next to the name opens the contact in HubSpot.',
         'Drag the window by its header, and resize it from the bottom-right corner.',
@@ -255,6 +255,24 @@ export const HELP_TOPICS: HelpTopic[] = [
         '"Claim" assigns a lead to you, moves it to MQL and opens it. If the lead belongs to a colleague, the tool first asks whether you want to take it over.',
         'Eneco leads are shown for information only.',
         'After Home Visit, Schedule Videocall, Long Term or Lost, a popup asks what to do with the other leads: Leave open (changes nothing), Lost, Long Term Opportunity or Send Configurator Link. Click "Save".',
+      ],
+    },
+  },
+  {
+    id: 'customer-deals', group: 'lead', clip: 'customer-deals',
+    title: { nl: '💼 Deals van de klant', en: '💼 The customer\'s deals' },
+    steps: {
+      nl: [
+        '"Deals van klant" staat onder "Andere leads van klant". Het getal is het aantal deals van de klant in Consumer Orders. Klik erop om ze te zien.',
+        'Per deal zie je de naam, de Deal stage en sinds wanneer de deal in die stage staat, de Deal owner en het product. De laatste wijziging staat bovenaan.',
+        'Alle deals staan erin: lopende, geïnstalleerde en verloren. Verloren en geannuleerde deals zijn grijs en staan onderaan.',
+        'Dit is alleen ter info: je kunt de deals hier niet wijzigen. Loopt er nog een deal bij een TAM, dan zie je bovenaan ook de oranje balk (zie "Waarschuwingen in het lead-scherm").',
+      ],
+      en: [
+        '"Customer\'s deals" sits under "Customer\'s other leads". The number is how many deals the customer has in Consumer Orders. Click it to see them.',
+        'Each deal shows its name, its Deal stage and since when it has been in that stage, the Deal owner and the product. The latest change is on top.',
+        'Every deal is listed: in progress, installed and lost. Lost and cancelled deals are grey and at the bottom.',
+        'This is for information only: you can\'t change the deals here. If a deal is still in progress with a TAM, the orange banner shows at the top as well (see "Warnings in the lead screen").',
       ],
     },
   },

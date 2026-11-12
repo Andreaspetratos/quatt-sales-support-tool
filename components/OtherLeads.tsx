@@ -35,7 +35,7 @@ const POPUP_RESULTS = ['Lost', 'Long Term Opportunity', 'Send Configurator Link'
 /** Prefilled as the Lost reason when the processed lead was booked. */
 const DUPLICATE_REASON = 'Ordered via other channel / Duplicate'
 
-function olDate(iso: string, withTime = false): string {
+export function olDate(iso: string, withTime = false): string {
   if (!iso) return '--'
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso

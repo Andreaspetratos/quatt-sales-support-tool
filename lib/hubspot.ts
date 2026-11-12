@@ -1283,13 +1283,15 @@ export interface DirectDeal {
 }
 
 /**
- * Read for the contact's deals. One list for both checks below (VEH direct
- * appointment, active TAM deal), so a VEH lead reads the deals only once.
+ * Read for the contact's deals. One list for everything below (VEH direct
+ * appointment, active TAM deal, the "Customer's deals" block), so the lead
+ * modal reads the deals only once.
  */
 const CONTACT_DEAL_PROPS = [
   'dealname', 'pipeline', 'dealstage', 'deal_origin', 'partner_name',
   'hs_is_closed', 'hs_is_closed_lost', 'date_of_first_appointment_static',
   'hubspot_owner_id', 'converted', 'selected_product', 'createdate',
+  'hs_v2_date_entered_current_stage',
 ]
 
 type RawDeal = { id: string; properties: Record<string, string | null> }
@@ -1484,6 +1486,59 @@ export async function fetchActiveTamDeals(leadId: string, contactId?: string, no
     })
   }
   deals.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return deals
+}
+
+// ── All of the customer's deals (read-only block) ────────────────────────────
+// Reps asked what the customer already has with Quatt: an installed product, a
+// quote with a TAM, a deal that was lost. The lead modal lists every Consumer
+// Orders deal on the contact, for information only (Andreas, 2026-11-12).
+
+export interface CustomerDeal {
+  id: string
+  name: string
+  /** '' when the deal has no owner. */
+  ownerId: string
+  /** Raw `selected_product` value, ';'-separated. */
+  product: string
+  /** Stage label, or the raw stage ID when the pipeline could not be read. */
+  stage: string
+  /** When the deal entered its current stage (ISO), '' when HubSpot has none. */
+  stageEnteredAt: string
+  createdAt: string
+  /** Lost or cancelled: shown greyed out, at the bottom. */
+  inactive: boolean
+}
+
+/**
+ * Every Consumer Orders deal on the contact: open, won and lost (Andreas,
+ * 2026-11-12). Latest stage change first; lost / cancelled deals after the
+ * rest. Throws when the deals cannot be read, so the caller can tell "none"
+ * apart from "could not check".
+ */
+export async function fetchCustomerDeals(leadId: string, contactId: string): Promise<CustomerDeal[]> {
+  if (isDemo() || !contactId) return []
+
+  const { deals: raw, stages } = await _readContactDeals(leadId, contactId)
+  const deals: CustomerDeal[] = []
+  for (const r of raw) {
+    const p = r.properties
+    if (p.pipeline !== CONFIG.DEAL_PIPELINE_ID) continue
+    const stage = stages.get(String(p.dealstage || ''))
+    deals.push({
+      id: r.id,
+      name: String(p.dealname || '').trim() || 'Deal',
+      ownerId: String(p.hubspot_owner_id || '').trim(),
+      product: String(p.selected_product || ''),
+      stage: stage?.label || String(p.dealstage || ''),
+      stageEnteredAt: String(p.hs_v2_date_entered_current_stage || ''),
+      createdAt: String(p.createdate || ''),
+      inactive: p.hs_is_closed_lost === 'true' || (!!stage && /cancel/i.test(stage.label)),
+    })
+  }
+  // A deal without a stage date sorts by its creation date
+  const when = (d: CustomerDeal) => Date.parse(d.stageEnteredAt || d.createdAt) || 0
+  deals.sort((a, b) => Number(a.inactive) - Number(b.inactive) || when(b) - when(a))
   return deals
 }
 

@@ -15,6 +15,7 @@ import PlaybookView from './PlaybookView'
 import ErrorBoundary from './ErrorBoundary'
 import { OtherLeadsSection, promptOtherLeads } from './OtherLeads'
 import ConfiguratorInfo from './ConfiguratorInfo'
+import CustomerDeals from './CustomerDeals'
 import { SsqBlock } from './Ssq'
 import { ActiveTamConfirmModal, ActiveTamDealsBanner, hasActiveTamDeals, useActiveTamDeals } from './ActiveTamDeals'
 import ConfirmModal from './ConfirmModal'
@@ -1977,6 +1978,19 @@ export default function DealModal() {
                       <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('olFailed')}</div>
                     }>
                       <OtherLeadsSection contactId={p['hs_primary_contact_id']} leadId={deal.id} lang={lang} />
+                    </ErrorBoundary>
+                  </>
+                )}
+
+                {/* Every Consumer Orders deal of the customer: open, won and
+                    lost. Information only, nothing in it writes to HubSpot. */}
+                {p['hs_primary_contact_id'] && (
+                  <>
+                    <div className="dv" />
+                    <ErrorBoundary fallback={
+                      <div style={{ fontSize: 12, color: 'var(--cs)' }}>{t('cdFailed')}</div>
+                    }>
+                      <CustomerDeals contactId={p['hs_primary_contact_id']} leadId={deal.id} lang={lang} />
                     </ErrorBoundary>
                   </>
                 )}
